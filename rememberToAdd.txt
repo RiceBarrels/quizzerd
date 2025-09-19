@@ -1,0 +1,27 @@
+Analyze the lang attribute of the <html> tag:
+If you are implementing your own multilingual solution, you can change the lang attribute of the <html> tag to reflect the current language. Browser translation tools might respect this attribute, and you can use JavaScript to read its value.
+JavaScript:
+
+    const currentLanguage = document.documentElement.lang;
+    console.log("Current page language:", currentLanguage);
+
+
+className="notranslate"
+
+className="translate-rtl"
+
+
+
+Detecting when a browser tab loses focus:
+This involves using the Page Visibility API, which provides information about the visibility state of the document.
+JavaScript
+
+document.addEventListener("visibilitychange", function() {
+  if (document.hidden) {
+    // The tab is now hidden (lost focus or minimized)
+    console.log("Tab lost focus");
+  } else {
+    // The tab is now visible (gained focus)
+    console.log("Tab gained focus");
+  }
+});
