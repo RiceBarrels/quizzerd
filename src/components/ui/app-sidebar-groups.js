@@ -20,7 +20,7 @@ export function GeneralGroup(){
     return (
         
         <SidebarGroup className="gap-2">
-            <h3 className="text-xs px-2 font-bold text-secondary-foreground">GENERAL</h3>
+            <h3 className="text-xs px-2 font-bold text-foreground/95">GENERAL</h3>
             {buttons.map((button,i)=>{
                 return (
                     <SidebarMenuButton key={i} className="true" isActive={pathname === button.link} asChild>
@@ -49,7 +49,7 @@ export function ClassesGroup(){
     return (
         
         <SidebarGroup className="gap-2">
-            <h3 className="text-xs px-2 font-bold text-secondary-foreground">ENROLLED</h3>
+            <h3 className="text-xs px-2 font-bold text-foreground/75">ENROLLED</h3>
             {buttons.map((button,i)=>{
                 return (
                     <SidebarMenuButton key={i} className="true" isActive={pathname === button.link} asChild>

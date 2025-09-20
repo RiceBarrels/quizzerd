@@ -490,7 +490,7 @@ function SidebarMenuButton({
       data-slot="sidebar-menu-button"
       data-sidebar="menu-button"
       data-size={size}
-      className={cn(sidebarMenuButtonVariants({ variant, size }), className, "rounded-l-3xl p-6 transition-all text-secondary-foreground active:ease-[cubic-bezier(0.68,-0.6,0.32,1.6)] active:scale-95", isActive && "!bg-background border border-r-0 rounded-r-none translate-x-4.5 ")}
+      className={cn(sidebarMenuButtonVariants({ variant, size }), className, "rounded-l-3xl p-6 transition-all active:ease-[cubic-bezier(0.68,-0.6,0.32,1.6)] active:scale-95 text-foreground/75", isActive && "!bg-background border border-r-0 rounded-r-none translate-x-4.5 text-foreground/95")}
       {...props} />
   )
 
