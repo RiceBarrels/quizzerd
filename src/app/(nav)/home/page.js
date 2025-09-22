@@ -10,7 +10,7 @@ import { GraduationCapIcon, HardDriveUploadIcon, PaperclipIcon, PlusIcon, Scroll
 import Image from "next/image";
 import { FcGoogle } from "react-icons/fc";
 import { Input } from "@/components/ui/input";
-import { Link } from "next-view-transitions";
+import { Link, useTransitionRouter } from "next-view-transitions";
 
 export default function Home() {
     const [classes, setClasses] = useState([]);
@@ -18,6 +18,7 @@ export default function Home() {
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(1);
     const [pagination, setPagination] = useState(null);
+    const router = useTransitionRouter();
     const limit = 6;
 
     useEffect(() => {
@@ -67,14 +68,14 @@ export default function Home() {
             <div className="p-2 m-2 bg-sidebar rounded-t-3xl rounded-b-xl flex flex-col gap-1 border">
                 <h2 className="font-bold text-lg flex gap-2 p-2">
                     <PaperclipIcon />
-                    Create a new test...
+                    Create a new Exam...
 
                     <div className="flex-1"/>
 
-                    <JoinButton defaultValue="joinQuiz"/>
+                    <JoinButton defaultValue="joinExam"/>
                 </h2>
                 <div className="flex bg-background rounded-t-3xl rounded-b-xl p-4 px-8 gap-4">
-                    <Button variant="outline" className="h-32 w-24 flex flex-col gap-2">
+                    <Button onClick={()=>router.push('exam')} variant="outline" className="h-32 w-24 flex flex-col gap-2">
 
                         <div className="text-xs h-6 -space-x-2 flex items-center justify-center">
                             <PlusIcon />

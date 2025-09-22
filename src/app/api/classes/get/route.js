@@ -60,11 +60,39 @@ export async function GET(request) {
         );
       }
 
-      // Add role information to the response
+      // Get user details for all members
+      const allMemberIds = [
+        ...(data.admin_ids || []),
+        ...(data.teacher_ids || []),
+        ...(data.student_ids || [])
+      ];
+
+      // Fetch user details for all members
+      const { data: users, error: userError } = await supabase
+        .from('user')
+        .select('user_id, email, first_name, last_name, full_name, img_url')
+        .in('user_id', allMemberIds);
+
+      if (userError) {
+        console.error('Error fetching user details:', userError);
+      }
+
+      // Create a map of user data for easy lookup
+      const userMap = {};
+      if (users) {
+        users.forEach(user => {
+          userMap[user.user_id] = user;
+        });
+      }
+
+      // Add role information and user details to the response
       const responseData = {
         ...data,
         role: data.admin_ids?.includes(userId) ? 'admin' : 
-              data.teacher_ids?.includes(userId) ? 'teacher' : 'student'
+              data.teacher_ids?.includes(userId) ? 'teacher' : 'student',
+        admins: data.admin_ids?.map(id => userMap[id] || { user_id: id }) || [],
+        teachers: data.teacher_ids?.map(id => userMap[id] || { user_id: id }) || [],
+        students: data.student_ids?.map(id => userMap[id] || { user_id: id }) || []
       };
 
       return NextResponse.json({ 

@@ -1,0 +1,15 @@
+create table public.user (
+  user_id text not null default (auth.jwt () ->> 'sub'::text),
+  created_at timestamp with time zone not null default now(),
+  email text not null default (auth.jwt () ->> 'email'::text),
+  first_name text not null default (auth.jwt () ->> 'given_name'::text),
+  last_name text not null default (auth.jwt () ->> 'family_name'::text),
+  full_name text not null default (auth.jwt () ->> 'name'::text),
+  is_ban boolean not null default false,
+  img_url text null default (
+    (auth.jwt () -> 'user_metadata'::text) ->> 'avatar_url'::text
+  ),
+  constraint user_pkey primary key (user_id),
+  constraint user_user_id_key unique (user_id)
+) TABLESPACE pg_default;
+

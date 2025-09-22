@@ -1,6 +1,6 @@
 "use client"
 
-import { Calendar1Icon, CheckLineIcon, HomeIcon, ListCheckIcon} from "lucide-react"
+import { Calendar1Icon, CheckLineIcon, HomeIcon, ListCheckIcon, ListTodoIcon} from "lucide-react"
 import { SidebarGroup, SidebarMenuButton } from "./sidebar"
 import { Link } from 'next-view-transitions'
 import { usePathname } from "next/navigation"
@@ -11,6 +11,10 @@ export function GeneralGroup(){
         {
             link:"/home",
             children:<><HomeIcon/> Home</>
+        },
+        {
+            link:"/exam",
+            children:<><ListTodoIcon/> Exams</>
         },
         {
             link:"/calender",

@@ -1,0 +1,18 @@
+create table public.class (
+  class_code text not null,
+  class_name text not null,
+  created_at timestamp with time zone not null default (now() AT TIME ZONE 'utc'::text),
+  admin_ids jsonb not null default '[]'::jsonb,
+  teacher_ids jsonb not null default '[]'::jsonb,
+  student_ids jsonb not null default '[]'::jsonb,
+  period_start time with time zone null,
+  period_end time with time zone null,
+  assignments jsonb not null default '[]'::jsonb,
+  class_id uuid not null default gen_random_uuid (),
+  class_settings jsonb null default '{"themeFont": "default", "themeColor": "#bc6a4a"}'::jsonb,
+  is_archived boolean not null default false,
+  description text null,
+  constraint class_pkey primary key (class_id),
+  constraint class_class_id_key unique (class_id),
+  constraint tasks_id_key unique (class_code)
+) TABLESPACE pg_default;

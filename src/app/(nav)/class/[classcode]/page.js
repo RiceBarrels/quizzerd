@@ -321,43 +321,100 @@ export default function ClassPage() {
               <CardTitle>Class Members</CardTitle>
               <CardDescription>View all members in this class</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {classData.admin_ids && classData.admin_ids.length > 0 && (
+            <CardContent className="space-y-6">
+              {classData.admins && classData.admins.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-medium mb-2">Administrators ({classData.admin_ids.length})</h3>
-                  <div className="space-y-2">
-                    {classData.admin_ids.map((id) => (
-                      <div key={id} className="flex items-center gap-2">
-                        <Badge variant="destructive" className="w-20">Admin</Badge>
-                        <span className="text-sm">{id}</span>
+                  <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <Shield className="h-4 w-4" />
+                    Administrators ({classData.admins.length})
+                  </h3>
+                  <div className="space-y-3">
+                    {classData.admins.map((admin) => (
+                      <div key={admin.user_id} className="flex items-center gap-3 p-3 border rounded-lg">
+                        {admin.img_url ? (
+                          <img 
+                            src={admin.img_url} 
+                            alt={admin.full_name || admin.email}
+                            className="h-10 w-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
+                            <Shield className="h-5 w-5 text-red-600" />
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-sm">{admin.full_name || admin.email}</p>
+                            <Badge variant="destructive" size="sm">Admin</Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{admin.email}</p>
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {classData.teacher_ids && classData.teacher_ids.length > 0 && (
+              {classData.teachers && classData.teachers.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-medium mb-2">Teachers ({classData.teacher_ids.length})</h3>
-                  <div className="space-y-2">
-                    {classData.teacher_ids.map((id) => (
-                      <div key={id} className="flex items-center gap-2">
-                        <Badge variant="secondary" className="w-20">Teacher</Badge>
-                        <span className="text-sm">{id}</span>
+                  <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <UserCheck className="h-4 w-4" />
+                    Teachers ({classData.teachers.length})
+                  </h3>
+                  <div className="space-y-3">
+                    {classData.teachers.map((teacher) => (
+                      <div key={teacher.user_id} className="flex items-center gap-3 p-3 border rounded-lg">
+                        {teacher.img_url ? (
+                          <img 
+                            src={teacher.img_url} 
+                            alt={teacher.full_name || teacher.email}
+                            className="h-10 w-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                            <UserCheck className="h-5 w-5 text-blue-600" />
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-sm">{teacher.full_name || teacher.email}</p>
+                            <Badge variant="secondary" size="sm">Teacher</Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{teacher.email}</p>
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {classData.student_ids && classData.student_ids.length > 0 && (
+              {classData.students && classData.students.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-medium mb-2">Students ({classData.student_ids.length})</h3>
-                  <div className="space-y-2">
-                    {classData.student_ids.map((id) => (
-                      <div key={id} className="flex items-center gap-2">
-                        <Badge variant="default" className="w-20">Student</Badge>
-                        <span className="text-sm">{id}</span>
+                  <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <GraduationCap className="h-4 w-4" />
+                    Students ({classData.students.length})
+                  </h3>
+                  <div className="space-y-3">
+                    {classData.students.map((student) => (
+                      <div key={student.user_id} className="flex items-center gap-3 p-3 border rounded-lg">
+                        {student.img_url ? (
+                          <img 
+                            src={student.img_url} 
+                            alt={student.full_name || student.email}
+                            className="h-10 w-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
+                            <GraduationCap className="h-5 w-5 text-green-600" />
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-sm">{student.full_name || student.email}</p>
+                            <Badge variant="default" size="sm">Student</Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{student.email}</p>
+                        </div>
                       </div>
                     ))}
                   </div>

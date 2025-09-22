@@ -1,0 +1,181 @@
+-- Exams table schema
+CREATE TABLE IF NOT EXISTS exams (
+    exam_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    exam_name VARCHAR(255) NOT NULL,
+    exam_description TEXT,
+    class_id UUID REFERENCES class(class_id) ON DELETE CASCADE,
+    creator_id TEXT NOT NULL, -- Clerk user ID
+    
+    -- Visibility settings
+    is_public BOOLEAN DEFAULT false, -- If true, visible to everyone; if false, only to creator/collaborators
+    collaborator_ids JSONB DEFAULT '[]'::jsonb, -- Array of user IDs who can view/edit private exams
+    
+    -- Exam settings
+    duration_minutes INTEGER, -- Exam duration in minutes
+    start_date TIMESTAMPTZ,
+    end_date TIMESTAMPTZ,
+    attempts_allowed INTEGER DEFAULT 1,
+    shuffle_questions BOOLEAN DEFAULT false,
+    show_results_immediately BOOLEAN DEFAULT true,
+    
+    -- Questions and content
+    questions JSONB DEFAULT '[]'::jsonb, -- Array of question objects
+    total_points DECIMAL(10, 2) DEFAULT 0,
+    passing_score DECIMAL(5, 2), -- Percentage required to pass
+    
+    -- Status
+    status VARCHAR(50) DEFAULT 'draft', -- draft, published, archived
+    
+    -- Metadata
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create indexes for better query performance
+CREATE INDEX idx_exams_creator ON exams(creator_id);
+CREATE INDEX idx_exams_class ON exams(class_id);
+CREATE INDEX idx_exams_public ON exams(is_public);
+CREATE INDEX idx_exams_status ON exams(status);
+CREATE INDEX idx_exams_collaborators ON exams USING GIN(collaborator_ids);
+
+-- RLS Policies for exams table
+ALTER TABLE exams ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Users can view their own exams
+CREATE POLICY "Users can view own exams" ON exams
+    FOR SELECT
+    USING (creator_id = (auth.jwt() ->> 'sub'::text));
+
+-- Policy: Users can view public exams
+CREATE POLICY "Users can view public exams" ON exams
+    FOR SELECT
+    USING (is_public = true AND status = 'published');
+
+-- Policy: Collaborators can view private exams
+CREATE POLICY "Collaborators can view shared exams" ON exams
+    FOR SELECT
+    USING (collaborator_ids::jsonb ? (auth.jwt() ->> 'sub'::text));
+
+-- Policy: Class admins/teachers can view class exams
+CREATE POLICY "Class admins can view class exams" ON exams
+    FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM class
+            WHERE class.class_id = exams.class_id
+            AND (
+                class.admin_ids::jsonb ? (auth.jwt() ->> 'sub'::text)
+                OR class.teacher_ids::jsonb ? (auth.jwt() ->> 'sub'::text)
+            )
+        )
+    );
+
+-- Policy: Creators can insert their own exams
+CREATE POLICY "Users can create exams" ON exams
+    FOR INSERT
+    WITH CHECK (creator_id = (auth.jwt() ->> 'sub'::text));
+
+-- Policy: Creators can update their own exams
+CREATE POLICY "Creators can update own exams" ON exams
+    FOR UPDATE
+    USING (creator_id = (auth.jwt() ->> 'sub'::text));
+
+-- Policy: Collaborators can update shared exams
+CREATE POLICY "Collaborators can update shared exams" ON exams
+    FOR UPDATE
+    USING (collaborator_ids::jsonb ? (auth.jwt() ->> 'sub'::text));
+
+-- Policy: Creators can delete their own exams
+CREATE POLICY "Creators can delete own exams" ON exams
+    FOR DELETE
+    USING (creator_id = (auth.jwt() ->> 'sub'::text));
+
+-- Function to update the updated_at timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Trigger to automatically update updated_at
+CREATE TRIGGER update_exams_updated_at BEFORE UPDATE ON exams
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Exam attempts table to track student attempts
+CREATE TABLE IF NOT EXISTS exam_attempts (
+    attempt_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    exam_id UUID REFERENCES exams(exam_id) ON DELETE CASCADE,
+    student_id TEXT NOT NULL, -- Clerk user ID
+    class_id UUID REFERENCES class(class_id) ON DELETE CASCADE,
+    
+    -- Attempt details
+    attempt_number INTEGER NOT NULL DEFAULT 1,
+    start_time TIMESTAMPTZ DEFAULT NOW(),
+    end_time TIMESTAMPTZ,
+    time_spent_seconds INTEGER,
+    
+    -- Responses and scoring
+    responses JSONB DEFAULT '{}'::jsonb, -- Student's answers
+    score DECIMAL(10, 2),
+    percentage DECIMAL(5, 2),
+    passed BOOLEAN,
+    
+    -- Status
+    status VARCHAR(50) DEFAULT 'in_progress', -- in_progress, submitted, graded
+    
+    -- Metadata
+    submitted_at TIMESTAMPTZ,
+    graded_at TIMESTAMPTZ,
+    graded_by TEXT, -- User ID of grader (if manual grading)
+    feedback TEXT,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    -- Ensure unique attempt per student per exam
+    UNIQUE(exam_id, student_id, attempt_number)
+);
+
+-- Create indexes for exam_attempts
+CREATE INDEX idx_exam_attempts_exam ON exam_attempts(exam_id);
+CREATE INDEX idx_exam_attempts_student ON exam_attempts(student_id);
+CREATE INDEX idx_exam_attempts_class ON exam_attempts(class_id);
+CREATE INDEX idx_exam_attempts_status ON exam_attempts(status);
+
+-- RLS Policies for exam_attempts
+ALTER TABLE exam_attempts ENABLE ROW LEVEL SECURITY;
+
+-- Students can view their own attempts
+CREATE POLICY "Students view own attempts" ON exam_attempts
+    FOR SELECT
+    USING (student_id = (auth.jwt() ->> 'sub'::text));
+
+-- Teachers/admins can view all attempts for their class exams
+CREATE POLICY "Teachers view class attempts" ON exam_attempts
+    FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM class
+            WHERE class.class_id = exam_attempts.class_id
+            AND (
+                class.admin_ids::jsonb ? (auth.jwt() ->> 'sub'::text)
+                OR class.teacher_ids::jsonb ? (auth.jwt() ->> 'sub'::text)
+            )
+        )
+    );
+
+-- Students can create their own attempts
+CREATE POLICY "Students create attempts" ON exam_attempts
+    FOR INSERT
+    WITH CHECK (student_id = (auth.jwt() ->> 'sub'::text));
+
+-- Students can update their own in-progress attempts
+CREATE POLICY "Students update own attempts" ON exam_attempts
+    FOR UPDATE
+    USING (student_id = (auth.jwt() ->> 'sub'::text) AND status = 'in_progress');
+
+-- Trigger for exam_attempts updated_at
+CREATE TRIGGER update_exam_attempts_updated_at BEFORE UPDATE ON exam_attempts
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import '@clerk/themes/shadcn.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -249,6 +250,21 @@
 }
 
 /* View Transitions for Main Content Only */
+::view-transition-old(main-content),
+::view-transition-new(main-content) {
+  animation-duration: 0.4s;
+  animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+::view-transition-old(main-content) {
+  animation-name: fade-and-scale-out;
+}
+
+::view-transition-new(main-content) {
+  animation-name: fade-and-scale-in;
+}
+
+/* View Transitions for fade-and-scale Only */
 ::view-transition-old(fade-and-scale),
 ::view-transition-new(fade-and-scale) {
   animation-duration: 0.4s;
@@ -256,11 +272,28 @@
 }
 
 ::view-transition-old(fade-and-scale) {
-  animation-name: fade-and-scale-in;
+  animation-name: fade-and-scale-out;
 }
 
 ::view-transition-new(fade-and-scale) {
-  animation-name: fade-and-scale-out;
+  animation-name: fade-and-scale-in;
+}
+
+
+
+/* View Transitions for auth-card Only */
+::view-transition-old(auth-card),
+::view-transition-new(auth-card) {
+  animation-duration: 0.4s;
+  animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+::view-transition-old(auth-card) {
+  animation-name: slide-out-fade;
+}
+
+::view-transition-new(auth-card) {
+  animation-name: slide-in-fade;
 }
 
 @keyframes slide-out-fade {

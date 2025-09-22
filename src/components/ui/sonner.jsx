@@ -19,11 +19,6 @@ const Toaster = ({
           "--normal-border": "var(--border)"
         }
       }
-      toastOptions={{
-        classNames: {
-          description: "text-muted-foreground!",
-        },
-      }}
       {...props} />
   );
 }
