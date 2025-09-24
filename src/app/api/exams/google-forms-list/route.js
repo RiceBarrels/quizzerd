@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+import { googleApiFetch } from '@/lib/google-auth';
 
 // Google Forms MIME type
 const GOOGLE_FORMS_MIMETYPE = 'application/vnd.google-apps.form';
@@ -16,15 +17,40 @@ export async function GET(request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const accessToken = searchParams.get('access_token');
+    let accessToken = searchParams.get('access_token');
+    let expiresAt = searchParams.get('expires_at') ? parseInt(searchParams.get('expires_at')) : null;
     const pageToken = searchParams.get('pageToken');
     const searchQuery = searchParams.get('q') || '';
 
+    // If no access token provided, try to get it from Clerk
     if (!accessToken) {
-      return NextResponse.json(
-        { error: 'Google access token required' },
-        { status: 400 }
-      );
+      try {
+        // Call our google-token endpoint to check if user has Google connected
+        const tokenResponse = await fetch(new URL('/api/auth/google-token', request.url).href, {
+          headers: {
+            cookie: request.headers.get('cookie') || '',
+          },
+        });
+        const tokenData = await tokenResponse.json();
+        
+        if (tokenData.success && tokenData.accessToken) {
+          accessToken = tokenData.accessToken;
+          expiresAt = tokenData.expiresAt;
+        }
+      } catch (error) {
+        console.log('Could not get token from Clerk:', error.message);
+      }
+    }
+
+    // If still no access token, return empty forms with message
+    if (!accessToken) {
+      return NextResponse.json({
+        success: true,
+        forms: [],
+        nextPageToken: null,
+        totalForms: 0,
+        message: 'No Google access token available. Please provide a token to fetch your forms.'
+      });
     }
 
     // Build the query for Google Drive API
@@ -49,29 +75,44 @@ export async function GET(request) {
       driveApiUrl.searchParams.append('pageToken', pageToken);
     }
 
-    // Fetch forms from Google Drive
-    const response = await fetch(driveApiUrl.toString(), {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Accept': 'application/json',
-      },
-    });
+    // Fetch forms from Google Drive with automatic token refresh
+    let response;
+    try {
+      response = await googleApiFetch(
+        driveApiUrl.toString(),
+        {},
+        userId,
+        accessToken,
+        expiresAt
+      );
+    } catch (error) {
+      console.error('Error calling Google API:', error);
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to fetch Google Forms',
+        message: error.message,
+        forms: []
+      });
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       console.error('Google Drive API error:', errorData);
       
       if (response.status === 401) {
-        return NextResponse.json(
-          { error: 'Google authentication expired. Please re-authenticate.' },
-          { status: 401 }
-        );
+        return NextResponse.json({
+          success: false,
+          error: 'Invalid or expired access token',
+          message: 'The provided access token is invalid or expired. Please provide a valid token.',
+          forms: []
+        });
       }
       
-      return NextResponse.json(
-        { error: errorData.error?.message || 'Failed to fetch Google Forms' },
-        { status: response.status }
-      );
+      return NextResponse.json({
+        success: false,
+        error: errorData.error?.message || 'Failed to fetch Google Forms',
+        forms: []
+      });
     }
 
     const data = await response.json();
@@ -93,168 +134,28 @@ export async function GET(request) {
       responseUrl: `https://docs.google.com/forms/d/${file.id}/responses`
     })) || [];
 
-    return NextResponse.json({
+    const result = {
       success: true,
       forms,
       nextPageToken: data.nextPageToken || null,
       totalForms: forms.length
-    });
+    };
+
+    // Include new token info if it was refreshed
+    if (response.newAccessToken) {
+      result.newAccessToken = response.newAccessToken;
+      result.newExpiresAt = response.newExpiresAt;
+    }
+
+    return NextResponse.json(result);
 
   } catch (error) {
     console.error('Error listing Google Forms:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
-
-// POST endpoint to get form details using Google Forms API
-export async function POST(request) {
-  try {
-    const { userId } = await auth();
-    
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const body = await request.json();
-    const { formId, accessToken } = body;
-
-    if (!formId || !accessToken) {
-      return NextResponse.json(
-        { error: 'Form ID and access token are required' },
-        { status: 400 }
-      );
-    }
-
-    // Get form metadata using Google Forms API
-    const formApiUrl = `https://forms.googleapis.com/v1/forms/${formId}`;
-    
-    const response = await fetch(formApiUrl, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Accept': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('Google Forms API error:', errorData);
-      
-      // If Forms API is not available, try to get basic info from Drive API
-      if (response.status === 403 || response.status === 404) {
-        // Fallback to Drive API for basic metadata
-        const driveResponse = await fetch(
-          `https://www.googleapis.com/drive/v3/files/${formId}?fields=id,name,description,createdTime,modifiedTime,owners`,
-          {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Accept': 'application/json',
-            },
-          }
-        );
-
-        if (driveResponse.ok) {
-          const driveData = await driveResponse.json();
-          return NextResponse.json({
-            success: true,
-            formData: {
-              formId: driveData.id,
-              title: driveData.name,
-              description: driveData.description || '',
-              documentTitle: driveData.name,
-              items: [], // No access to questions without Forms API
-              requiresFormsApi: true,
-              driveMetadata: driveData
-            },
-            message: 'Forms API not available. Using Drive API metadata only.'
-          });
-        }
-      }
-      
-      return NextResponse.json(
-        { error: errorData.error?.message || 'Failed to fetch form details' },
-        { status: response.status }
-      );
-    }
-
-    const formData = await response.json();
-
-    // Extract questions from the form
-    const questions = formData.items?.map(item => {
-      if (!item.questionItem) return null;
-      
-      const question = item.questionItem.question;
-      const questionData = {
-        id: item.itemId,
-        title: item.title || '',
-        description: item.description || '',
-        required: question.required || false,
-        type: question.choiceQuestion ? 'choice' : 
-              question.textQuestion ? 'text' :
-              question.scaleQuestion ? 'scale' :
-              question.dateQuestion ? 'date' :
-              question.timeQuestion ? 'time' : 'unknown',
-        questionDetails: {}
-      };
-
-      // Extract type-specific details
-      if (question.choiceQuestion) {
-        questionData.questionDetails = {
-          type: question.choiceQuestion.type, // RADIO, CHECKBOX, DROP_DOWN
-          options: question.choiceQuestion.options?.map(opt => ({
-            value: opt.value,
-            image: opt.image,
-            goToAction: opt.goToAction
-          })) || [],
-          shuffle: question.choiceQuestion.shuffle || false
-        };
-      } else if (question.textQuestion) {
-        questionData.questionDetails = {
-          paragraph: question.textQuestion.paragraph || false
-        };
-      } else if (question.scaleQuestion) {
-        questionData.questionDetails = {
-          low: question.scaleQuestion.low,
-          high: question.scaleQuestion.high,
-          lowLabel: question.scaleQuestion.lowLabel,
-          highLabel: question.scaleQuestion.highLabel
-        };
-      }
-
-      // Check if question has grading (for quiz mode)
-      if (question.grading) {
-        questionData.points = question.grading.pointValue || 0;
-        questionData.correctAnswer = question.grading.correctAnswers;
-        questionData.feedback = question.grading.feedback;
-      }
-
-      return questionData;
-    }).filter(Boolean) || [];
-
     return NextResponse.json({
-      success: true,
-      formData: {
-        formId: formData.formId,
-        title: formData.info?.title || '',
-        description: formData.info?.description || '',
-        documentTitle: formData.info?.documentTitle || formData.info?.title || '',
-        questions,
-        settings: formData.settings,
-        isQuiz: formData.settings?.quizSettings?.isQuiz || false,
-        totalPoints: questions.reduce((sum, q) => sum + (q.points || 0), 0)
-      }
+      success: false,
+      error: 'Internal server error',
+      message: error.message,
+      forms: []
     });
-
-  } catch (error) {
-    console.error('Error fetching form details:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
   }
 }

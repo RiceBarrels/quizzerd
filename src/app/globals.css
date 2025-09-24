@@ -281,6 +281,8 @@
 
 
 
+
+
 /* View Transitions for auth-card Only */
 ::view-transition-old(auth-card),
 ::view-transition-new(auth-card) {
@@ -293,6 +295,22 @@
 }
 
 ::view-transition-new(auth-card) {
+  animation-name: slide-in-fade;
+}
+
+/* sidebar */
+
+::view-transition-old(side-bar),
+::view-transition-new(side-bar) {
+  animation-duration: 0.4s;
+  animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+::view-transition-old(side-bar) {
+  animation-name: slide-out-fade;
+}
+
+::view-transition-new(side-bar) {
   animation-name: slide-in-fade;
 }
 

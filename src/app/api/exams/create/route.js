@@ -22,7 +22,7 @@ export async function POST(request) {
       is_public,
       duration_minutes,
       attempts_allowed,
-      shuffle_questions,
+      shuffle_items,
       show_results_immediately,
       passing_score,
       collaborator_ids = []
@@ -86,12 +86,15 @@ export async function POST(request) {
         collaborator_ids: collaborator_ids,
         duration_minutes: duration_minutes || 60,
         attempts_allowed: attempts_allowed || 1,
-        shuffle_questions: shuffle_questions || false,
+        shuffle_items: shuffle_items || false,
         show_results_immediately: show_results_immediately !== false,
         passing_score: passing_score || 70,
-        questions: [],
+        items: [],
         total_points: 0,
-        status: 'draft'
+        status: 'draft',
+        is_published: false,
+        start_date: null,
+        end_date: null
       })
       .select()
       .single();

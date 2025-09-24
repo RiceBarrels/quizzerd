@@ -202,7 +202,7 @@ export async function GET(request) {
       return {
         ...exam,
         class_names: classNames,
-        questions: exam.questions || []
+        items: exam.items || []
       };
     });
 

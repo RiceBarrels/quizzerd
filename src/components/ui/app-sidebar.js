@@ -17,12 +17,12 @@ import { useClerk, useUser } from "@clerk/nextjs"
 import { Button } from "./button"
 import { Avatar, AvatarFallback, AvatarImage } from "./avatar"
 
-export default function AppSidebar(){
+export default function AppSidebar({...prop}){
     const { signOut } = useClerk();
     const { user } = useUser();
     
     return (
-        <Sidebar className="border-sidebar ease-[cubic-bezier(0.85,0,0.15,1)]">
+        <Sidebar className="border-sidebar ease-[cubic-bezier(0.85,0,0.15,1)]" {...prop}>
             <SidebarHeader className="h-13 border-b border-r rounded-br-4xl pl-6 bg-background">
                 <h1 className="font-bold text-2xl">QuizZered</h1>
             </SidebarHeader>

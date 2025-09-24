@@ -27,7 +27,8 @@ import {
   XCircle,
   FileUp,
   Link2,
-  AlertCircle
+  AlertCircle,
+  Key
 } from "lucide-react";
 import { useTransitionRouter } from "next-view-transitions";
 
@@ -44,7 +45,7 @@ export default function ExamPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [googleForms, setGoogleForms] = useState([]);
   const [selectedFormId, setSelectedFormId] = useState(null);
-  const [googleAccessToken, setGoogleAccessToken] = useState(null);
+  const [googleAccessToken, setGoogleAccessToken] = useState("");
   const [loadingForms, setLoadingForms] = useState(false);
   const [importMode, setImportMode] = useState('url'); // 'url' or 'browse'
   const [classes, setClasses] = useState([]);
@@ -111,104 +112,33 @@ export default function ExamPage() {
     }
   };
 
-
-  const handleGoogleAuth = async () => {
-    try {
-      // Try to get Google OAuth token through our API
-      const response = await fetch('/api/auth/google-token');
-      const data = await response.json();
-
-      if (data.success && data.accessToken) {
-        if (data.isDemo) {
-          toast.info("Using demo mode. To use real Google Forms, configure OAuth.");
-        }
-        setGoogleAccessToken(data.accessToken);
-        handleBrowseGoogleForms(data.accessToken);
-      } else if (data.needsConnection) {
-        // User needs to connect Google account
-        toast.info("Google account not connected. Using demo mode.");
-        
-        // Use simplified endpoint for demo
-        const demoResponse = await fetch('/api/auth/google-token-simple');
-        const demoData = await demoResponse.json();
-        
-        if (demoData.success) {
-          setGoogleAccessToken(demoData.accessToken);
-          handleBrowseGoogleForms(demoData.accessToken);
-        }
-      } else {
-        toast.error(data.error || "Failed to get Google access token");
-        // Fallback to demo
-        setGoogleAccessToken('demo_token');
-        handleBrowseGoogleForms('demo_token');
-      }
-    } catch (error) {
-      console.error("Error getting Google token:", error);
-      // Fallback to demo mode
-      toast.info("Using demo mode for Google Forms browse");
-      setGoogleAccessToken('demo_token');
-      handleBrowseGoogleForms('demo_token');
-    }
-  };
-
-  const handleBrowseGoogleForms = async (token) => {
+  const handleLoadForms = async () => {
     setLoadingForms(true);
     try {
-      // If using demo token, show mock forms
-      if (token.startsWith('demo') || token === 'demo_token') {
-        const mockForms = [
-          {
-            id: 'form1',
-            name: 'Customer Feedback Survey',
-            modifiedTime: new Date().toISOString(),
-            owner: 'You',
-            iconLink: 'https://ssl.gstatic.com/docs/doclist/images/icon_11_form_list.png'
-          },
-          {
-            id: 'form2',
-            name: 'Math Quiz - Chapter 5',
-            modifiedTime: new Date(Date.now() - 86400000).toISOString(),
-            owner: 'You',
-            iconLink: 'https://ssl.gstatic.com/docs/doclist/images/icon_11_form_list.png'
-          },
-          {
-            id: 'form3',
-            name: 'Event Registration Form',
-            modifiedTime: new Date(Date.now() - 172800000).toISOString(),
-            owner: 'You',
-            iconLink: 'https://ssl.gstatic.com/docs/doclist/images/icon_11_form_list.png'
-          }
-        ];
-        setGoogleForms(mockForms);
-        return;
+      // Build URL with optional access token
+      const url = new URL('/api/exams/google-forms-list', window.location.origin);
+      if (googleAccessToken) {
+        url.searchParams.append('access_token', googleAccessToken);
       }
 
-      // Fetch actual forms from Google Drive
-      const response = await fetch(`/api/exams/google-forms-list?access_token=${token}`);
+      const response = await fetch(url.toString());
       const data = await response.json();
 
-      if (data.success && data.forms) {
+      if (data.forms) {
         setGoogleForms(data.forms);
-        if (data.forms.length === 0) {
-          toast.info("No Google Forms found in your Drive");
+        if (data.forms.length > 0) {
+          toast.success(`Found ${data.forms.length} Google Forms`);
+        } else {
+          toast.info(data.message || "No forms found. Provide a Google access token to see your forms.");
         }
-      } else {
+      } else if (data.error) {
         toast.error(data.error || "Failed to fetch Google Forms");
-        // Fallback to mock data
-        const mockForms = [
-          {
-            id: 'demo1',
-            name: 'Sample Form (Demo)',
-            modifiedTime: new Date().toISOString(),
-            owner: 'Demo',
-            iconLink: 'https://ssl.gstatic.com/docs/doclist/images/icon_11_form_list.png'
-          }
-        ];
-        setGoogleForms(mockForms);
+        setGoogleForms([]);
       }
     } catch (error) {
       console.error("Error fetching Google Forms:", error);
       toast.error("Failed to fetch Google Forms");
+      setGoogleForms([]);
     } finally {
       setLoadingForms(false);
     }
@@ -253,7 +183,10 @@ export default function ExamPage() {
         payload.formUrl = importFormUrl;
       } else {
         payload.formId = selectedFormId;
-        payload.accessToken = googleAccessToken;
+        // Include access token if available
+        if (googleAccessToken) {
+          payload.accessToken = googleAccessToken;
+        }
       }
       
       const response = await fetch('/api/exams/import-google-form', {
@@ -270,9 +203,10 @@ export default function ExamPage() {
         setImportFormUrl("");
         setSelectedFormId(null);
         setGoogleForms([]);
+        setGoogleAccessToken("");
         setImportMode('url');
         if (data.data?.exam_id) {
-          router.push(`/exam/edit/${data.data.exam_id}`);
+          router.push(`/exam/${data.data.exam_id}/edit`);
         } else {
           fetchExams();
         }
@@ -317,7 +251,7 @@ export default function ExamPage() {
           show_results_immediately: true,
           passing_score: 70
         });
-        router.push(`/exam/edit/${data.data.exam_id}`);
+        router.push(`/exam/${data.data.exam_id}/edit`);
       } else {
         toast.error(data.error || "Failed to create exam");
       }
@@ -391,7 +325,7 @@ export default function ExamPage() {
                   Import from Google Forms
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[500px]">
+              <DialogContent className="sm:max-w-[600px]">
                 <DialogHeader>
                   <DialogTitle>Import from Google Forms</DialogTitle>
                   <DialogDescription>
@@ -400,78 +334,102 @@ export default function ExamPage() {
                 </DialogHeader>
                 
                 <div className="space-y-4 py-4">
-                  <Tabs value={importMode} onValueChange={setImportMode}>
+                  <Tabs value={importMode} onValueChange={(value) => {
+                    setImportMode(value);
+                    if (value === 'browse' && googleForms.length === 0 && !loadingForms) {
+                      handleLoadForms();
+                    }
+                  }}>
                     <TabsList className="grid w-full grid-cols-2">
                       <TabsTrigger value="browse">Browse My Forms</TabsTrigger>
                       <TabsTrigger value="url">Enter URL</TabsTrigger>
                     </TabsList>
                     
                     <TabsContent value="browse" className="mt-4 space-y-4">
-                      {!googleAccessToken ? (
-                        <div className="text-center py-8">
-                          <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                            <Link2 className="h-6 w-6 text-muted-foreground" />
-                          </div>
-                          <h3 className="text-sm font-medium mb-2">Connect Google Account</h3>
-                          <p className="text-sm text-muted-foreground mb-4">
-                            Sign in with Google to browse your forms
-                          </p>
-                          <Button onClick={handleGoogleAuth} variant="outline">
-                            <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24">
-                              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                            </svg>
-                            Sign in with Google
-                          </Button>
-                        </div>
-                      ) : (
+                      <div className="space-y-4">
                         <div className="space-y-2">
-                          {loadingForms ? (
-                            <div className="flex items-center justify-center py-8">
-                              <Loader2 className="h-6 w-6 animate-spin" />
-                            </div>
-                          ) : googleForms.length > 0 ? (
-                            <div className="space-y-2 max-h-60 overflow-y-auto">
-                              {googleForms.map((form) => (
-                                <div
-                                  key={form.id}
-                                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                                    selectedFormId === form.id
-                                      ? 'border-primary bg-primary/5'
-                                      : 'border-border hover:bg-muted/50'
-                                  }`}
-                                  onClick={() => handleSelectForm(form.id)}
-                                >
-                                  <img
-                                    src={form.iconLink}
-                                    alt="Form icon"
-                                    className="h-8 w-8"
-                                  />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">
-                                      {form.name}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                      Modified {new Date(form.modifiedTime).toLocaleDateString()}
-                                    </p>
-                                  </div>
-                                  {selectedFormId === form.id && (
-                                    <CheckCircle className="h-5 w-5 text-primary" />
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="text-center py-8">
-                              <p className="text-sm text-muted-foreground">
-                                No Google Forms found in your Drive
-                              </p>
-                            </div>
-                          )}
+                          <Label htmlFor="access-token">Google Access Token (Optional)</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              id="access-token"
+                              type="password"
+                              placeholder="Enter your Google OAuth access token"
+                              value={googleAccessToken}
+                              onChange={(e) => setGoogleAccessToken(e.target.value)}
+                              className="flex-1"
+                            />
+                            <Button 
+                              onClick={handleLoadForms}
+                              disabled={loadingForms}
+                              variant="outline"
+                            >
+                              {loadingForms ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                'Load Forms'
+                              )}
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Leave empty to try automatic detection, or{' '}
+                            <a 
+                              href="https://developers.google.com/oauthplayground/" 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-primary underline"
+                            >
+                              get a token here
+                            </a>
+                            {' '}(select Drive and Forms API scopes)
+                          </p>
                         </div>
-                      )}
+
+                        {loadingForms ? (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin" />
+                          </div>
+                        ) : googleForms.length > 0 ? (
+                          <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {googleForms.map((form) => (
+                              <div
+                                key={form.id}
+                                className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                                  selectedFormId === form.id
+                                    ? 'border-primary bg-primary/5'
+                                    : 'border-border hover:bg-muted/50'
+                                }`}
+                                onClick={() => handleSelectForm(form.id)}
+                              >
+                                <img
+                                  src={form.iconLink}
+                                  alt="Form icon"
+                                  className="h-8 w-8"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate">
+                                    {form.name}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Modified {new Date(form.modifiedTime).toLocaleDateString()}
+                                  </p>
+                                </div>
+                                {selectedFormId === form.id && (
+                                  <CheckCircle className="h-5 w-5 text-primary" />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8">
+                            <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                              <Key className="h-6 w-6 text-muted-foreground" />
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              Click "Load Forms" to check for forms, or enter a token to access your Google Forms
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     </TabsContent>
                     
                     <TabsContent value="url" className="mt-4 space-y-4">
@@ -498,12 +456,13 @@ export default function ExamPage() {
                     <div className="flex items-start gap-2">
                       <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5" />
                       <div className="space-y-1 text-sm text-muted-foreground">
-                        <p className="font-medium">How to get the form URL:</p>
+                        <p className="font-medium">How to get an access token:</p>
                         <ol className="list-decimal list-inside space-y-1">
-                          <li>Open your Google Form</li>
-                          <li>Click the "Send" button</li>
-                          <li>Click the link icon</li>
-                          <li>Copy the link and paste it here</li>
+                          <li>Go to <a href="https://developers.google.com/oauthplayground/" target="_blank" rel="noopener noreferrer" className="underline">OAuth Playground</a></li>
+                          <li>Select Drive API v3 and Forms API v1</li>
+                          <li>Click "Authorize APIs"</li>
+                          <li>Exchange authorization code for tokens</li>
+                          <li>Copy the Access Token</li>
                         </ol>
                       </div>
                     </div>
@@ -526,6 +485,8 @@ export default function ExamPage() {
                     onClick={() => {
                       setImportDialogOpen(false);
                       setImportFormUrl("");
+                      setGoogleAccessToken("");
+                      setSelectedFormId(null);
                     }}
                     disabled={isImporting}
                   >
@@ -734,7 +695,7 @@ export default function ExamPage() {
                     <Card 
                       key={exam.exam_id} 
                       className="hover:shadow-lg transition-shadow cursor-pointer"
-                      onClick={() => router.push(`/exam/${activeTab === "my-exams" ? "edit" : "view"}/${exam.exam_id}`)}
+                      onClick={() => router.push(`/exam/${exam.exam_id}/${activeTab === "my-exams" ? "edit" : "view"}`)}
                     >
                       <CardHeader>
                         <div className="flex justify-between items-start mb-2">
@@ -748,7 +709,7 @@ export default function ExamPage() {
                                 variant="ghost"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  router.push(`/exam/edit/${exam.exam_id}`);
+                                  router.push(`/exam/${exam.exam_id}/edit`);
                                 }}
                               >
                                 <Edit className="h-4 w-4" />

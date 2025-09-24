@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseClient } from '@/lib/supabase';
 import { auth } from '@clerk/nextjs/server';
+import { googleApiFetch } from '@/lib/google-auth';
 
 // Helper function to extract Google Form ID from URL
 function extractFormId(url) {
@@ -97,7 +98,8 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { formUrl, formId, accessToken, class_ids = [], is_public = false } = body;
+    const { formUrl, formId, class_ids = [], is_public = false } = body;
+    let { accessToken, expiresAt } = body;
 
     // Determine form ID from either direct ID or URL
     let googleFormId = formId;
@@ -114,22 +116,87 @@ export async function POST(request) {
 
     const supabase = await createSupabaseClient();
 
-    let formData = null;
-    
-    // Try to fetch actual form data if access token is provided
-    if (accessToken) {
+    // If no access token provided, try to get it from Clerk
+    if (!accessToken) {
       try {
-        // First try Google Forms API
-        const formApiUrl = `https://forms.googleapis.com/v1/forms/${googleFormId}`;
-        const formResponse = await fetch(formApiUrl, {
+        // Call our google-token endpoint to get access token from Clerk
+        const tokenResponse = await fetch(new URL('/api/auth/google-token', request.url).href, {
           headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Accept': 'application/json',
+            cookie: request.headers.get('cookie') || '',
           },
         });
+        const tokenData = await tokenResponse.json();
+        
+        if (tokenData.success && tokenData.accessToken) {
+          accessToken = tokenData.accessToken;
+          expiresAt = tokenData.expiresAt;
+          console.log('Got access token from Clerk, expires at:', new Date(expiresAt).toISOString());
+        } else {
+          console.log('Could not get token from Clerk:', tokenData.message);
+        }
+      } catch (error) {
+        console.log('Error getting token from Clerk:', error.message);
+      }
+    }
+
+    // Access token is required for importing from Google Forms
+    if (!accessToken) {
+      return NextResponse.json(
+        { 
+          error: 'Authentication required',
+          message: 'No Google OAuth access token available. Please ensure your Google account is connected with Forms API permissions.'
+        },
+        { status: 401 }
+      );
+    }
+
+    let formData = null;
+    
+    // Try to fetch actual form data if we have a valid access token
+    if (accessToken) {
+      try {
+        // First try Google Forms API with automatic token refresh
+        const formApiUrl = `https://forms.googleapis.com/v1/forms/${googleFormId}`;
+        const formResponse = await googleApiFetch(
+          formApiUrl,
+          {},
+          userId,
+          accessToken,
+          expiresAt
+        );
+
+        console.log("formApi response status:", formResponse.status);
+        console.log("formApi response ok:", formResponse.ok);
+
+        if (!formResponse.ok) {
+          const errorText = await formResponse.text();
+          console.error("Google Forms API error response:", errorText);
+          
+          if (formResponse.status === 401) {
+            return NextResponse.json(
+              { 
+                error: 'Google Forms API authentication failed',
+                message: 'The access token is invalid or expired. Please reconnect your Google account.',
+                details: errorText
+              },
+              { status: 401 }
+            );
+          } else if (formResponse.status === 403) {
+            return NextResponse.json(
+              { 
+                error: 'Google Forms API permission denied',
+                message: 'You do not have permission to access this form. Please ensure Forms API scope is enabled.',
+                details: errorText
+              },
+              { status: 403 }
+            );
+          }
+        }
 
         if (formResponse.ok) {
           const googleFormData = await formResponse.json();
+
+          console.log("googleFormData: ", JSON.stringify(googleFormData))
           
           // Convert Google Forms data to our format
           formData = {
@@ -170,68 +237,39 @@ export async function POST(request) {
           };
         }
       } catch (error) {
-        console.log('Forms API not available, using fallback');
+        console.error('Error fetching form from Google Forms API:', error.message);
+        
+        // If it's an authentication error, return a more specific message
+        if (error.message.includes('401') || error.message.includes('unauthorized')) {
+          return NextResponse.json(
+            { 
+              error: 'Google Forms API authorization failed',
+              message: 'Unable to access the Google Form. Please ensure you have the necessary permissions and that Forms API scope is enabled.',
+              details: error.message
+            },
+            { status: 401 }
+          );
+        }
+        
+        // For other errors, log and continue to fallback
+        console.log('Forms API error, details:', error);
       }
     }
     
-    // Fallback to mock data if we couldn't fetch real data
+    // If we couldn't fetch form data, return error
     if (!formData) {
-      // Try to get basic metadata from Drive API if we have access token
-      let formTitle = `Imported Google Form (${new Date().toLocaleDateString()})`;
-      
-      if (accessToken) {
-        try {
-          const driveResponse = await fetch(
-            `https://www.googleapis.com/drive/v3/files/${googleFormId}?fields=name,description`,
-            {
-              headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Accept': 'application/json',
-              },
-            }
-          );
-          
-          if (driveResponse.ok) {
-            const driveData = await driveResponse.json();
-            formTitle = driveData.name || formTitle;
-          }
-        } catch (error) {
-          console.log('Drive API error:', error);
-        }
-      }
-      
-      // Use mock data with better title
-      formData = {
-        title: formTitle,
-        description: `Imported from Google Forms${formUrl ? `: ${formUrl}` : ''}`,
-        questions: [
-          {
-            title: "Sample Multiple Choice Question",
-            type: "RADIO",
-            choices: ["Option A", "Option B", "Option C", "Option D"],
-            points: 10,
-            required: true
-          },
-          {
-            title: "Sample Short Answer Question",
-            type: "TEXT",
-            points: 5,
-            required: true
-          },
-          {
-            title: "Sample Checkbox Question",
-            type: "CHECKBOX",
-            choices: ["Choice 1", "Choice 2", "Choice 3"],
-            points: 15,
-            required: false
-          }
-        ]
-      };
+      return NextResponse.json(
+        { 
+          error: 'Failed to fetch form data',
+          message: 'Could not retrieve form data from Google Forms. Please ensure you have proper permissions and the form ID is correct.'
+        },
+        { status: 400 }
+      );
     }
 
     // Convert Google Forms questions to exam format
-    const examQuestions = formData.questions.map(convertQuestion);
-    const totalPoints = examQuestions.reduce((sum, q) => sum + q.points, 0);
+    const examItems = formData.questions.map(convertQuestion);
+    const totalPoints = examItems.reduce((sum, q) => sum + q.points, 0);
 
     // Validate class permissions if classes are provided
     const validClassIds = [];
@@ -270,12 +308,15 @@ export async function POST(request) {
         collaborator_ids: [],
         duration_minutes: 60,
         attempts_allowed: 1,
-        shuffle_questions: false,
+        shuffle_items: false,
         show_results_immediately: true,
         passing_score: 70,
-        questions: examQuestions,
+        items: examItems,
         total_points: totalPoints,
-        status: 'draft'
+        status: 'draft',
+        is_published: false,
+        start_date: null,
+        end_date: null
       })
       .select()
       .single();
@@ -291,8 +332,7 @@ export async function POST(request) {
     return NextResponse.json({
       success: true,
       data,
-      message: 'Exam imported successfully from Google Forms',
-      note: 'This is a demonstration import. Full Google Forms API integration requires OAuth2 authentication.'
+      message: 'Exam imported successfully from Google Forms'
     });
 
   } catch (error) {
@@ -305,7 +345,7 @@ export async function POST(request) {
 }
 
 // GET endpoint to check if Google Forms API is configured
-export async function GET(request) {
+export async function GET() {
   try {
     const { userId } = await auth();
     
