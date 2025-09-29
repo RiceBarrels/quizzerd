@@ -1,38 +1,27 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import TextEditor from '@/components/ui/text-editor';
-import FloatingFormatDock from '@/components/ui/floating-format-dock';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import FloatingFormatDock from '@/components/editors/floating-format-dock';
+import { Tabs, TabsList, TabsTrigger, TabsContents, TabsContent } from '@/components/ui/shadcn-io/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Loader2, Plus, Trash2, GripVertical, Save, Eye, Calendar, Clock, ListTodoIcon, ListChecksIcon, TextAlignStartIcon, NotepadTextIcon, CircleSlashIcon } from 'lucide-react';
-
-const questionTypes = [
-  { value: 'multiple_choice', label: <><ListTodoIcon /> Multiple Choice</> },
-  { value: 'multiple_select', label: <><ListChecksIcon /> Multiple Select</> },
-  { value: 'short_answer', label: <><TextAlignStartIcon /> Short Answer</> },
-  { value: 'long_answer', label: <><NotepadTextIcon /> Long Answer</> },
-  { value: 'true_false', label: <><CircleSlashIcon />True/False</> },
-];
+import { Loader2 } from 'lucide-react';
+import ExamHeader from '@/components/exam/ExamHeader';
+import ExamDetailsTab from '@/components/exam/ExamDetailsTab';
+import QuestionsTab from '@/components/exam/QuestionsTab';
+import ExamSettingsTab from '@/components/exam/ExamSettingsTab';
 
 export default function EditExamPage({ params }) {
   const router = useRouter();
-  const { examId } = params;
+  const { examId } = use(params);
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('details');
+  const [lastSaved, setLastSaved] = useState(null);
+  const autoSaveTimerRef = useRef(null);
+  const hasUnsavedChangesRef = useRef(false);
   
   // Form states
   const [examName, setExamName] = useState('');
@@ -46,6 +35,12 @@ export default function EditExamPage({ params }) {
   const [isPublished, setIsPublished] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [lastScrollPosition, setLastScrollPosition] = useState({
+    details: 0,
+    questions: 0,
+    settings: 0
+  });
+  
   
   // Items (questions)
   const [items, setItems] = useState([]);
@@ -61,6 +56,13 @@ export default function EditExamPage({ params }) {
       
       if (result.success) {
         const examData = result.data;
+        
+        console.log('📥 Loaded exam data with items:', (examData.items || []).map((item, idx) => ({
+          index: idx,
+          question_id: item.question_id,
+          question_text: item.question_text ? item.question_text.substring(0, 50) + '...' : 'EMPTY',
+          question_type: item.question_type
+        })));
         
         // Populate form fields
         setExamName(examData.exam_name || '');
@@ -104,6 +106,13 @@ export default function EditExamPage({ params }) {
   };
 
   const updateQuestion = (index, field, value) => {
+    console.log(`📝 updateQuestion called:`, {
+      index,
+      field,
+      value: field === 'question_text' ? value.substring(0, 100) + '...' : value,
+      currentValue: items[index]?.[field]
+    });
+    
     const updatedItems = [...items];
     updatedItems[index] = {
       ...updatedItems[index],
@@ -143,8 +152,17 @@ export default function EditExamPage({ params }) {
     return items.reduce((sum, item) => sum + (item.points || 0), 0);
   };
 
-  const saveExam = async (publish = false) => {
-    setSaving(true);
+  const saveExam = async (publish = false, isAutoSave = false) => {
+    if (!isAutoSave) {
+      setSaving(true);
+    }
+    
+    console.log('💾 Saving exam with items:', items.map((item, idx) => ({
+      index: idx,
+      question_id: item.question_id,
+      question_text: item.question_text ? item.question_text.substring(0, 50) + '...' : 'EMPTY',
+      question_type: item.question_type
+    })));
     
     try {
       const response = await fetch(`/api/exams/update`, {
@@ -174,20 +192,94 @@ export default function EditExamPage({ params }) {
       const result = await response.json();
       
       if (result.success) {
-        toast.success(publish ? 'Exam published successfully!' : 'Exam saved successfully!');
+        setLastSaved(new Date());
+        hasUnsavedChangesRef.current = false;
+        
+        if (!isAutoSave) {
+          toast.success(publish ? 'Exam published successfully!' : 'Exam saved successfully!');
+        } else {
+          toast.success('Auto-saved', {
+            duration: 2000,
+            position: 'bottom-right'
+          });
+        }
+        
         if (publish) {
           setIsPublished(true);
         }
       } else {
-        toast.error(result.error || 'Failed to save exam');
+        if (!isAutoSave) {
+          toast.error(result.error || 'Failed to save exam');
+        }
       }
     } catch (error) {
       console.error('Error saving exam:', error);
-      toast.error('Failed to save exam');
+      if (!isAutoSave) {
+        toast.error('Failed to save exam');
+      }
     } finally {
-      setSaving(false);
+      if (!isAutoSave) {
+        setSaving(false);
+      }
     }
   };
+
+  // Auto-save function
+  const triggerAutoSave = useCallback(() => {
+    // Clear existing timer
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+    
+    // Mark as having unsaved changes
+    hasUnsavedChangesRef.current = true;
+    
+    // Set new timer for 3 seconds
+    autoSaveTimerRef.current = setTimeout(() => {
+      if (hasUnsavedChangesRef.current && examName) {
+        saveExam(false, true);
+      }
+    }, 3000);
+  }, [examName, examDescription, durationMinutes, attemptsAllowed, passingScore, 
+      shuffleItems, showResultsImmediately, isPublic, startDate, endDate, items]);
+
+  // Watch for changes and trigger auto-save
+  useEffect(() => {
+    if (!loading) {
+      triggerAutoSave();
+    }
+    
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [examName, examDescription, durationMinutes, attemptsAllowed, passingScore,
+      shuffleItems, showResultsImmediately, isPublic, startDate, endDate, items, triggerAutoSave, loading]);
+
+  // Save scroll position while scrolling
+  useEffect(() => {
+    const scrollContainer = document.querySelector('.overflow-y-auto');
+    if (!scrollContainer) return;
+
+    let scrollTimeout;
+    const handleScroll = () => {
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        setLastScrollPosition(prev => ({
+          ...prev,
+          [activeTab]: scrollContainer.scrollTop
+        }));
+      }, 100);
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll);
+    
+    return () => {
+      scrollContainer.removeEventListener('scroll', handleScroll);
+      clearTimeout(scrollTimeout);
+    };
+  }, [activeTab]);
 
   if (loading) {
     return (
@@ -200,389 +292,99 @@ export default function EditExamPage({ params }) {
   return (
     <>
       <FloatingFormatDock />
-      <div className="container mx-auto p-6 max-w-6xl">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Edit Exam</h1>
-          <p className="text-muted-foreground">
-            Modify exam details and questions
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => router.push(`/exam/${examId}/preview`)}
-          >
-            <Eye className="w-4 h-4 mr-2" />
-            Preview
-          </Button>
-          <Button
-            onClick={() => saveExam(false)}
-            disabled={saving}
-          >
-            {saving ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4 mr-2" />
-            )}
-            Save Draft
-          </Button>
-          <Button
-            onClick={() => saveExam(true)}
-            disabled={saving || !examName || items.length === 0}
-            variant={isPublished ? "secondary" : "default"}
-          >
-            {saving ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : null}
-            {isPublished ? 'Update Published' : 'Publish'}
-          </Button>
-        </div>
-      </div>
+      <div className="w-full py-8 flex-1 flex flex-col">
+      <ExamHeader
+        examId={examId}
+        isPublished={isPublished}
+        saving={saving}
+        onSave={() => saveExam(false)}
+        onPublish={() => saveExam(true)}
+        onPreview={() => router.push(`/exam/${examId}/preview`)}
+        canPublish={examName && items.length > 0}
+        lastSaved={lastSaved}
+      />
 
-      {isPublished && (
-        <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-          <p className="text-sm text-green-800 dark:text-green-200">
-             This exam is published and available to students.
-          </p>
-        </div>
-      )}
-
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
+      <Tabs value={activeTab} onValueChange={(value) => {
+        const scrollContainer = document.querySelector('.overflow-y-auto');
+        if (scrollContainer) {
+          // Save current tab's scroll position
+          setLastScrollPosition(prev => ({
+            ...prev,
+            [activeTab]: scrollContainer.scrollTop
+          }));
+          
+          // Switch tab
+          setActiveTab(value);
+          
+          // Restore new tab's scroll position
+          setTimeout(() => {
+            scrollContainer.scrollTo({ 
+              top: lastScrollPosition[value] || 0, 
+              behavior: 'smooth' 
+            });
+          }, 50);
+        } else {
+          setActiveTab(value);
+        }
+      }} className="flex-1">
+        <TabsList className="ml-8 sticky top-8 z-10">
           <TabsTrigger value="details">Exam Details</TabsTrigger>
           <TabsTrigger value="questions">
-            Questions ({items.length})
-            {items.length > 0 && (
-              <Badge className="ml-2" variant="secondary">
-                {calculateTotalPoints()} pts
-              </Badge>
-            )}
+            <span className="flex items-center gap-2 flex-1">
+              Questions ({items.length})
+              {items.length > 0 && (
+                <Badge variant="secondary">
+                  {calculateTotalPoints()} pts
+                </Badge>
+              )}
+            </span>
           </TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="details">
-          <Card>
-            <CardHeader>
-              <CardTitle>Exam Information</CardTitle>
-              <CardDescription>
-                Basic details about your exam
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="exam-name">Exam Name *</Label>
-                <Input
-                  id="exam-name"
-                  value={examName}
-                  onChange={(e) => setExamName(e.target.value)}
-                  placeholder="Enter exam name"
-                  required
-                />
-              </div>
+        <TabsContents className="mt-4 overflow-x-hidden">
+          <TabsContent value="details" className="container mx-auto px-12 max-w-6xl overflow-y-auto flex-1">
+            <ExamDetailsTab
+              examName={examName}
+              examDescription={examDescription}
+              startDate={startDate}
+              endDate={endDate}
+              onExamNameChange={setExamName}
+              onDescriptionChange={setExamDescription}
+              onStartDateChange={setStartDate}
+              onEndDateChange={setEndDate}
+            />
+          </TabsContent>
 
-              <div className="space-y-2">
-                <Label htmlFor="exam-description">Description</Label>
-                <TextEditor
-                  id="exam-description"
-                  value={examDescription}
-                  onChange={(value) => setExamDescription(value)}
-                  placeholder="Enter exam description"
-                  minHeight={100}
-                />
-              </div>
+          <TabsContent value="questions" className="container mx-auto px-12 max-w-6xl overflow-y-auto flex-1 space-y-4">
+            <QuestionsTab
+              items={items}
+              onUpdateQuestion={updateQuestion}
+              onAddOption={addOption}
+              onUpdateOption={updateOption}
+              onRemoveOption={removeOption}
+              onRemoveQuestion={removeQuestion}
+              onAddNewQuestion={addNewQuestion}
+            />
+          </TabsContent>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="start-date">
-                    <Calendar className="w-4 h-4 inline mr-1" />
-                    Start Date
-                  </Label>
-                  <Input
-                    id="start-date"
-                    type="datetime-local"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="end-date">
-                    <Calendar className="w-4 h-4 inline mr-1" />
-                    End Date
-                  </Label>
-                  <Input
-                    id="end-date"
-                    type="datetime-local"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="questions" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Exam Questions</CardTitle>
-              <CardDescription>
-                Add and manage exam questions
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {items.map((item, index) => (
-                <Card key={item.question_id} className="relative">
-                  <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-2">
-                        <GripVertical className="w-4 h-4 text-muted-foreground" />
-                        <Badge variant="outline">Question {index + 1}</Badge>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeQuestion(index)}
-                      >
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Question Type</Label>
-                        <Select
-                          value={item.question_type}
-                          onValueChange={(value) => updateQuestion(index, 'question_type', value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {questionTypes.map((type) => (
-                              <SelectItem key={type.value} value={type.value}>
-                                {type.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Points</Label>
-                        <Input
-                          type="number"
-                          value={item.points}
-                          onChange={(e) => updateQuestion(index, 'points', parseInt(e.target.value))}
-                          min="1"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Question Text</Label>
-                      <TextEditor
-                        id={`question-${item.question_id}`}
-                        value={item.question_text}
-                        onChange={(value) => updateQuestion(index, 'question_text', value)}
-                        placeholder="Enter your question"
-                        minHeight={80}
-                      />
-                    </div>
-
-                    {(item.question_type === 'multiple_choice' || item.question_type === 'multiple_select') && (
-                      <div className="space-y-2">
-                        <Label>Options</Label>
-                        {item.options.map((option, optionIndex) => (
-                          <div key={optionIndex} className="flex gap-2 items-center">
-                            {item.question_type === 'multiple_choice' ? (
-                              <RadioGroup value={item.correct_answer?.toString()} onValueChange={(value) => updateQuestion(index, 'correct_answer', parseInt(value))}>
-                                <RadioGroupItem value={optionIndex.toString()} />
-                              </RadioGroup>
-                            ) : (
-                              <Checkbox
-                                checked={Array.isArray(item.correct_answer) && item.correct_answer.includes(optionIndex)}
-                                onCheckedChange={(checked) => {
-                                  const currentAnswers = Array.isArray(item.correct_answer) ? item.correct_answer : [];
-                                  if (checked) {
-                                    updateQuestion(index, 'correct_answer', [...currentAnswers, optionIndex]);
-                                  } else {
-                                    updateQuestion(index, 'correct_answer', currentAnswers.filter(a => a !== optionIndex));
-                                  }
-                                }}
-                              />
-                            )}
-                            <div className="flex-1">
-                              <TextEditor
-                                id={`question-${item.question_id}-option-${optionIndex}`}
-                                value={option}
-                                onChange={(value) => updateOption(index, optionIndex, value)}
-                                placeholder={`Option ${optionIndex + 1}`}
-                                minHeight={50}
-                              />
-                            </div>
-                            {item.options.length > 2 && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeOption(index, optionIndex)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            )}
-                          </div>
-                        ))}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => addOption(index)}
-                        >
-                          <Plus className="w-4 h-4 mr-1" />
-                          Add Option
-                        </Button>
-                      </div>
-                    )}
-
-                    {item.question_type === 'true_false' && (
-                      <div className="space-y-2">
-                        <Label>Correct Answer</Label>
-                        <RadioGroup 
-                          value={item.correct_answer?.toString()} 
-                          onValueChange={(value) => updateQuestion(index, 'correct_answer', value === 'true')}
-                        >
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="true" />
-                            <Label>True</Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="false" />
-                            <Label>False</Label>
-                          </div>
-                        </RadioGroup>
-                      </div>
-                    )}
-
-                    <div className="space-y-2">
-                      <Label>Explanation (Optional)</Label>
-                      <TextEditor
-                        id={`question-${item.question_id}-explanation`}
-                        value={item.explanation}
-                        onChange={(value) => updateQuestion(index, 'explanation', value)}
-                        placeholder="Provide an explanation for the answer"
-                        minHeight={80}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-
-              <Button
-                onClick={addNewQuestion}
-                className="w-full"
-                variant="outline"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Question
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="settings">
-          <Card>
-            <CardHeader>
-              <CardTitle>Exam Settings</CardTitle>
-              <CardDescription>
-                Configure exam behavior and scoring
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="duration">
-                    <Clock className="w-4 h-4 inline mr-1" />
-                    Duration (minutes)
-                  </Label>
-                  <Input
-                    id="duration"
-                    type="number"
-                    value={durationMinutes}
-                    onChange={(e) => setDurationMinutes(parseInt(e.target.value))}
-                    min="1"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="attempts">Attempts Allowed</Label>
-                  <Input
-                    id="attempts"
-                    type="number"
-                    value={attemptsAllowed}
-                    onChange={(e) => setAttemptsAllowed(parseInt(e.target.value))}
-                    min="1"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="passing-score">Passing Score (%)</Label>
-                <Input
-                  id="passing-score"
-                  type="number"
-                  value={passingScore}
-                  onChange={(e) => setPassingScore(parseInt(e.target.value))}
-                  min="0"
-                  max="100"
-                />
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Shuffle Questions</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Randomize question order for each attempt
-                    </p>
-                  </div>
-                  <Switch
-                    checked={shuffleItems}
-                    onCheckedChange={setShuffleItems}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Show Results Immediately</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Display results right after submission
-                    </p>
-                  </div>
-                  <Switch
-                    checked={showResultsImmediately}
-                    onCheckedChange={setShowResultsImmediately}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Public Exam</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Allow anyone to view and take this exam
-                    </p>
-                  </div>
-                  <Switch
-                    checked={isPublic}
-                    onCheckedChange={setIsPublic}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+          <TabsContent value="settings" className="container mx-auto px-12 overflow-y-auto flex-1 max-w-6xl">
+            <ExamSettingsTab
+              durationMinutes={durationMinutes}
+              attemptsAllowed={attemptsAllowed}
+              passingScore={passingScore}
+              shuffleItems={shuffleItems}
+              showResultsImmediately={showResultsImmediately}
+              isPublic={isPublic}
+              onDurationChange={setDurationMinutes}
+              onAttemptsChange={setAttemptsAllowed}
+              onPassingScoreChange={setPassingScore}
+              onShuffleChange={setShuffleItems}
+              onShowResultsChange={setShowResultsImmediately}
+              onPublicChange={setIsPublic}
+            />
+          </TabsContent>
+        </TabsContents>
       </Tabs>
     </div>
     </>

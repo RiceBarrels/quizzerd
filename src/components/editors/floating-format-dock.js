@@ -1,0 +1,748 @@
+'use client';
+
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Toggle } from '@/components/ui/toggle';
+import { Separator } from '@/components/ui/separator';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { 
+  Bold, 
+  Italic, 
+  Underline, 
+  Strikethrough,
+  List,
+  ListOrdered,
+  Heading1,
+  Heading2,
+  Heading3,
+  Type,
+  Link,
+  Image,
+  Code,
+  Quote,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Palette,
+  Highlighter,
+  Eraser,
+  ChevronDown,
+  MoreHorizontal,
+  Minus,
+  Plus
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+// Singleton instance to manage the dock globally
+let dockInstance = null;
+
+export function useFloatingDock() {
+  const [activeEditor, setActiveEditor] = useState(null);
+  const [updateTrigger, setUpdateTrigger] = useState(0);
+  
+  useEffect(() => {
+    if (!dockInstance) {
+      dockInstance = {
+        setActiveEditor,
+        activeEditor: null,
+        updateFormats: () => setUpdateTrigger(prev => prev + 1)
+      };
+    } else {
+      dockInstance.setActiveEditor = setActiveEditor;
+      dockInstance.updateFormats = () => setUpdateTrigger(prev => prev + 1);
+    }
+    
+    return () => {
+      if (dockInstance?.setActiveEditor === setActiveEditor) {
+        dockInstance.setActiveEditor = null;
+        dockInstance.updateFormats = null;
+      }
+    };
+  }, []);
+  
+  return { activeEditor, updateTrigger };
+}
+
+export function registerEditor(editorRef, editorId) {
+  const handleFocus = () => {
+    if (dockInstance?.setActiveEditor) {
+      dockInstance.activeEditor = { ref: editorRef, id: editorId };
+      dockInstance.setActiveEditor({ ref: editorRef, id: editorId });
+    }
+  };
+  
+  const handleBlur = (e) => {
+    // Don't hide if clicking within the dock, its popovers, or select dropdowns
+    if (!e?.relatedTarget?.closest('.floating-format-dock') && 
+        !e?.relatedTarget?.closest('[role="dialog"]') &&
+        !e?.relatedTarget?.closest('[data-radix-select-content]')) {
+      const timeoutId = setTimeout(() => {
+        // Double check that focus hasn't returned to dock, editor, or select
+        const activeEl = document.activeElement;
+        const isInDock = activeEl?.closest('.floating-format-dock');
+        const isInPopover = activeEl?.closest('[role="dialog"]');
+        const isInEditor = activeEl?.closest('.ql-editor');
+        const isInSelect = activeEl?.closest('[data-radix-select-content]');
+        
+        if (!isInDock && !isInPopover && !isInEditor && !isInSelect) {
+          if (dockInstance?.activeEditor?.id === editorId) {
+            dockInstance.activeEditor = null;
+            dockInstance.setActiveEditor?.(null);
+          }
+        }
+      }, 200);
+      
+      // Store timeout ID so it can be cancelled
+      if (dockInstance) {
+        dockInstance.hideTimeout = timeoutId;
+      }
+    }
+  };
+  
+  const updateFormats = () => {
+    if (dockInstance?.updateFormats) {
+      dockInstance.updateFormats();
+    }
+  };
+  
+  return { handleFocus, handleBlur, updateFormats };
+}
+
+export default function FloatingFormatDock() {
+  const { activeEditor, updateTrigger } = useFloatingDock();
+  const [isVisible, setIsVisible] = useState(false);
+  const [activeFormats, setActiveFormats] = useState({});
+  const [fontSize, setFontSize] = useState(16);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [textColor, setTextColor] = useState('#000000');
+  const [bgColor, setBgColor] = useState('#FFFF00');
+  const [showLinkDialog, setShowLinkDialog] = useState(false);
+  const [showImageDialog, setShowImageDialog] = useState(false);
+  const [showColorDialog, setShowColorDialog] = useState(false);
+  const [showBgColorDialog, setShowBgColorDialog] = useState(false);
+  const dockRef = useRef(null);
+
+  useEffect(() => {
+    setIsVisible(!!activeEditor);
+    if (activeEditor?.ref?.current) {
+      updateActiveFormats();
+    }
+  }, [activeEditor, updateTrigger]);
+
+  const updateActiveFormats = useCallback((skipSizeUpdate = false) => {
+    if (activeEditor?.ref?.current) {
+      const selection = activeEditor.ref.current.getSelection();
+      if (selection) {
+        const formats = activeEditor.ref.current.getFormat(selection);
+        setActiveFormats(formats);
+        
+        // Update font size state based on current selection (unless we're actively changing it)
+        if (!skipSizeUpdate) {
+          if (formats.size) {
+            // Extract number from size string (e.g., "18px" -> 18)
+            const sizeNum = parseInt(formats.size);
+            if (!isNaN(sizeNum)) {
+              setFontSize(sizeNum);
+            }
+          } else {
+            // Reset to default if no size is set
+            setFontSize(16);
+          }
+        }
+      }
+    }
+  }, [activeEditor]);
+
+  const applyFormat = useCallback((format, value = true) => {
+    if (activeEditor?.ref?.current) {
+      const quill = activeEditor.ref.current;
+      const selection = quill.getSelection();
+      
+      if (!selection) {
+        quill.focus();
+        return;
+      }
+
+      if (format === 'header') {
+        const currentHeader = activeFormats.header;
+        if (currentHeader === value) {
+          quill.format('header', false);
+        } else {
+          quill.format('header', value);
+        }
+      } else if (format === 'clean') {
+        quill.removeFormat(selection.index, selection.length);
+      } else if (format === 'link') {
+        const currentLink = quill.getFormat(selection).link;
+        if (currentLink) {
+          quill.format('link', false);
+        } else {
+          // Will be handled by dialog
+          setShowLinkDialog(true);
+        }
+      } else if (format === 'image') {
+        // Will be handled by dialog
+        setShowImageDialog(true);
+      } else if (format === 'size') {
+        if (value === 'default' || value === false) {
+          quill.format('size', false);
+          setFontSize(16); // Reset to default
+        } else {
+          // Check if value already includes 'px' or is a number
+          const sizeValue = typeof value === 'number' ? value + 'px' : value;
+          quill.format('size', sizeValue);
+          // Update the font size state
+          if (typeof value === 'number') {
+            setFontSize(value);
+          } else {
+            const num = parseInt(value);
+            if (!isNaN(num)) {
+              setFontSize(num);
+            }
+          }
+        }
+      } else if (format === 'color') {
+        if (value && value !== true) {
+          quill.format('color', value);
+        } else {
+          setShowColorDialog(true);
+        }
+      } else if (format === 'background') {
+        if (value && value !== true) {
+          quill.format('background', value);
+        } else {
+          setShowBgColorDialog(true);
+        }
+      } else if (format === 'list') {
+        // Toggle list format
+        const currentList = activeFormats.list;
+        if (currentList === value) {
+          quill.format('list', false);
+        } else {
+          quill.format('list', value);
+        }
+      } else if (format === 'align') {
+        // Toggle alignment
+        const currentAlign = activeFormats.align;
+        if (currentAlign === value || (value === false && !currentAlign)) {
+          quill.format('align', false);
+        } else {
+          quill.format('align', value);
+        }
+      } else if (format === 'blockquote') {
+        // Toggle blockquote format
+        const currentValue = activeFormats.blockquote;
+        if (currentValue) {
+          quill.format('blockquote', false);
+        } else {
+          quill.format('blockquote', true);
+        }
+      } else if (format === 'code') {
+        // Toggle inline code format
+        const currentValue = activeFormats.code;
+        if (currentValue) {
+          quill.format('code', false);
+        } else {
+          quill.format('code', true);
+        }
+      } else if (format === 'code-block') {
+        // Toggle code block format
+        const currentValue = activeFormats['code-block'];
+        if (currentValue) {
+          quill.format('code-block', false);
+        } else {
+          quill.format('code-block', true);
+        }
+      } else {
+        // For basic formats like bold, italic, underline, strike
+        const currentValue = activeFormats[format];
+        if (currentValue === value || currentValue === true) {
+          quill.format(format, false);
+        } else {
+          quill.format(format, value);
+        }
+      }
+      
+      // Small delay to ensure Quill has applied the format
+      setTimeout(() => {
+        // Skip size update when we just changed the size
+        updateActiveFormats(format === 'size');
+      }, 10);
+    }
+  }, [activeEditor, activeFormats, updateActiveFormats]);
+
+  const applyLink = () => {
+    if (activeEditor?.ref?.current && linkUrl) {
+      const quill = activeEditor.ref.current;
+      quill.format('link', linkUrl);
+      setLinkUrl('');
+      setShowLinkDialog(false);
+      updateActiveFormats();
+    }
+  };
+
+  const insertImage = () => {
+    if (activeEditor?.ref?.current && imageUrl) {
+      const quill = activeEditor.ref.current;
+      const range = quill.getSelection();
+      quill.insertEmbed(range.index, 'image', imageUrl);
+      setImageUrl('');
+      setShowImageDialog(false);
+    }
+  };
+
+  const FormatButton = ({ format, icon: Icon, title, formatValue, className }) => {
+    const isPressed = formatValue !== undefined ? activeFormats[format] === formatValue : activeFormats[format];
+    
+    return (
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Toggle
+              size="sm"
+              pressed={isPressed}
+              onPressedChange={() => applyFormat(format, formatValue)}
+              aria-label={title}
+              className={cn(
+                "h-8 w-8 p-0 transition-all",
+                isPressed && "bg-primary text-primary-foreground hover:bg-primary/90",
+                className
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+            </Toggle>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            <p>{title}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
+  return (
+    <AnimatePresence>
+      {isVisible && (
+        <motion.div
+          ref={dockRef}
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 20, opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="floating-format-dock fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 bg-background/95 backdrop-blur-sm border rounded-lg px-2 py-1 shadow-lg"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            // Cancel any pending hide timeout
+            if (dockInstance?.hideTimeout) {
+              clearTimeout(dockInstance.hideTimeout);
+              dockInstance.hideTimeout = null;
+            }
+          }}
+          onClick={() => {
+            // Keep dock visible and re-focus the editor if needed
+            if (dockInstance?.hideTimeout) {
+              clearTimeout(dockInstance.hideTimeout);
+              dockInstance.hideTimeout = null;
+            }
+            // Ensure editor stays active
+            if (activeEditor?.ref?.current) {
+              activeEditor.ref.current.focus();
+            }
+          }}
+          onFocus={() => {
+            // Cancel hide when dock gains focus
+            if (dockInstance?.hideTimeout) {
+              clearTimeout(dockInstance.hideTimeout);
+              dockInstance.hideTimeout = null;
+            }
+          }}
+          onMouseEnter={() => {
+            // Cancel hide when mouse enters dock
+            if (dockInstance?.hideTimeout) {
+              clearTimeout(dockInstance.hideTimeout);
+              dockInstance.hideTimeout = null;
+            }
+          }}
+        >
+          {/* Basic formatting */}
+          <div className="flex items-center gap-0.5">
+            <FormatButton format="bold" icon={Bold} title="Bold (Ctrl+B)" />
+            <FormatButton format="italic" icon={Italic} title="Italic (Ctrl+I)" />
+            <FormatButton format="underline" icon={Underline} title="Underline (Ctrl+U)" />
+            <FormatButton format="strike" icon={Strikethrough} title="Strikethrough" />
+          </div>
+
+          <Separator orientation="vertical" className="h-6" />
+
+          {/* Quote and Code buttons */}
+          <div className="flex items-center gap-0.5">
+            <FormatButton format="blockquote" icon={Quote} title="Quote" />
+            <FormatButton format="code" icon={Code} title="Inline Code" />
+          </div>
+
+          <Separator orientation="vertical" className="h-6" />
+
+          {/* Text type select */}
+          <Select
+            value={
+              activeFormats.header === 1 ? 'h1' :
+              activeFormats.header === 2 ? 'h2' :
+              activeFormats.header === 3 ? 'h3' :
+              'normal'
+            }
+            onValueChange={(value) => {
+              // First clear all text style formats
+              applyFormat('header', false);
+              
+              // Then apply the selected format
+              switch(value) {
+                case 'normal':
+                  // Already cleared above
+                  break;
+                case 'h1':
+                  applyFormat('header', 1);
+                  break;
+                case 'h2':
+                  applyFormat('header', 2);
+                  break;
+                case 'h3':
+                  applyFormat('header', 3);
+                  break;
+              }
+            }}
+          >
+            <SelectTrigger className="h-8 w-32">
+              <SelectValue placeholder="Normal" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="normal">
+                <span className="flex items-center gap-2">
+                  <Type className="h-3.5 w-3.5" />
+                  Normal
+                </span>
+              </SelectItem>
+              <SelectItem value="h1">
+                <span className="flex items-center gap-2">
+                  <Heading1 className="h-4 w-4" />
+                  Heading 1
+                </span>
+              </SelectItem>
+              <SelectItem value="h2">
+                <span className="flex items-center gap-2">
+                  <Heading2 className="h-3.5 w-3.5" />
+                  Heading 2
+                </span>
+              </SelectItem>
+              <SelectItem value="h3">
+                <span className="flex items-center gap-2">
+                  <Heading3 className="h-3 w-3" />
+                  Heading 3
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Lists */}
+          <div className="flex items-center gap-0.5">
+            <FormatButton format="list" icon={List} title="Bullet List" formatValue="bullet" />
+            <FormatButton format="list" icon={ListOrdered} title="Numbered List" formatValue="ordered" />
+          </div>
+
+          <Separator orientation="vertical" className="h-6" />
+
+          {/* Alignment popup */}
+          <Popover modal={false}>
+            <PopoverTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 px-2 gap-1"
+                aria-label="Alignment"
+              >
+                <AlignLeft className="h-3.5 w-3.5" />
+                <ChevronDown className="h-3 w-3" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-36 p-1">
+              <div className="flex flex-col gap-1">
+                <Button
+                  size="sm"
+                  variant={!activeFormats.align ? "secondary" : "ghost"}
+                  onClick={() => applyFormat('align', false)}
+                  className="justify-start h-8 px-2"
+                >
+                  <AlignLeft className="h-3.5 w-3.5 mr-2" />
+                  Align Left
+                </Button>
+                <Button
+                  size="sm"
+                  variant={activeFormats.align === 'center' ? "secondary" : "ghost"}
+                  onClick={() => applyFormat('align', 'center')}
+                  className="justify-start h-8 px-2"
+                >
+                  <AlignCenter className="h-3.5 w-3.5 mr-2" />
+                  Center
+                </Button>
+                <Button
+                  size="sm"
+                  variant={activeFormats.align === 'right' ? "secondary" : "ghost"}
+                  onClick={() => applyFormat('align', 'right')}
+                  className="justify-start h-8 px-2"
+                >
+                  <AlignRight className="h-3.5 w-3.5 mr-2" />
+                  Align Right
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          <Separator orientation="vertical" className="h-6" />
+
+          {/* More options popup */}
+          <Popover modal={false}>
+            <PopoverTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 w-8 p-0"
+                aria-label="More Options"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-44 p-1">
+              <div className="flex flex-col gap-1">
+                {/* Link Dialog */}
+                <Popover open={showLinkDialog} onOpenChange={setShowLinkDialog} modal={false}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setShowLinkDialog(true)}
+                      className="justify-start h-8 px-2"
+                    >
+                      <Link className="h-3.5 w-3.5 mr-2" />
+                      Insert Link
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80" side="left">
+                    <div className="space-y-2">
+                      <Label className="text-xs">URL</Label>
+                      <Input
+                        value={linkUrl}
+                        onChange={(e) => setLinkUrl(e.target.value)}
+                        placeholder="https://example.com"
+                        className="h-8"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') applyLink();
+                        }}
+                      />
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={applyLink} className="h-8">
+                          Apply
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setShowLinkDialog(false)} className="h-8">
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {/* Image Dialog */}
+                <Popover open={showImageDialog} onOpenChange={setShowImageDialog} modal={false}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setShowImageDialog(true)}
+                      className="justify-start h-8 px-2"
+                    >
+                      <Image className="h-3.5 w-3.5 mr-2" />
+                      Insert Image
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80" side="left">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Image URL</Label>
+                      <Input
+                        value={imageUrl}
+                        onChange={(e) => setImageUrl(e.target.value)}
+                        placeholder="https://example.com/image.jpg"
+                        className="h-8"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') insertImage();
+                        }}
+                      />
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={insertImage} className="h-8">
+                          Insert
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setShowImageDialog(false)} className="h-8">
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                <Separator />
+
+                {/* Background Color Dialog */}
+                <Popover open={showBgColorDialog} onOpenChange={setShowBgColorDialog} modal={false}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant={activeFormats.background ? "secondary" : "ghost"}
+                      onClick={() => setShowBgColorDialog(true)}
+                      className="justify-start h-8 px-2"
+                    >
+                      <Highlighter className="h-3.5 w-3.5 mr-2" />
+                      Highlight
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64" side="left">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Background Color</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="color"
+                          value={bgColor}
+                          onChange={(e) => {
+                            setBgColor(e.target.value);
+                            applyFormat('background', e.target.value + '50');
+                            setTimeout(() => setShowBgColorDialog(false), 100);
+                          }}
+                          className="h-8 w-16"
+                        />
+                        <Input
+                          value={bgColor}
+                          onChange={(e) => setBgColor(e.target.value)}
+                          placeholder="#FFFF00"
+                          className="h-8 flex-1"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && bgColor) {
+                              applyFormat('background', bgColor + '50');
+                              setShowBgColorDialog(false);
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="grid grid-cols-8 gap-1">
+                        {['#FFFF00', '#00FF00', '#00FFFF', '#FF00FF', '#FFA500', '#FF0000', '#0000FF', '#808080'].map(color => (
+                          <Button
+                            key={color}
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0"
+                            style={{ backgroundColor: color }}
+                            onClick={() => {
+                              setBgColor(color);
+                              applyFormat('background', color + '50');
+                              setShowBgColorDialog(false);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {/* Text Color Dialog */}
+                <Popover open={showColorDialog} onOpenChange={setShowColorDialog} modal={false}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant={activeFormats.color ? "secondary" : "ghost"}
+                      onClick={() => setShowColorDialog(true)}
+                      className="justify-start h-8 px-2"
+                    >
+                      <Palette className="h-3.5 w-3.5 mr-2" />
+                      Text Color
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64" side="left">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Text Color</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="color"
+                          value={textColor}
+                          onChange={(e) => {
+                            setTextColor(e.target.value);
+                            applyFormat('color', e.target.value);
+                            setTimeout(() => setShowColorDialog(false), 100);
+                          }}
+                          className="h-8 w-16"
+                        />
+                        <Input
+                          value={textColor}
+                          onChange={(e) => setTextColor(e.target.value)}
+                          placeholder="#000000"
+                          className="h-8 flex-1"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && textColor) {
+                              applyFormat('color', textColor);
+                              setShowColorDialog(false);
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="grid grid-cols-8 gap-1">
+                        {['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#808080'].map(color => (
+                          <Button
+                            key={color}
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0"
+                            style={{ backgroundColor: color }}
+                            onClick={() => {
+                              setTextColor(color);
+                              applyFormat('color', color);
+                              setShowColorDialog(false);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <Separator />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => applyFormat('clean')}
+                  className="justify-start h-8 px-2 text-destructive"
+                >
+                  <Eraser className="h-3.5 w-3.5 mr-2" />
+                  Clear Format
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
