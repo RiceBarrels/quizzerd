@@ -5,14 +5,29 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, X, FileCode } from 'lucide-react';
+import type * as Monaco from 'monaco-editor';
 
 const MonacoEditor = dynamic(
   () => import('@monaco-editor/react'),
   { ssr: false }
 );
 
+export interface CodeFile {
+  name: string;
+  content: string;
+}
+
+interface CodeEditorProps {
+  files?: CodeFile[];
+  onChange?: (files: CodeFile[]) => void;
+  height?: string;
+  width?: string;
+}
+
+type LanguageMap = Record<string, string>;
+
 // Function to get CSS variable value
-const getCSSVariable = (variable) => {
+const getCSSVariable = (variable: string): string => {
   if (typeof window !== 'undefined') {
     return getComputedStyle(document.documentElement)
       .getPropertyValue(variable)
@@ -22,7 +37,7 @@ const getCSSVariable = (variable) => {
 };
 
 // Convert OKLCH to Hex for Monaco
-const oklchToHex = (oklchString) => {
+const oklchToHex = (oklchString: string): string => {
   try {
     const color = parse(oklchString);
     if (color) {
@@ -34,9 +49,9 @@ const oklchToHex = (oklchString) => {
   return '#000000';
 };
 
-const getLanguageFromFileName = (fileName) => {
+const getLanguageFromFileName = (fileName: string): string => {
   const ext = fileName.split('.').pop()?.toLowerCase();
-  const languageMap = {
+  const languageMap: LanguageMap = {
     'js': 'javascript',
     'jsx': 'javascript',
     'ts': 'typescript',
@@ -67,7 +82,7 @@ const getLanguageFromFileName = (fileName) => {
     'yml': 'yaml',
     'txt': 'plaintext'
   };
-  return languageMap[ext] || 'plaintext';
+  return languageMap[ext || ''] || 'plaintext';
 };
 
 export default function CodeEditor({
@@ -75,16 +90,16 @@ export default function CodeEditor({
   onChange,
   height = '400px',
   width = '100%'
-}) {
-  const [editorFiles, setEditorFiles] = useState(files);
-  const [activeFile, setActiveFile] = useState(files[0]?.name || 'index.js');
-  const [newFileName, setNewFileName] = useState('');
-  const [showAddFile, setShowAddFile] = useState(false);
+}: CodeEditorProps) {
+  const [editorFiles, setEditorFiles] = useState<CodeFile[]>(files);
+  const [activeFile, setActiveFile] = useState<string>(files[0]?.name || 'index.js');
+  const [newFileName, setNewFileName] = useState<string>('');
+  const [showAddFile, setShowAddFile] = useState<boolean>(false);
 
-  const [theme, setTheme] = useState('custom-light');
-  const [isThemeRegistered, setIsThemeRegistered] = useState(false);
-  const editorRef = useRef(null);
-  const monacoRef = useRef(null);
+  const [theme, setTheme] = useState<'custom-light' | 'custom-dark'>('custom-light');
+  const [isThemeRegistered, setIsThemeRegistered] = useState<boolean>(false);
+  const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
+  const monacoRef = useRef<typeof Monaco | null>(null);
 
   // Sync external files prop with internal state
   useEffect(() => {
@@ -94,11 +109,11 @@ export default function CodeEditor({
         setActiveFile(files[0].name);
       }
     }
-  }, [files]);
+  }, [files, activeFile]);
 
-  const defineCustomThemes = (monaco) => {
+  const defineCustomThemes = (monaco: typeof Monaco) => {
     // Get CSS variables and convert OKLCH to Hex
-    const getColor = (cssVar) => {
+    const getColor = (cssVar: string): string => {
       const value = getCSSVariable(cssVar);
       return oklchToHex(value);
     };
@@ -251,7 +266,7 @@ export default function CodeEditor({
     return () => observer.disconnect();
   }, []);
 
-  const registerLanguageSupport = (monaco) => {
+  const registerLanguageSupport = (monaco: typeof Monaco) => {
     // Python language configuration
     monaco.languages.register({ id: 'python' });
     monaco.languages.setMonarchTokensProvider('python', {
@@ -536,9 +551,9 @@ export default function CodeEditor({
 
   };
 
-  const setupLinting = (editor, monaco) => {
-    let pythonValidationTimeout;
-    let javaValidationTimeout;
+  const setupLinting = (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => {
+    let pythonValidationTimeout: NodeJS.Timeout;
+    let javaValidationTimeout: NodeJS.Timeout;
 
     // Listen to content changes
     editor.onDidChangeModelContent(() => {
@@ -632,7 +647,7 @@ export default function CodeEditor({
     });
   };
 
-  const handleEditorDidMount = (editor, monaco) => {
+  const handleEditorDidMount = (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
 
@@ -650,7 +665,8 @@ export default function CodeEditor({
     monaco.editor.setTheme(isDark ? 'custom-dark' : 'custom-light');
   };
 
-  const handleEditorChange = (value) => {
+  const handleEditorChange = (value: string | undefined) => {
+    if (value === undefined) return;
     const updatedFiles = editorFiles.map(file =>
       file.name === activeFile ? { ...file, content: value } : file
     );
@@ -674,7 +690,7 @@ export default function CodeEditor({
     }
 
     const ext = newFileName.split('.').pop()?.toLowerCase();
-    const defaultContent = {
+    const defaultContent: Record<string, string> = {
       'js': '// JavaScript code here',
       'jsx': '// React component here',
       'ts': '// TypeScript code here',
@@ -691,9 +707,9 @@ export default function CodeEditor({
       'txt': ''
     };
 
-    const newFile = {
+    const newFile: CodeFile = {
       name: newFileName,
-      content: defaultContent[ext] || ''
+      content: defaultContent[ext || ''] || ''
     };
 
     const updatedFiles = [...editorFiles, newFile];
@@ -707,7 +723,7 @@ export default function CodeEditor({
     }
   };
 
-  const removeFile = (fileName) => {
+  const removeFile = (fileName: string) => {
     if (editorFiles.length === 1) {
       alert('Cannot remove the last file');
       return;

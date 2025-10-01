@@ -7,7 +7,22 @@ import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Clock } from 'lucide-react';
 
-export default function ExamSettingsTab({ 
+interface ExamSettingsTabProps {
+  durationMinutes: number;
+  attemptsAllowed: number;
+  passingScore: number;
+  shuffleItems: boolean;
+  showResultsImmediately: boolean;
+  isPublic: boolean;
+  onDurationChange: (value: number) => void;
+  onAttemptsChange: (value: number) => void;
+  onPassingScoreChange: (value: number) => void;
+  onShuffleChange: (value: boolean) => void;
+  onShowResultsChange: (value: boolean) => void;
+  onPublicChange: (value: boolean) => void;
+}
+
+export default function ExamSettingsTab({
   durationMinutes,
   attemptsAllowed,
   passingScore,
@@ -20,7 +35,7 @@ export default function ExamSettingsTab({
   onShuffleChange,
   onShowResultsChange,
   onPublicChange
-}) {
+}: ExamSettingsTabProps) {
   return (
     <Card className="overflow-auto">
       <CardHeader>

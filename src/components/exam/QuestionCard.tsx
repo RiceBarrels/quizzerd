@@ -16,8 +16,9 @@ import VariableContent from '@/components/ui/variable-content';
 import CodeEditor from '@/components/editors/CodeEditor';
 import { Trash2, GripVertical, Plus, ListTodoIcon, ListChecksIcon, TextAlignStartIcon, NotepadTextIcon, CircleSlashIcon, Eye, EyeOff, ChevronDown, SlidersHorizontal, Calendar, Clock, Upload, Star, Heading, Minus, ChevronsUpDown, Check, Heart, ThumbsUp, Code } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ExamItem, QuestionType, QuestionTypeOption } from '@/types/exam';
 
-const questionTypes = [
+const questionTypes: QuestionTypeOption[] = [
   { value: 'multiple_choice', label: 'Multiple Choice', icon: ListTodoIcon },
   { value: 'multiple_select', label: 'Multiple Select', icon: ListChecksIcon },
   { value: 'short_answer', label: 'Short Answer', icon: TextAlignStartIcon },
@@ -34,6 +35,17 @@ const questionTypes = [
   { value: 'page_break', label: 'Page Break', icon: Minus },
 ];
 
+interface QuestionCardProps {
+  item: ExamItem;
+  index: number;
+  onUpdateQuestion: (index: number, field: keyof ExamItem, value: any) => void;
+  onAddOption: (questionIndex: number) => void;
+  onUpdateOption: (questionIndex: number, optionIndex: number, value: string) => void;
+  onRemoveOption: (questionIndex: number, optionIndex: number) => void;
+  onRemoveQuestion: (index: number) => void;
+  dragHandleProps?: Record<string, any>;
+}
+
 export default function QuestionCard({
   item,
   index,
@@ -43,7 +55,7 @@ export default function QuestionCard({
   onRemoveOption,
   onRemoveQuestion,
   dragHandleProps
-}) {
+}: QuestionCardProps) {
   const [open, setOpen] = useState(false);
 
   const selectedType = questionTypes.find(type => type.value === item.question_type);

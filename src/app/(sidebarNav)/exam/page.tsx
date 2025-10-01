@@ -425,7 +425,7 @@ export default function ExamPage() {
                               <Key className="h-6 w-6 text-muted-foreground" />
                             </div>
                             <p className="text-sm text-muted-foreground">
-                              Click "Load Forms" to check for forms, or enter a token to access your Google Forms
+                              Click &quot;Load Forms&quot; to check for forms, or enter a token to access your Google Forms
                             </p>
                           </div>
                         )}
@@ -460,7 +460,7 @@ export default function ExamPage() {
                         <ol className="list-decimal list-inside space-y-1">
                           <li>Go to <a href="https://developers.google.com/oauthplayground/" target="_blank" rel="noopener noreferrer" className="underline">OAuth Playground</a></li>
                           <li>Select Drive API v3 and Forms API v1</li>
-                          <li>Click "Authorize APIs"</li>
+                          <li>Click &quot;Authorize APIs&quot;</li>
                           <li>Exchange authorization code for tokens</li>
                           <li>Copy the Access Token</li>
                         </ol>

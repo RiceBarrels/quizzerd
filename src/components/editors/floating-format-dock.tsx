@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, RefObject, Dispatch, SetStateAction } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
@@ -25,10 +25,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { 
-  Bold, 
-  Italic, 
-  Underline, 
+import {
+  Bold,
+  Italic,
+  Underline,
   Strikethrough,
   List,
   ListOrdered,
@@ -49,17 +49,31 @@ import {
   ChevronDown,
   MoreHorizontal,
   Minus,
-  Plus
+  Plus,
+  LucideIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Quill from 'quill';
+
+interface EditorInstance {
+  ref: RefObject<Quill>;
+  id: string;
+}
+
+interface DockInstance {
+  setActiveEditor: Dispatch<SetStateAction<EditorInstance | null>> | null;
+  activeEditor: EditorInstance | null;
+  updateFormats: (() => void) | null;
+  hideTimeout?: NodeJS.Timeout;
+}
 
 // Singleton instance to manage the dock globally
-let dockInstance = null;
+let dockInstance: DockInstance | null = null;
 
 export function useFloatingDock() {
-  const [activeEditor, setActiveEditor] = useState(null);
-  const [updateTrigger, setUpdateTrigger] = useState(0);
-  
+  const [activeEditor, setActiveEditor] = useState<EditorInstance | null>(null);
+  const [updateTrigger, setUpdateTrigger] = useState<number>(0);
+
   useEffect(() => {
     if (!dockInstance) {
       dockInstance = {
@@ -71,7 +85,7 @@ export function useFloatingDock() {
       dockInstance.setActiveEditor = setActiveEditor;
       dockInstance.updateFormats = () => setUpdateTrigger(prev => prev + 1);
     }
-    
+
     return () => {
       if (dockInstance?.setActiveEditor === setActiveEditor) {
         dockInstance.setActiveEditor = null;
@@ -79,11 +93,11 @@ export function useFloatingDock() {
       }
     };
   }, []);
-  
+
   return { activeEditor, updateTrigger };
 }
 
-export function registerEditor(editorRef, editorId) {
+export function registerEditor(editorRef: RefObject<Quill>, editorId: string) {
   const handleFocus = () => {
     if (dockInstance?.setActiveEditor) {
       dockInstance.activeEditor = { ref: editorRef, id: editorId };
@@ -91,11 +105,12 @@ export function registerEditor(editorRef, editorId) {
     }
   };
   
-  const handleBlur = (e) => {
+  const handleBlur = (e: { relatedTarget?: EventTarget | null }) => {
     // Don't hide if clicking within the dock, its popovers, or select dropdowns
-    if (!e?.relatedTarget?.closest('.floating-format-dock') && 
-        !e?.relatedTarget?.closest('[role="dialog"]') &&
-        !e?.relatedTarget?.closest('[data-radix-select-content]')) {
+    const relatedTarget = e?.relatedTarget as Element | null;
+    if (!relatedTarget?.closest('.floating-format-dock') &&
+        !relatedTarget?.closest('[role="dialog"]') &&
+        !relatedTarget?.closest('[data-radix-select-content]')) {
       const timeoutId = setTimeout(() => {
         // Double check that focus hasn't returned to dock, editor, or select
         const activeEl = document.activeElement;
@@ -130,18 +145,18 @@ export function registerEditor(editorRef, editorId) {
 
 export default function FloatingFormatDock() {
   const { activeEditor, updateTrigger } = useFloatingDock();
-  const [isVisible, setIsVisible] = useState(false);
-  const [activeFormats, setActiveFormats] = useState({});
-  const [fontSize, setFontSize] = useState(16);
-  const [linkUrl, setLinkUrl] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
-  const [textColor, setTextColor] = useState('#000000');
-  const [bgColor, setBgColor] = useState('#FFFF00');
-  const [showLinkDialog, setShowLinkDialog] = useState(false);
-  const [showImageDialog, setShowImageDialog] = useState(false);
-  const [showColorDialog, setShowColorDialog] = useState(false);
-  const [showBgColorDialog, setShowBgColorDialog] = useState(false);
-  const dockRef = useRef(null);
+  const [isVisible, setIsVisible] = useState<boolean>(false);
+  const [activeFormats, setActiveFormats] = useState<Record<string, any>>({});
+  const [fontSize, setFontSize] = useState<number>(16);
+  const [linkUrl, setLinkUrl] = useState<string>('');
+  const [imageUrl, setImageUrl] = useState<string>('');
+  const [textColor, setTextColor] = useState<string>('#000000');
+  const [bgColor, setBgColor] = useState<string>('#FFFF00');
+  const [showLinkDialog, setShowLinkDialog] = useState<boolean>(false);
+  const [showImageDialog, setShowImageDialog] = useState<boolean>(false);
+  const [showColorDialog, setShowColorDialog] = useState<boolean>(false);
+  const [showBgColorDialog, setShowBgColorDialog] = useState<boolean>(false);
+  const dockRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setIsVisible(!!activeEditor);
@@ -579,7 +594,7 @@ export default function FloatingFormatDock() {
                       onClick={() => setShowImageDialog(true)}
                       className="justify-start h-8 px-2"
                     >
-                      <Image className="h-3.5 w-3.5 mr-2" />
+                      <Image className="h-3.5 w-3.5 mr-2" alt="" />
                       Insert Image
                     </Button>
                   </PopoverTrigger>

@@ -11,39 +11,50 @@ import ExamHeader from '@/components/exam/ExamHeader';
 import ExamDetailsTab from '@/components/exam/ExamDetailsTab';
 import QuestionsTab from '@/components/exam/QuestionsTab';
 import ExamSettingsTab from '@/components/exam/ExamSettingsTab';
+import { ExamItem } from '@/types/exam';
 
-export default function EditExamPage({ params }) {
+interface PageParams {
+  examId: string;
+}
+
+interface ScrollPosition {
+  details: number;
+  questions: number;
+  settings: number;
+}
+
+export default function EditExamPage({ params }: { params: Promise<PageParams> }) {
   const router = useRouter();
   const { examId } = use(params);
-  
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState('details');
-  const [lastSaved, setLastSaved] = useState(null);
-  const autoSaveTimerRef = useRef(null);
-  const hasUnsavedChangesRef = useRef(false);
-  
+
+  const [loading, setLoading] = useState<boolean>(true);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<string>('details');
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasUnsavedChangesRef = useRef<boolean>(false);
+
   // Form states
-  const [examName, setExamName] = useState('');
-  const [examDescription, setExamDescription] = useState('');
-  const [durationMinutes, setDurationMinutes] = useState(60);
-  const [attemptsAllowed, setAttemptsAllowed] = useState(1);
-  const [passingScore, setPassingScore] = useState(70);
-  const [shuffleItems, setShuffleItems] = useState(false);
-  const [showResultsImmediately, setShowResultsImmediately] = useState(true);
-  const [isPublic, setIsPublic] = useState(false);
-  const [isPublished, setIsPublished] = useState(false);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [lastScrollPosition, setLastScrollPosition] = useState({
+  const [examName, setExamName] = useState<string>('');
+  const [examDescription, setExamDescription] = useState<string>('');
+  const [durationMinutes, setDurationMinutes] = useState<number>(60);
+  const [attemptsAllowed, setAttemptsAllowed] = useState<number>(1);
+  const [passingScore, setPassingScore] = useState<number>(70);
+  const [shuffleItems, setShuffleItems] = useState<boolean>(false);
+  const [showResultsImmediately, setShowResultsImmediately] = useState<boolean>(true);
+  const [isPublic, setIsPublic] = useState<boolean>(false);
+  const [isPublished, setIsPublished] = useState<boolean>(false);
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [lastScrollPosition, setLastScrollPosition] = useState<ScrollPosition>({
     details: 0,
     questions: 0,
     settings: 0
   });
-  
-  
+
+
   // Items (questions)
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState<ExamItem[]>([]);
 
   useEffect(() => {
     fetchExam();
@@ -57,7 +68,7 @@ export default function EditExamPage({ params }) {
       if (result.success) {
         const examData = result.data;
         
-        console.log('📥 Loaded exam data with items:', (examData.items || []).map((item, idx) => ({
+        console.log('📥 Loaded exam data with items:', (examData.items || []).map((item:any, idx:number) => ({
           index: idx,
           question_id: item.question_id,
           question_text: item.question_text ? item.question_text.substring(0, 50) + '...' : 'EMPTY',
@@ -91,10 +102,10 @@ export default function EditExamPage({ params }) {
   };
 
   const addNewQuestion = () => {
-    const newQuestion = {
+    const newQuestion: ExamItem = {
       question_id: `q_${Date.now()}`,
       question_text: '',
-      question_type: 'multiple_choice',
+      question_type: 'multiple_choice' as const,
       options: ['', ''],
       correct_answer: 0,
       points: 10,
@@ -107,10 +118,10 @@ export default function EditExamPage({ params }) {
 
   const addPageBreak = () => {
     const timestamp = Date.now();
-    const pageBreak = {
+    const pageBreak: ExamItem = {
       question_id: `pb_${timestamp}`,
       question_text: 'Page Break',
-      question_type: 'page_break',
+      question_type: 'page_break' as const,
       points: 0,
       required: false
     };
@@ -118,7 +129,7 @@ export default function EditExamPage({ params }) {
     setActiveTab('questions');
   };
 
-  const updateQuestion = (index, field, value) => {
+  const updateQuestion = (index: number, field: keyof ExamItem, value: any) => {
     console.log(`📝 updateQuestion called:`, {
       index,
       field,
@@ -134,34 +145,41 @@ export default function EditExamPage({ params }) {
     setItems(updatedItems);
   };
 
-  const addOption = (questionIndex) => {
+  const addOption = (questionIndex: number) => {
     const updatedItems = [...items];
-    updatedItems[questionIndex].options.push('');
-    setItems(updatedItems);
-  };
-
-  const updateOption = (questionIndex, optionIndex, value) => {
-    const updatedItems = [...items];
-    updatedItems[questionIndex].options[optionIndex] = value;
-    setItems(updatedItems);
-  };
-
-  const removeOption = (questionIndex, optionIndex) => {
-    const updatedItems = [...items];
-    updatedItems[questionIndex].options.splice(optionIndex, 1);
-    // Adjust correct answer if needed
-    if (updatedItems[questionIndex].correct_answer >= optionIndex && updatedItems[questionIndex].correct_answer > 0) {
-      updatedItems[questionIndex].correct_answer--;
+    if (updatedItems[questionIndex]?.options) {
+      updatedItems[questionIndex].options!.push('');
+      setItems(updatedItems);
     }
-    setItems(updatedItems);
   };
 
-  const removeQuestion = (index) => {
+  const updateOption = (questionIndex: number, optionIndex: number, value: string) => {
+    const updatedItems = [...items];
+    if (updatedItems[questionIndex]?.options) {
+      updatedItems[questionIndex].options![optionIndex] = value;
+      setItems(updatedItems);
+    }
+  };
+
+  const removeOption = (questionIndex: number, optionIndex: number) => {
+    const updatedItems = [...items];
+    if (updatedItems[questionIndex]?.options) {
+      updatedItems[questionIndex].options!.splice(optionIndex, 1);
+      // Adjust correct answer if needed
+      const correctAnswer = updatedItems[questionIndex].correct_answer;
+      if (typeof correctAnswer === 'number' && correctAnswer >= optionIndex && correctAnswer > 0) {
+        updatedItems[questionIndex].correct_answer = correctAnswer - 1;
+      }
+      setItems(updatedItems);
+    }
+  };
+
+  const removeQuestion = (index: number) => {
     const updatedItems = items.filter((_, i) => i !== index);
     setItems(updatedItems);
   };
 
-  const reorderQuestions = (newItems) => {
+  const reorderQuestions = (newItems: ExamItem[]) => {
     setItems(newItems);
   };
 
@@ -169,7 +187,7 @@ export default function EditExamPage({ params }) {
     return items.reduce((sum, item) => sum + (item.points || 0), 0);
   };
 
-  const saveExam = async (publish = false, isAutoSave = false) => {
+  const saveExam = async (publish: boolean = false, isAutoSave: boolean = false) => {
     if (!isAutoSave) {
       setSaving(true);
     }
@@ -279,7 +297,7 @@ export default function EditExamPage({ params }) {
     const scrollContainer = document.querySelector('.overflow-y-auto');
     if (!scrollContainer) return;
 
-    let scrollTimeout;
+    let scrollTimeout:NodeJS.Timeout;
     const handleScroll = () => {
       clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => {
@@ -317,7 +335,7 @@ export default function EditExamPage({ params }) {
         onSave={() => saveExam(false)}
         onPublish={() => saveExam(true)}
         onPreview={() => router.push(`/exam/${examId}/preview`)}
-        canPublish={examName && items.length > 0}
+        canPublish={!!(examName && items.length > 0)}
         lastSaved={lastSaved}
       />
 
@@ -335,9 +353,9 @@ export default function EditExamPage({ params }) {
           
           // Restore new tab's scroll position
           setTimeout(() => {
-            scrollContainer.scrollTo({ 
-              top: lastScrollPosition[value] || 0, 
-              behavior: 'smooth' 
+            scrollContainer.scrollTo({
+              top: lastScrollPosition[value as keyof ScrollPosition] || 0,
+              behavior: 'smooth'
             });
           }, 50);
         } else {

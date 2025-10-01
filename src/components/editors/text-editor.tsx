@@ -4,22 +4,40 @@ import { useEffect, useRef, useCallback } from 'react';
 import { registerEditor } from './floating-format-dock';
 import { cn } from '@/lib/utils';
 import './text-editor.css';
+import Quill from 'quill';
 
-export default function TextEditor({ 
-  value, 
-  onChange, 
-  placeholder = 'Start typing...', 
+interface TextEditorProps {
+  value: string;
+  onChange?: (value: string) => void;
+  placeholder?: string;
+  id?: string;
+  className?: string;
+  disabled?: boolean;
+  error?: boolean;
+  minHeight?: number;
+}
+
+interface EventHandler {
+  event: string;
+  handler: EventListener;
+  element: HTMLElement;
+}
+
+export default function TextEditor({
+  value,
+  onChange,
+  placeholder = 'Start typing...',
   id,
   className,
   disabled = false,
   error = false
-}) {
-  const containerRef = useRef(null);
-  const quillRef = useRef(null);
-  const isInitialized = useRef(false);
-  const editorId = useRef(id || `editor-${Date.now()}`);
-  const prevValueRef = useRef(value);
-  const observerRef = useRef(null);
+}: TextEditorProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const quillRef = useRef<Quill | null>(null);
+  const isInitialized = useRef<boolean>(false);
+  const editorId = useRef<string>(id || `editor-${Date.now()}`);
+  const prevValueRef = useRef<string>(value);
+  const observerRef = useRef<MutationObserver | null>(null);
 
   const handleChange = useCallback(() => {
     if (!quillRef.current || !onChange) return;
@@ -41,19 +59,19 @@ export default function TextEditor({
   }, [onChange]);
 
   useEffect(() => {
-    let eventHandlers = [];
-    
+    let eventHandlers: EventHandler[] = [];
+
     const initQuill = async () => {
       if (typeof window !== 'undefined' && containerRef.current && !isInitialized.current) {
         isInitialized.current = true;
-        
-        const Quill = (await import('quill')).default;
+
+        const QuillModule = (await import('quill')).default;
         
         const editorContainer = document.createElement('div');
         editorContainer.className = cn('text-editor-container', disabled && 'disabled', error && 'error');
         containerRef.current.appendChild(editorContainer);
-        
-        quillRef.current = new Quill(editorContainer, {
+
+        quillRef.current = new QuillModule(editorContainer, {
           theme: 'snow',
           formats: ['bold', 'italic', 'underline', 'strike', 'code', 'link', 'blockquote', 'header', 'list', 'script', 'indent', 'direction', 'size', 'color', 'background', 'font', 'align'],
           modules: {

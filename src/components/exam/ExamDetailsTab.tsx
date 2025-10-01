@@ -6,7 +6,18 @@ import { Input } from '@/components/ui/input';
 import TextEditor from '@/components/editors/text-editor';
 import { Calendar } from 'lucide-react';
 
-export default function ExamDetailsTab({ 
+interface ExamDetailsTabProps {
+  examName: string;
+  examDescription: string;
+  startDate: string;
+  endDate: string;
+  onExamNameChange: (value: string) => void;
+  onDescriptionChange: (value: string) => void;
+  onStartDateChange: (value: string) => void;
+  onEndDateChange: (value: string) => void;
+}
+
+export default function ExamDetailsTab({
   examName,
   examDescription,
   startDate,
@@ -14,8 +25,8 @@ export default function ExamDetailsTab({
   onExamNameChange,
   onDescriptionChange,
   onStartDateChange,
-  onEndDateChange 
-}) {
+  onEndDateChange
+}: ExamDetailsTabProps) {
   return (
     <Card className="overflow-auto">
       <CardHeader>

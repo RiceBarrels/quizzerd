@@ -43,7 +43,7 @@ export default function ClassPage() {
         
         setClassData(data.data)
       } catch (err) {
-        setError(err.message)
+        setError(err instanceof Error ? err.message : 'An error occurred')
       } finally {
         setLoading(false)
       }

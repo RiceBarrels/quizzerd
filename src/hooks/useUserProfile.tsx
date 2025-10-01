@@ -39,7 +39,7 @@ export function useUserProfile() {
       const data = await response.json()
       setProfile(data)
     } catch (err) {
-      setError(err.message)
+      setError(err instanceof Error ? err.message : 'An error occurred')
       console.error('Error fetching profile:', err)
     } finally {
       setLoading(false)
@@ -66,7 +66,7 @@ export function useUserProfile() {
       setProfile(data)
       return data
     } catch (err) {
-      setError(err.message)
+      setError(err instanceof Error ? err.message : 'An error occurred')
       console.error('Error updating profile:', err)
       throw err
     }
@@ -92,7 +92,7 @@ export function useUserProfile() {
       setProfile(data)
       return data
     } catch (err) {
-      setError(err.message)
+      setError(err instanceof Error ? err.message : 'An error occurred')
       console.error('Error creating profile:', err)
       throw err
     }

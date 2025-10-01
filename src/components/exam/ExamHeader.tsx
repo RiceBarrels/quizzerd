@@ -4,17 +4,28 @@ import { Button } from '@/components/ui/button';
 import { Loader2, Eye, Save, CheckCircle2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-export default function ExamHeader({ 
+interface ExamHeaderProps {
+  examId: string;
+  isPublished: boolean;
+  saving: boolean;
+  onSave: () => void;
+  onPublish: () => void;
+  onPreview: () => void;
+  canPublish: boolean;
+  lastSaved: Date | null;
+}
+
+export default function ExamHeader({
   examId,
-  isPublished, 
-  saving, 
-  onSave, 
+  isPublished,
+  saving,
+  onSave,
   onPublish,
   onPreview,
   canPublish,
-  lastSaved 
-}) {
-  const [savedText, setSavedText] = useState('');
+  lastSaved
+}: ExamHeaderProps) {
+  const [savedText, setSavedText] = useState<string>('');
 
   useEffect(() => {
     if (!lastSaved) {
@@ -24,7 +35,7 @@ export default function ExamHeader({
 
     const updateSavedText = () => {
       const now = new Date();
-      const diff = Math.floor((now - lastSaved) / 1000);
+      const diff = Math.floor((now.getTime() - lastSaved.getTime()) / 1000);
       
       if (diff < 60) {
         setSavedText('Just saved');

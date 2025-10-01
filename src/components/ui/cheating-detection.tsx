@@ -41,14 +41,14 @@ export default function CheatingDetection(){
                     <AlertDialogHeader>
                         <AlertDialogTitle>Developer Tools Detected</AlertDialogTitle>
                         <AlertDialogDescription>
-                            We've detected that you have opened the developer tools. 
+                            We&apos;ve detected that you have opened the developer tools.
                             This action will be logged for security purposes during an actual exam. <br/><br/>
                             <span className='text-red-700'>This is a warning that you can not open developer tools in an actual Exam! <br/> <span className='font-bold'>(Your score can be DISQUALIFYED by your teacher!)</span></span>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel variant="outline" onClick={() => {setIsKnowingConsole(false);setTimeout(()=>setShowCheatingDialog(true),100)}}>
-                            I don't Understood...
+                            I don&apos;t Understood...
                         </AlertDialogCancel>
                         <AlertDialogAction>
                             Understood

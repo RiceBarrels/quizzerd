@@ -116,7 +116,7 @@ export default function JoinButton({children=(<Button variant="outline"> <PlusIc
 
                     <TabsContent value="joinClass" className="p-2 flex flex-col">
                         <Label htmlFor="classCode">Class code<span className="text-primary">*</span></Label>
-                        <Label htmlFor="classCode" className="text-xs mt-1 mb-2 mx-1 font-normal">If you don't have a class code, please ask your teacher...</Label>
+                        <Label htmlFor="classCode" className="text-xs mt-1 mb-2 mx-1 font-normal">If you don&apos;t have a class code, please ask your teacher...</Label>
                         <Input 
                             id="classCode" 
                             placeholder="Class code..." 
@@ -131,7 +131,7 @@ export default function JoinButton({children=(<Button variant="outline"> <PlusIc
 
                     <TabsContent value="joinExam" className="p-2 flex flex-col">
                         <Label htmlFor="examCode">Exam code<span className="text-primary">*</span></Label>
-                        <Label htmlFor="examCode" className="text-xs mt-1 mb-2 mx-1 font-normal">If you don't have a exam code, please ask your teacher...</Label>
+                        <Label htmlFor="examCode" className="text-xs mt-1 mb-2 mx-1 font-normal">If you don&apos;t have a exam code, please ask your teacher...</Label>
                         <Input 
                             id="examCode" 
                             placeholder="Exam code..." 

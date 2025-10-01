@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, CSSProperties } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +13,7 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  DragEndEvent,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -22,8 +23,19 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { ExamItem } from '@/types/exam';
 
-function SortableQuestionCard({ item, index, onUpdateQuestion, onAddOption, onUpdateOption, onRemoveOption, onRemoveQuestion }) {
+interface SortableQuestionCardProps {
+  item: ExamItem;
+  index: number;
+  onUpdateQuestion: (index: number, field: keyof ExamItem, value: any) => void;
+  onAddOption: (questionIndex: number) => void;
+  onUpdateOption: (questionIndex: number, optionIndex: number, value: string) => void;
+  onRemoveOption: (questionIndex: number, optionIndex: number) => void;
+  onRemoveQuestion: (index: number) => void;
+}
+
+function SortableQuestionCard({ item, index, onUpdateQuestion, onAddOption, onUpdateOption, onRemoveOption, onRemoveQuestion }: SortableQuestionCardProps) {
   const {
     attributes,
     listeners,
@@ -33,7 +45,7 @@ function SortableQuestionCard({ item, index, onUpdateQuestion, onAddOption, onUp
     isDragging,
   } = useSortable({ id: item.question_id });
 
-  const style = {
+  const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
@@ -55,7 +67,27 @@ function SortableQuestionCard({ item, index, onUpdateQuestion, onAddOption, onUp
   );
 }
 
-function SortablePageCard({ pageId, pageNumber, page, onUpdateQuestion, onAddOption, onUpdateOption, onRemoveOption, onRemoveQuestion }) {
+interface PageItem extends ExamItem {
+  index: number;
+}
+
+interface Page {
+  id: string;
+  items: PageItem[];
+}
+
+interface SortablePageCardProps {
+  pageId: string;
+  pageNumber: number;
+  page: PageItem[];
+  onUpdateQuestion: (index: number, field: keyof ExamItem, value: any) => void;
+  onAddOption: (questionIndex: number) => void;
+  onUpdateOption: (questionIndex: number, optionIndex: number, value: string) => void;
+  onRemoveOption: (questionIndex: number, optionIndex: number) => void;
+  onRemoveQuestion: (index: number) => void;
+}
+
+function SortablePageCard({ pageId, pageNumber, page, onUpdateQuestion, onAddOption, onUpdateOption, onRemoveOption, onRemoveQuestion }: SortablePageCardProps) {
   const {
     attributes,
     listeners,
@@ -65,7 +97,7 @@ function SortablePageCard({ pageId, pageNumber, page, onUpdateQuestion, onAddOpt
     isDragging,
   } = useSortable({ id: pageId });
 
-  const style = {
+  const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
@@ -121,6 +153,18 @@ function SortablePageCard({ pageId, pageNumber, page, onUpdateQuestion, onAddOpt
   );
 }
 
+interface QuestionsTabProps {
+  items: ExamItem[];
+  onUpdateQuestion: (index: number, field: keyof ExamItem, value: any) => void;
+  onAddOption: (questionIndex: number) => void;
+  onUpdateOption: (questionIndex: number, optionIndex: number, value: string) => void;
+  onRemoveOption: (questionIndex: number, optionIndex: number) => void;
+  onRemoveQuestion: (index: number) => void;
+  onAddNewQuestion: () => void;
+  onAddPageBreak: () => void;
+  onReorderQuestions: (newItems: ExamItem[]) => void;
+}
+
 export default function QuestionsTab({
   items,
   onUpdateQuestion,
@@ -131,7 +175,7 @@ export default function QuestionsTab({
   onAddNewQuestion,
   onAddPageBreak,
   onReorderQuestions
-}) {
+}: QuestionsTabProps) {
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -139,7 +183,7 @@ export default function QuestionsTab({
     })
   );
 
-  const handleDragEnd = (event) => {
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
@@ -171,13 +215,11 @@ export default function QuestionsTab({
         let overPageIndex = -1;
 
         pages.forEach((page, idx) => {
-          if (!page.isPageBreak) {
-            if (page.items.some(item => item.question_id === active.id)) {
-              activePageIndex = idx;
-            }
-            if (page.items.some(item => item.question_id === over.id)) {
-              overPageIndex = idx;
-            }
+          if (page.items.some(item => item.question_id === active.id)) {
+            activePageIndex = idx;
+          }
+          if (page.items.some(item => item.question_id === over.id)) {
+            overPageIndex = idx;
           }
         });
 
@@ -189,10 +231,10 @@ export default function QuestionsTab({
           const timestamp = Date.now();
           const draggedItemNewIndex = newItems.findIndex(item => item.question_id === active.id);
 
-          const pageBreak = {
+          const pageBreak: ExamItem = {
             question_id: `pb_${timestamp}`,
             question_text: 'Page Break',
-            question_type: 'page_break',
+            question_type: 'page_break' as const,
             points: 0,
             required: false
           };
@@ -207,8 +249,8 @@ export default function QuestionsTab({
   };
   // Group items by pages (split by page_break)
   const pages = useMemo(() => {
-    const result = [];
-    let currentPage = [];
+    const result: Page[] = [];
+    let currentPage: PageItem[] = [];
 
     items.forEach((item, index) => {
       if (item.question_type === 'page_break') {
@@ -232,7 +274,7 @@ export default function QuestionsTab({
 
   // Get sortable IDs for pages and all questions
   const sortableIds = useMemo(() => {
-    const ids = [];
+    const ids: string[] = [];
     pages.forEach(page => {
       ids.push(page.id);
       // Also add all questions within the page
