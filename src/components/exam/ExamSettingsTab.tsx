@@ -1,11 +1,23 @@
 'use client';
 
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
-import { Clock } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Clock, Trash2, AlertTriangle } from 'lucide-react';
 
 interface ExamSettingsTabProps {
   durationMinutes: number;
@@ -20,6 +32,7 @@ interface ExamSettingsTabProps {
   onShuffleChange: (value: boolean) => void;
   onShowResultsChange: (value: boolean) => void;
   onPublicChange: (value: boolean) => void;
+  onDeleteExam?: () => void;
 }
 
 export default function ExamSettingsTab({
@@ -34,17 +47,21 @@ export default function ExamSettingsTab({
   onPassingScoreChange,
   onShuffleChange,
   onShowResultsChange,
-  onPublicChange
+  onPublicChange,
+  onDeleteExam
 }: ExamSettingsTabProps) {
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
   return (
-    <Card className="overflow-auto">
-      <CardHeader>
-        <CardTitle>Exam Settings</CardTitle>
-        <CardDescription>
-          Configure exam behavior and scoring
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <>
+      <Card className="overflow-auto">
+        <CardHeader>
+          <CardTitle>Exam Settings</CardTitle>
+          <CardDescription>
+            Configure exam behavior and scoring
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="duration">
@@ -126,7 +143,60 @@ export default function ExamSettingsTab({
             />
           </div>
         </div>
+
+        {onDeleteExam && (
+          <>
+            <Separator />
+
+            <div className="space-y-4">
+              <div className="flex items-start gap-3 p-4 border-2 border-destructive/50 rounded-lg bg-destructive/5">
+                <AlertTriangle className="w-5 h-5 text-destructive mt-0.5" />
+                <div className="flex-1 space-y-2">
+                  <div>
+                    <h3 className="font-semibold text-destructive">Danger Zone</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Delete this exam permanently. This action cannot be undone.
+                    </p>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    onClick={() => setShowDeleteDialog(true)}
+                    className="mt-2"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete Exam
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
+
+    <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This action cannot be undone. This will permanently delete this exam
+            and remove all associated data including student responses.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              onDeleteExam?.();
+              setShowDeleteDialog(false);
+            }}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            Delete Exam
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  </>
   );
 }

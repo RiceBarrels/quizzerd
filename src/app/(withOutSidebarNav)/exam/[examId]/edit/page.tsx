@@ -187,6 +187,24 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     return items.reduce((sum, item) => sum + (item.points || 0), 0);
   };
 
+  const deleteExam = async () => {
+    try {
+      const response = await fetch(`/api/exams/delete?examId=${examId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete exam');
+      }
+
+      toast.success('Exam deleted successfully');
+      router.push('/exam');
+    } catch (error) {
+      console.error('Error deleting exam:', error);
+      toast.error('Failed to delete exam');
+    }
+  };
+
   const saveExam = async (publish: boolean = false, isAutoSave: boolean = false) => {
     if (!isAutoSave) {
       setSaving(true);
@@ -419,6 +437,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
               onShuffleChange={setShuffleItems}
               onShowResultsChange={setShowResultsImmediately}
               onPublicChange={setIsPublic}
+              onDeleteExam={deleteExam}
             />
           </TabsContent>
         </TabsContents>
