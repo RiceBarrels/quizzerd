@@ -105,6 +105,19 @@ export default function EditExamPage({ params }) {
     setActiveTab('questions');
   };
 
+  const addPageBreak = () => {
+    const timestamp = Date.now();
+    const pageBreak = {
+      question_id: `pb_${timestamp}`,
+      question_text: 'Page Break',
+      question_type: 'page_break',
+      points: 0,
+      required: false
+    };
+    setItems([...items, pageBreak]);
+    setActiveTab('questions');
+  };
+
   const updateQuestion = (index, field, value) => {
     console.log(`📝 updateQuestion called:`, {
       index,
@@ -146,6 +159,10 @@ export default function EditExamPage({ params }) {
   const removeQuestion = (index) => {
     const updatedItems = items.filter((_, i) => i !== index);
     setItems(updatedItems);
+  };
+
+  const reorderQuestions = (newItems) => {
+    setItems(newItems);
   };
 
   const calculateTotalPoints = () => {
@@ -365,6 +382,8 @@ export default function EditExamPage({ params }) {
               onRemoveOption={removeOption}
               onRemoveQuestion={removeQuestion}
               onAddNewQuestion={addNewQuestion}
+              onAddPageBreak={addPageBreak}
+              onReorderQuestions={reorderQuestions}
             />
           </TabsContent>
 

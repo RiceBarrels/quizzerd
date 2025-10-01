@@ -26,64 +26,174 @@ function extractFormId(url) {
   return null;
 }
 
-// Helper function to convert Google Forms question to exam question format
-function convertQuestion(googleQuestion) {
-  const question = {
-    question_id: crypto.randomUUID(),
-    question_text: googleQuestion.title || '',
-    question_type: 'multiple_choice', // default
-    options: [],
-    correct_answer: null,
-    points: googleQuestion.points || 10,
-    explanation: '',
-    required: googleQuestion.required || false
-  };
-
-  // Map Google Forms question types to our exam question types
-  switch (googleQuestion.type) {
-    case 'RADIO':
-    case 'multiple_choice':
-      question.question_type = 'multiple_choice';
-      question.options = googleQuestion.choices || [];
-      break;
-      
-    case 'CHECKBOX':
-    case 'checkboxes':
-      question.question_type = 'multiple_select';
-      question.options = googleQuestion.choices || [];
-      question.correct_answer = []; // Array for multiple correct answers
-      break;
-      
-    case 'TEXT':
-    case 'short_answer':
-      question.question_type = 'short_answer';
-      break;
-      
-    case 'PARAGRAPH_TEXT':
-    case 'paragraph':
-      question.question_type = 'long_answer';
-      break;
-      
-    case 'SCALE':
-    case 'linear_scale':
-      question.question_type = 'scale';
-      question.scale_min = googleQuestion.scaleMin || 1;
-      question.scale_max = googleQuestion.scaleMax || 5;
-      break;
-      
-    case 'DATE':
-      question.question_type = 'date';
-      break;
-      
-    case 'TIME':
-      question.question_type = 'time';
-      break;
-      
-    default:
-      question.question_type = 'short_answer';
+// Helper function to convert Google Forms item to exam question format
+function convertGoogleFormItem(item) {
+  // Handle non-question items
+  if (item.textItem) {
+    // Section header/description
+    return {
+      question_id: crypto.randomUUID(),
+      question_type: 'section_header',
+      question_text: item.title || '',
+      description: item.description || '',
+      points: 0,
+      required: false
+    };
+  }
+  
+  if (item.pageBreakItem) {
+    // Page break
+    return {
+      question_id: crypto.randomUUID(),
+      question_type: 'page_break',
+      question_text: item.title || 'Page Break',
+      points: 0,
+      required: false
+    };
   }
 
-  return question;
+  // Handle grid questions (multiple choice grid or checkbox grid)
+  if (item.questionGroupItem) {
+    const group = item.questionGroupItem;
+    const gridType = group.grid?.columns?.type;
+    const columnOptions = group.grid?.columns?.options?.map(opt => opt.value) || [];
+    
+    // Convert each row into a separate question
+    return (group.questions || []).map(gridQuestion => {
+      const question = {
+        question_id: crypto.randomUUID(),
+        question_text: `${item.title || 'Grid Question'}: ${gridQuestion.rowQuestion?.title || ''}`,
+        question_type: gridType === 'CHECKBOX' ? 'multiple_select' : 'multiple_choice',
+        options: columnOptions,
+        correct_answer: null,
+        points: gridQuestion.grading?.pointValue || 10,
+        required: gridQuestion.required || false,
+        grid_parent: item.title || 'Grid Question',
+        shuffle: group.grid?.shuffleQuestions || false
+      };
+      
+      // Set correct answer if available
+      if (gridQuestion.grading?.correctAnswers?.answers) {
+        const correctValues = gridQuestion.grading.correctAnswers.answers.map(a => a.value);
+        question.correct_answer = gridType === 'CHECKBOX' ? correctValues : correctValues[0];
+      }
+      
+      return question;
+    });
+  }
+
+  // Handle regular question items
+  if (item.questionItem) {
+    const questionData = item.questionItem.question;
+    const baseQuestion = {
+      question_id: crypto.randomUUID(),
+      question_text: item.title || '',
+      points: questionData.grading?.pointValue || 10,
+      required: questionData.required || false,
+      explanation: questionData.grading?.generalFeedback?.text || '',
+      correct_answer: null
+    };
+
+    // Extract correct answers if available
+    if (questionData.grading?.correctAnswers?.answers) {
+      const correctValues = questionData.grading.correctAnswers.answers.map(a => a.value);
+      baseQuestion.correct_answer = correctValues.length === 1 ? correctValues[0] : correctValues;
+    }
+
+    // Handle different question types
+    if (questionData.choiceQuestion) {
+      const choiceType = questionData.choiceQuestion.type;
+      const options = questionData.choiceQuestion.options?.map(opt => opt.value) || [];
+      
+      if (choiceType === 'RADIO') {
+        return {
+          ...baseQuestion,
+          question_type: 'multiple_choice',
+          options,
+          shuffle: questionData.choiceQuestion.shuffle || false
+        };
+      } else if (choiceType === 'CHECKBOX') {
+        return {
+          ...baseQuestion,
+          question_type: 'multiple_select',
+          options,
+          correct_answer: baseQuestion.correct_answer || [],
+          shuffle: questionData.choiceQuestion.shuffle || false
+        };
+      } else if (choiceType === 'DROP_DOWN') {
+        return {
+          ...baseQuestion,
+          question_type: 'dropdown',
+          options,
+          shuffle: questionData.choiceQuestion.shuffle || false
+        };
+      }
+    }
+    
+    if (questionData.textQuestion) {
+      return {
+        ...baseQuestion,
+        question_type: questionData.textQuestion.paragraph ? 'long_answer' : 'short_answer'
+      };
+    }
+    
+    if (questionData.scaleQuestion) {
+      return {
+        ...baseQuestion,
+        question_type: 'scale',
+        scale_min: questionData.scaleQuestion.low || 1,
+        scale_max: questionData.scaleQuestion.high || 5,
+        scale_min_label: questionData.scaleQuestion.lowLabel || '',
+        scale_max_label: questionData.scaleQuestion.highLabel || ''
+      };
+    }
+    
+    if (questionData.dateQuestion) {
+      return {
+        ...baseQuestion,
+        question_type: 'date',
+        include_time: questionData.dateQuestion.includeTime || false,
+        include_year: questionData.dateQuestion.includeYear || false
+      };
+    }
+    
+    if (questionData.timeQuestion) {
+      return {
+        ...baseQuestion,
+        question_type: 'time',
+        duration: questionData.timeQuestion.duration || false
+      };
+    }
+    
+    if (questionData.fileUploadQuestion) {
+      return {
+        ...baseQuestion,
+        question_type: 'file_upload',
+        folder_id: questionData.fileUploadQuestion.folderId || '',
+        max_files: questionData.fileUploadQuestion.maxFiles || 1,
+        max_file_size: questionData.fileUploadQuestion.maxFileSize || '10485760',
+        allowed_types: questionData.fileUploadQuestion.types || ['ANY']
+      };
+    }
+    
+    if (questionData.ratingQuestion) {
+      return {
+        ...baseQuestion,
+        question_type: 'rating',
+        rating_scale: questionData.ratingQuestion.ratingScaleLevel || 5,
+        rating_icon: questionData.ratingQuestion.iconType || 'STAR'
+      };
+    }
+    
+    // Default to short answer if type is unknown
+    return {
+      ...baseQuestion,
+      question_type: 'short_answer'
+    };
+  }
+  
+  // Return null for unrecognized items
+  return null;
 }
 
 export async function POST(request) {
@@ -202,38 +312,9 @@ export async function POST(request) {
           formData = {
             title: googleFormData.info?.title || 'Imported Form',
             description: googleFormData.info?.description || '',
-            questions: googleFormData.items?.map(item => {
-              if (!item.questionItem) return null;
-              
-              const question = item.questionItem.question;
-              const baseQuestion = {
-                title: item.title || '',
-                required: question.required || false,
-                points: question.grading?.pointValue || 10
-              };
-
-              if (question.choiceQuestion) {
-                return {
-                  ...baseQuestion,
-                  type: question.choiceQuestion.type || 'RADIO',
-                  choices: question.choiceQuestion.options?.map(opt => opt.value) || []
-                };
-              } else if (question.textQuestion) {
-                return {
-                  ...baseQuestion,
-                  type: question.textQuestion.paragraph ? 'PARAGRAPH_TEXT' : 'TEXT'
-                };
-              } else if (question.scaleQuestion) {
-                return {
-                  ...baseQuestion,
-                  type: 'SCALE',
-                  scaleMin: question.scaleQuestion.low,
-                  scaleMax: question.scaleQuestion.high
-                };
-              }
-              
-              return baseQuestion;
-            }).filter(Boolean) || []
+            documentTitle: googleFormData.info?.documentTitle || '',
+            isQuiz: googleFormData.settings?.quizSettings?.isQuiz || false,
+            items: googleFormData.items || []
           };
         }
       } catch (error) {
@@ -267,9 +348,26 @@ export async function POST(request) {
       );
     }
 
-    // Convert Google Forms questions to exam format
-    const examItems = formData.questions.map(convertQuestion);
-    const totalPoints = examItems.reduce((sum, q) => sum + q.points, 0);
+    // Convert Google Forms items to exam format
+    const examItems = [];
+    for (const item of formData.items) {
+      const converted = convertGoogleFormItem(item);
+      if (converted) {
+        // Handle grid questions that return an array
+        if (Array.isArray(converted)) {
+          examItems.push(...converted);
+        } else {
+          examItems.push(converted);
+        }
+      }
+    }
+    
+    // Filter out non-question items for total points calculation
+    const scorableItems = examItems.filter(item => 
+      item.question_type !== 'section_header' && 
+      item.question_type !== 'page_break'
+    );
+    const totalPoints = scorableItems.reduce((sum, q) => sum + (q.points || 0), 0);
 
     // Validate class permissions if classes are provided
     const validClassIds = [];
@@ -309,12 +407,14 @@ export async function POST(request) {
         duration_minutes: 60,
         attempts_allowed: 1,
         shuffle_items: false,
-        show_results_immediately: true,
+        show_results_immediately: formData.isQuiz || false,
         passing_score: 70,
         items: examItems,
         total_points: totalPoints,
         status: 'draft',
         is_published: false,
+        is_quiz: formData.isQuiz || false,
+        google_form_id: googleFormId,
         start_date: null,
         end_date: null
       })

@@ -9,35 +9,59 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import TextEditor from '@/components/editors/text-editor';
 import VariableContent from '@/components/ui/variable-content';
-import { Trash2, GripVertical, Plus, ListTodoIcon, ListChecksIcon, TextAlignStartIcon, NotepadTextIcon, CircleSlashIcon, Eye, EyeOff } from 'lucide-react';
+import CodeEditor from '@/components/editors/CodeEditor';
+import { Trash2, GripVertical, Plus, ListTodoIcon, ListChecksIcon, TextAlignStartIcon, NotepadTextIcon, CircleSlashIcon, Eye, EyeOff, ChevronDown, SlidersHorizontal, Calendar, Clock, Upload, Star, Heading, Minus, ChevronsUpDown, Check, Heart, ThumbsUp, Code } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const questionTypes = [
-  { value: 'multiple_choice', label: <><ListTodoIcon /> Multiple Choice</> },
-  { value: 'multiple_select', label: <><ListChecksIcon /> Multiple Select</> },
-  { value: 'short_answer', label: <><TextAlignStartIcon /> Short Answer</> },
-  { value: 'long_answer', label: <><NotepadTextIcon /> Long Answer</> },
-  { value: 'true_false', label: <><CircleSlashIcon />True/False</> },
+  { value: 'multiple_choice', label: 'Multiple Choice', icon: ListTodoIcon },
+  { value: 'multiple_select', label: 'Multiple Select', icon: ListChecksIcon },
+  { value: 'short_answer', label: 'Short Answer', icon: TextAlignStartIcon },
+  { value: 'long_answer', label: 'Long Answer', icon: NotepadTextIcon },
+  { value: 'true_false', label: 'True/False', icon: CircleSlashIcon },
+  { value: 'dropdown', label: 'Dropdown', icon: ChevronDown },
+  { value: 'scale', label: 'Scale', icon: SlidersHorizontal },
+  { value: 'date', label: 'Date', icon: Calendar },
+  { value: 'time', label: 'Time', icon: Clock },
+  { value: 'file_upload', label: 'File Upload', icon: Upload },
+  { value: 'rating', label: 'Rating', icon: Star },
+  { value: 'coding', label: 'Coding', icon: Code },
+  { value: 'section_header', label: 'Section Header', icon: Heading },
+  { value: 'page_break', label: 'Page Break', icon: Minus },
 ];
 
-export default function QuestionCard({ 
-  item, 
-  index, 
-  onUpdateQuestion, 
-  onAddOption, 
-  onUpdateOption, 
-  onRemoveOption, 
-  onRemoveQuestion 
+export default function QuestionCard({
+  item,
+  index,
+  onUpdateQuestion,
+  onAddOption,
+  onUpdateOption,
+  onRemoveOption,
+  onRemoveQuestion,
+  dragHandleProps
 }) {
-  const [showPreview, setShowPreview] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const selectedType = questionTypes.find(type => type.value === item.question_type);
+  const SelectedIcon = selectedType?.icon;
+
   return (
     <Card className="relative">
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start">
-          <div className="flex items-center gap-2">
-            <GripVertical className="w-4 h-4 text-muted-foreground" />
-            <Badge variant="outline">Question {index + 1}</Badge>
+          <div className="flex items-center gap-2 flex-1">
+            <div {...dragHandleProps} className="cursor-grab active:cursor-grabbing p-2 -m-2 hover:bg-accent rounded">
+              <GripVertical className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <Badge variant="outline">
+              {item.question_type === 'section_header' ? 'Section Header' :
+               item.question_type === 'page_break' ? 'Page Break' :
+               `Question ${index + 1}`}
+            </Badge>
           </div>
           <Button
             variant="ghost"
@@ -52,21 +76,58 @@ export default function QuestionCard({
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label>Question Type</Label>
-            <Select
-              value={item.question_type}
-              onValueChange={(value) => onUpdateQuestion(index, 'question_type', value)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {questionTypes.map((type) => (
-                  <SelectItem key={type.value} value={type.value}>
-                    {type.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={open} onOpenChange={setOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={open}
+                  className="w-full justify-between"
+                >
+                  {selectedType ? (
+                    <div className="flex items-center gap-2">
+                      {SelectedIcon && <SelectedIcon className="h-4 w-4" />}
+                      {selectedType.label}
+                    </div>
+                  ) : (
+                    "Select question type..."
+                  )}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[300px] p-0">
+                <Command>
+                  <CommandInput placeholder="Search question type..." />
+                  <CommandList>
+                    <CommandEmpty>No question type found.</CommandEmpty>
+                    <CommandGroup>
+                      {questionTypes.map((type) => {
+                        const Icon = type.icon;
+                        return (
+                          <CommandItem
+                            key={type.value}
+                            value={type.value}
+                            onSelect={(currentValue) => {
+                              onUpdateQuestion(index, 'question_type', currentValue);
+                              setOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                item.question_type === type.value ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <Icon className="mr-2 h-4 w-4" />
+                            {type.label}
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
           <div className="space-y-2">
             <Label>Points</Label>
@@ -206,16 +267,256 @@ export default function QuestionCard({
           </div>
         )}
 
-        <div className="space-y-2">
-          <Label>Explanation (Optional)</Label>
-          <TextEditor
-            id={`question-${item.question_id}-explanation`}
-            value={item.explanation}
-            onChange={(value) => onUpdateQuestion(index, 'explanation', value)}
-            placeholder="Provide an explanation for the answer"
-            minHeight={80}
-          />
-        </div>
+        {item.question_type === 'dropdown' && (
+          <div className="space-y-2">
+            <Label>Dropdown Options</Label>
+            {item.options.map((option, optionIndex) => (
+              <div key={optionIndex} className="flex gap-2 items-center">
+                <RadioGroup value={item.correct_answer?.toString()} onValueChange={(value) => onUpdateQuestion(index, 'correct_answer', parseInt(value))}>
+                  <RadioGroupItem value={optionIndex.toString()} />
+                </RadioGroup>
+                <Input
+                  value={option}
+                  onChange={(e) => onUpdateOption(index, optionIndex, e.target.value)}
+                  placeholder={`Option ${optionIndex + 1}`}
+                />
+                {item.options.length > 2 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onRemoveOption(index, optionIndex)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onAddOption(index)}
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Add Option
+            </Button>
+          </div>
+        )}
+
+        {item.question_type === 'scale' && (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Minimum Value</Label>
+                <Input
+                  type="number"
+                  value={item.scale_min || 1}
+                  onChange={(e) => onUpdateQuestion(index, 'scale_min', parseInt(e.target.value))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Maximum Value</Label>
+                <Input
+                  type="number"
+                  value={item.scale_max || 5}
+                  onChange={(e) => onUpdateQuestion(index, 'scale_max', parseInt(e.target.value))}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Minimum Label (Optional)</Label>
+                <Input
+                  value={item.scale_min_label || ''}
+                  onChange={(e) => onUpdateQuestion(index, 'scale_min_label', e.target.value)}
+                  placeholder="e.g., Strongly Disagree"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Maximum Label (Optional)</Label>
+                <Input
+                  value={item.scale_max_label || ''}
+                  onChange={(e) => onUpdateQuestion(index, 'scale_max_label', e.target.value)}
+                  placeholder="e.g., Strongly Agree"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {item.question_type === 'date' && (
+          <div className="space-y-2">
+            <div className="flex gap-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  checked={item.include_time || false}
+                  onCheckedChange={(checked) => onUpdateQuestion(index, 'include_time', checked)}
+                />
+                <Label>Include Time</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  checked={item.include_year || false}
+                  onCheckedChange={(checked) => onUpdateQuestion(index, 'include_year', checked)}
+                />
+                <Label>Include Year</Label>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {item.question_type === 'time' && (
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                checked={item.duration || false}
+                onCheckedChange={(checked) => onUpdateQuestion(index, 'duration', checked)}
+              />
+              <Label>Duration (instead of time of day)</Label>
+            </div>
+          </div>
+        )}
+
+        {item.question_type === 'file_upload' && (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Maximum Files</Label>
+                <Input
+                  type="number"
+                  value={item.max_files || 1}
+                  onChange={(e) => onUpdateQuestion(index, 'max_files', parseInt(e.target.value))}
+                  min="1"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Max File Size (MB)</Label>
+                <Input
+                  type="number"
+                  value={Math.round((item.max_file_size || 10485760) / 1048576)}
+                  onChange={(e) => onUpdateQuestion(index, 'max_file_size', e.target.value * 1048576)}
+                  min="1"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Allowed File Types</Label>
+              <Input
+                value={(item.allowed_types || ['ANY']).join(', ')}
+                onChange={(e) => onUpdateQuestion(index, 'allowed_types', e.target.value.split(',').map(t => t.trim()))}
+                placeholder="e.g., PDF, DOC, DOCX or ANY for all types"
+              />
+            </div>
+          </div>
+        )}
+
+        {item.question_type === 'rating' && (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Rating Scale</Label>
+                <Select
+                  value={item.rating_scale?.toString() || '5'}
+                  onValueChange={(value) => onUpdateQuestion(index, 'rating_scale', parseInt(value))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                      <SelectItem key={num} value={num.toString()}>
+                        {num}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Icon Type</Label>
+                <Select
+                  value={item.rating_icon || 'STAR'}
+                  onValueChange={(value) => onUpdateQuestion(index, 'rating_icon', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="STAR">
+                      <div className="flex items-center gap-2">
+                        <Star className="h-4 w-4" />
+                        Star
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="HEART">
+                      <div className="flex items-center gap-2">
+                        <Heart className="h-4 w-4" />
+                        Heart
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="THUMB">
+                      <div className="flex items-center gap-2">
+                        <ThumbsUp className="h-4 w-4" />
+                        Thumb
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {item.question_type === 'coding' && (
+          <div className="space-y-2">
+            <Label>Starter Code</Label>
+            <CodeEditor
+              files={item.starter_files || [{ name: 'index.js', content: '// Write your code here' }]}
+              onChange={(files) => onUpdateQuestion(index, 'starter_files', files)}
+              height="400px"
+            />
+            <div className="space-y-2 mt-4">
+              <Label>Test Cases (Optional)</Label>
+              <TextEditor
+                id={`question-${item.question_id}-test-cases`}
+                value={item.test_cases || ''}
+                onChange={(value) => onUpdateQuestion(index, 'test_cases', value)}
+                placeholder="Describe the test cases or expected output"
+                minHeight={80}
+              />
+            </div>
+          </div>
+        )}
+
+        {item.question_type === 'section_header' && (
+          <div className="space-y-2">
+            <Label>Description</Label>
+            <TextEditor
+              id={`question-${item.question_id}-description`}
+              value={item.description || ''}
+              onChange={(value) => onUpdateQuestion(index, 'description', value)}
+              placeholder="Section description"
+              minHeight={80}
+            />
+          </div>
+        )}
+
+        {item.question_type === 'page_break' && (
+          <div className="text-center py-4 text-muted-foreground">
+            This will create a page break in the exam
+          </div>
+        )}
+
+        {item.question_type !== 'section_header' && item.question_type !== 'page_break' && (
+          <div className="space-y-2">
+            <Label>Explanation (Optional)</Label>
+            <TextEditor
+              id={`question-${item.question_id}-explanation`}
+              value={item.explanation}
+              onChange={(value) => onUpdateQuestion(index, 'explanation', value)}
+              placeholder="Provide an explanation for the answer"
+              minHeight={80}
+            />
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -1,6 +1,10 @@
 import dynamic from 'next/dynamic';
 import { useState, useEffect, useRef } from 'react';
-import { formatHex, formatRgb, parse } from 'culori';
+import { formatHex, parse } from 'culori';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Plus, X, FileCode } from 'lucide-react';
 
 const MonacoEditor = dynamic(
   () => import('@monaco-editor/react'),
@@ -30,24 +34,67 @@ const oklchToHex = (oklchString) => {
   return '#000000';
 };
 
-export default function CodeEditor({language="javascript", height, width}) {
-  const [code, setCode] = useState(`// Welcome to your custom themed editor
-function greet(name) {
-  console.log(\`Hello, \${name}!\`);
-  return {
-    message: "Welcome",
-    timestamp: Date.now()
+const getLanguageFromFileName = (fileName) => {
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  const languageMap = {
+    'js': 'javascript',
+    'jsx': 'javascript',
+    'ts': 'typescript',
+    'tsx': 'typescript',
+    'css': 'css',
+    'scss': 'scss',
+    'sass': 'sass',
+    'less': 'less',
+    'html': 'html',
+    'htm': 'html',
+    'xml': 'xml',
+    'json': 'json',
+    'md': 'markdown',
+    'py': 'python',
+    'java': 'java',
+    'c': 'c',
+    'cpp': 'cpp',
+    'cs': 'csharp',
+    'php': 'php',
+    'rb': 'ruby',
+    'go': 'go',
+    'rs': 'rust',
+    'swift': 'swift',
+    'kt': 'kotlin',
+    'sql': 'sql',
+    'sh': 'shell',
+    'yaml': 'yaml',
+    'yml': 'yaml',
+    'txt': 'plaintext'
   };
-}
+  return languageMap[ext] || 'plaintext';
+};
 
-// Example usage
-const result = greet("World");
-console.log(result);`);
+export default function CodeEditor({
+  files = [{ name: 'index.js', content: '// Write your code here' }],
+  onChange,
+  height = '400px',
+  width = '100%'
+}) {
+  const [editorFiles, setEditorFiles] = useState(files);
+  const [activeFile, setActiveFile] = useState(files[0]?.name || 'index.js');
+  const [newFileName, setNewFileName] = useState('');
+  const [showAddFile, setShowAddFile] = useState(false);
 
   const [theme, setTheme] = useState('custom-light');
   const [isThemeRegistered, setIsThemeRegistered] = useState(false);
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
+
+  // Sync external files prop with internal state
+  useEffect(() => {
+    if (files && files.length > 0) {
+      setEditorFiles(files);
+      if (!files.find(f => f.name === activeFile)) {
+        setActiveFile(files[0].name);
+      }
+    }
+  }, [files]);
 
   const defineCustomThemes = (monaco) => {
     // Get CSS variables and convert OKLCH to Hex
@@ -204,20 +251,478 @@ console.log(result);`);
     return () => observer.disconnect();
   }, []);
 
+  const registerLanguageSupport = (monaco) => {
+    // Python language configuration
+    monaco.languages.register({ id: 'python' });
+    monaco.languages.setMonarchTokensProvider('python', {
+      defaultToken: '',
+      tokenPostfix: '.python',
+      keywords: [
+        'and', 'as', 'assert', 'break', 'class', 'continue', 'def', 'del', 'elif',
+        'else', 'except', 'exec', 'finally', 'for', 'from', 'global', 'if', 'import',
+        'in', 'is', 'lambda', 'not', 'or', 'pass', 'print', 'raise', 'return', 'try',
+        'while', 'with', 'yield', 'async', 'await', 'nonlocal'
+      ],
+      builtins: [
+        '__import__', 'abs', 'all', 'any', 'bin', 'bool', 'bytearray', 'callable',
+        'chr', 'classmethod', 'compile', 'complex', 'delattr', 'dict', 'dir', 'divmod',
+        'enumerate', 'eval', 'filter', 'float', 'format', 'frozenset', 'getattr',
+        'globals', 'hasattr', 'hash', 'help', 'hex', 'id', 'input', 'int', 'isinstance',
+        'issubclass', 'iter', 'len', 'list', 'locals', 'map', 'max', 'memoryview',
+        'min', 'next', 'object', 'oct', 'open', 'ord', 'pow', 'print', 'property',
+        'range', 'repr', 'reversed', 'round', 'set', 'setattr', 'slice', 'sorted',
+        'staticmethod', 'str', 'sum', 'super', 'tuple', 'type', 'vars', 'zip'
+      ],
+      operators: [
+        '+', '-', '*', '/', '%', '//', '**', '==', '!=', '<', '>', '<=', '>=',
+        '=', '+=', '-=', '*=', '/=', '%=', '//=', '**=', '&=', '|=', '^=',
+        '>>=', '<<=', '&', '|', '^', '~', '<<', '>>'
+      ],
+      symbols: /[=><!~?:&|+\-*\/\^%]+/,
+      escapes: /\\(?:[abfnrtv\\"']|x[0-9A-Fa-f]{1,4}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8})/,
+      tokenizer: {
+        root: [
+          [/[a-zA-Z_]\w*/, {
+            cases: {
+              '@keywords': 'keyword',
+              '@builtins': 'type.identifier',
+              '@default': 'identifier'
+            }
+          }],
+          { include: '@whitespace' },
+          [/[{}()\[\]]/, '@brackets'],
+          [/@symbols/, {
+            cases: {
+              '@operators': 'operator',
+              '@default': 'delimiter'
+            }
+          }],
+          [/\d*\.\d+([eE][\-+]?\d+)?/, 'number.float'],
+          [/0[xX][0-9a-fA-F]+/, 'number.hex'],
+          [/0[oO][0-7]+/, 'number.octal'],
+          [/0[bB][01]+/, 'number.binary'],
+          [/\d+/, 'number'],
+          [/[;,.]/, 'delimiter'],
+          [/"([^"\\]|\\.)*$/, 'string.invalid'],
+          [/'([^'\\]|\\.)*$/, 'string.invalid'],
+          [/"""/, 'string', '@string_triple_double'],
+          [/'''/, 'string', '@string_triple_single'],
+          [/"/, 'string', '@string_double'],
+          [/'/, 'string', '@string_single'],
+        ],
+        whitespace: [
+          [/\s+/, 'white'],
+          [/#.*$/, 'comment'],
+        ],
+        string_double: [
+          [/[^\\"]+/, 'string'],
+          [/@escapes/, 'string.escape'],
+          [/\\./, 'string.escape.invalid'],
+          [/"/, 'string', '@pop']
+        ],
+        string_single: [
+          [/[^\\']+/, 'string'],
+          [/@escapes/, 'string.escape'],
+          [/\\./, 'string.escape.invalid'],
+          [/'/, 'string', '@pop']
+        ],
+        string_triple_double: [
+          [/[^\\"]+/, 'string'],
+          [/@escapes/, 'string.escape'],
+          [/\\./, 'string.escape.invalid'],
+          [/"""/, 'string', '@pop'],
+          [/./, 'string']
+        ],
+        string_triple_single: [
+          [/[^\\']+/, 'string'],
+          [/@escapes/, 'string.escape'],
+          [/\\./, 'string.escape.invalid'],
+          [/'''/, 'string', '@pop'],
+          [/./, 'string']
+        ],
+      }
+    });
+
+    // Java language configuration
+    monaco.languages.register({ id: 'java' });
+    monaco.languages.setMonarchTokensProvider('java', {
+      defaultToken: '',
+      tokenPostfix: '.java',
+      keywords: [
+        'abstract', 'continue', 'for', 'new', 'switch', 'assert', 'default',
+        'goto', 'package', 'synchronized', 'boolean', 'do', 'if', 'private',
+        'this', 'break', 'double', 'implements', 'protected', 'throw', 'byte',
+        'else', 'import', 'public', 'throws', 'case', 'enum', 'instanceof', 'return',
+        'transient', 'catch', 'extends', 'int', 'short', 'try', 'char', 'final',
+        'interface', 'static', 'void', 'class', 'finally', 'long', 'strictfp',
+        'volatile', 'const', 'float', 'native', 'super', 'while', 'true', 'false', 'null'
+      ],
+      operators: [
+        '=', '>', '<', '!', '~', '?', ':',
+        '==', '<=', '>=', '!=', '&&', '||', '++', '--',
+        '+', '-', '*', '/', '&', '|', '^', '%', '<<',
+        '>>', '>>>', '+=', '-=', '*=', '/=', '&=', '|=',
+        '^=', '%=', '<<=', '>>=', '>>>='
+      ],
+      symbols: /[=><!~?:&|+\-*\/\^%]+/,
+      escapes: /\\(?:[abfnrtv\\"']|x[0-9A-Fa-f]{1,4}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8})/,
+      tokenizer: {
+        root: [
+          [/[a-zA-Z_$][\w$]*/, {
+            cases: {
+              '@keywords': 'keyword',
+              '@default': 'identifier'
+            }
+          }],
+          { include: '@whitespace' },
+          [/[{}()\[\]]/, '@brackets'],
+          [/@symbols/, {
+            cases: {
+              '@operators': 'operator',
+              '@default': ''
+            }
+          }],
+          [/\d*\.\d+([eE][\-+]?\d+)?[fFdD]?/, 'number.float'],
+          [/0[xX][0-9a-fA-F]+[Ll]?/, 'number.hex'],
+          [/0[bB][01]+[Ll]?/, 'number.binary'],
+          [/\d+[lL]?/, 'number'],
+          [/[;,.]/, 'delimiter'],
+          [/"([^"\\]|\\.)*$/, 'string.invalid'],
+          [/"/, 'string', '@string'],
+          [/'[^\\']'/, 'string'],
+          [/(')(@escapes)(')/, ['string', 'string.escape', 'string']],
+          [/'/, 'string.invalid']
+        ],
+        whitespace: [
+          [/[ \t\r\n]+/, ''],
+          [/\/\*/, 'comment', '@comment'],
+          [/\/\/.*$/, 'comment'],
+        ],
+        comment: [
+          [/[^\/*]+/, 'comment'],
+          [/\*\//, 'comment', '@pop'],
+          [/[\/*]/, 'comment']
+        ],
+        string: [
+          [/[^\\"]+/, 'string'],
+          [/@escapes/, 'string.escape'],
+          [/\\./, 'string.escape.invalid'],
+          [/"/, 'string', '@pop']
+        ],
+      }
+    });
+
+    // C/C++ language configuration (already supported but we can enhance)
+    monaco.languages.setLanguageConfiguration('c', {
+      comments: {
+        lineComment: '//',
+        blockComment: ['/*', '*/']
+      },
+      brackets: [
+        ['{', '}'],
+        ['[', ']'],
+        ['(', ')']
+      ],
+      autoClosingPairs: [
+        { open: '{', close: '}' },
+        { open: '[', close: ']' },
+        { open: '(', close: ')' },
+        { open: '"', close: '"' },
+        { open: "'", close: "'" }
+      ],
+      surroundingPairs: [
+        { open: '{', close: '}' },
+        { open: '[', close: ']' },
+        { open: '(', close: ')' },
+        { open: '"', close: '"' },
+        { open: "'", close: "'" }
+      ]
+    });
+
+    // Python IntelliSense
+    monaco.languages.registerCompletionItemProvider('python', {
+      provideCompletionItems: () => {
+        const suggestions = [
+          {
+            label: 'def',
+            kind: monaco.languages.CompletionItemKind.Keyword,
+            insertText: 'def ${1:function_name}(${2:params}):\n    ${3:pass}',
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            documentation: 'Define a function'
+          },
+          {
+            label: 'class',
+            kind: monaco.languages.CompletionItemKind.Keyword,
+            insertText: 'class ${1:ClassName}:\n    def __init__(self${2:, params}):\n        ${3:pass}',
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            documentation: 'Define a class'
+          },
+          {
+            label: 'if',
+            kind: monaco.languages.CompletionItemKind.Keyword,
+            insertText: 'if ${1:condition}:\n    ${2:pass}',
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            documentation: 'If statement'
+          },
+          {
+            label: 'for',
+            kind: monaco.languages.CompletionItemKind.Keyword,
+            insertText: 'for ${1:item} in ${2:iterable}:\n    ${3:pass}',
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            documentation: 'For loop'
+          },
+          {
+            label: 'while',
+            kind: monaco.languages.CompletionItemKind.Keyword,
+            insertText: 'while ${1:condition}:\n    ${2:pass}',
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            documentation: 'While loop'
+          },
+          {
+            label: 'try',
+            kind: monaco.languages.CompletionItemKind.Keyword,
+            insertText: 'try:\n    ${1:pass}\nexcept ${2:Exception} as ${3:e}:\n    ${4:pass}',
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            documentation: 'Try-except block'
+          }
+        ];
+        return { suggestions };
+      }
+    });
+
+    // Java IntelliSense
+    monaco.languages.registerCompletionItemProvider('java', {
+      provideCompletionItems: () => {
+        const suggestions = [
+          {
+            label: 'main',
+            kind: monaco.languages.CompletionItemKind.Snippet,
+            insertText: 'public static void main(String[] args) {\n    ${1}\n}',
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            documentation: 'Main method'
+          },
+          {
+            label: 'sysout',
+            kind: monaco.languages.CompletionItemKind.Snippet,
+            insertText: 'System.out.println(${1});',
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            documentation: 'Print to console'
+          },
+          {
+            label: 'for',
+            kind: monaco.languages.CompletionItemKind.Keyword,
+            insertText: 'for (${1:int i = 0}; ${2:i < length}; ${3:i++}) {\n    ${4}\n}',
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            documentation: 'For loop'
+          },
+          {
+            label: 'if',
+            kind: monaco.languages.CompletionItemKind.Keyword,
+            insertText: 'if (${1:condition}) {\n    ${2}\n}',
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            documentation: 'If statement'
+          },
+          {
+            label: 'class',
+            kind: monaco.languages.CompletionItemKind.Keyword,
+            insertText: 'public class ${1:ClassName} {\n    ${2}\n}',
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            documentation: 'Class definition'
+          }
+        ];
+        return { suggestions };
+      }
+    });
+
+  };
+
+  const setupLinting = (editor, monaco) => {
+    let pythonValidationTimeout;
+    let javaValidationTimeout;
+
+    // Listen to content changes
+    editor.onDidChangeModelContent(() => {
+      const model = editor.getModel();
+      if (!model) return;
+
+      const language = model.getLanguageId();
+
+      // Python linting
+      if (language === 'python') {
+        clearTimeout(pythonValidationTimeout);
+        pythonValidationTimeout = setTimeout(() => {
+          const code = model.getValue();
+          const markers = [];
+          const lines = code.split('\n');
+
+          lines.forEach((line, lineNumber) => {
+            // Check for missing colons
+            const controlStructures = /^\s*(if|elif|else|for|while|def|class|try|except|finally|with)\s+.*[^:]\s*$/;
+            if (controlStructures.test(line) && !line.trim().endsWith(':')) {
+              markers.push({
+                severity: monaco.MarkerSeverity.Error,
+                startLineNumber: lineNumber + 1,
+                startColumn: line.length + 1,
+                endLineNumber: lineNumber + 1,
+                endColumn: line.length + 1,
+                message: 'Missing colon (:) at end of statement'
+              });
+            }
+
+            // Check for inconsistent indentation
+            if (line.trim() && /^\s+/.test(line)) {
+              const spaces = line.match(/^\s+/)[0];
+              if (spaces.includes('\t') && spaces.includes(' ')) {
+                markers.push({
+                  severity: monaco.MarkerSeverity.Warning,
+                  startLineNumber: lineNumber + 1,
+                  startColumn: 1,
+                  endLineNumber: lineNumber + 1,
+                  endColumn: spaces.length + 1,
+                  message: 'Mixed tabs and spaces in indentation'
+                });
+              }
+            }
+          });
+
+          monaco.editor.setModelMarkers(model, 'python', markers);
+        }, 500);
+      }
+
+      // Java linting
+      if (language === 'java') {
+        clearTimeout(javaValidationTimeout);
+        javaValidationTimeout = setTimeout(() => {
+          const code = model.getValue();
+          const markers = [];
+          const lines = code.split('\n');
+
+          lines.forEach((line, lineNumber) => {
+            // Check for missing semicolons
+            const needsSemicolon = /^\s*(int|long|double|float|boolean|char|String|byte|short|var)\s+\w+\s*=\s*.+[^;{}\s]\s*$/;
+            if (needsSemicolon.test(line)) {
+              markers.push({
+                severity: monaco.MarkerSeverity.Error,
+                startLineNumber: lineNumber + 1,
+                startColumn: line.length + 1,
+                endLineNumber: lineNumber + 1,
+                endColumn: line.length + 1,
+                message: 'Missing semicolon (;)'
+              });
+            }
+
+            // Check for method calls without semicolons
+            if (/^\s*\w+\([^)]*\)\s*$/.test(line) && !line.includes('if') && !line.includes('for') && !line.includes('while')) {
+              if (!lines[lineNumber - 1]?.includes('public') && !lines[lineNumber - 1]?.includes('private')) {
+                markers.push({
+                  severity: monaco.MarkerSeverity.Error,
+                  startLineNumber: lineNumber + 1,
+                  startColumn: line.length + 1,
+                  endLineNumber: lineNumber + 1,
+                  endColumn: line.length + 1,
+                  message: 'Missing semicolon (;)'
+                });
+              }
+            }
+          });
+
+          monaco.editor.setModelMarkers(model, 'java', markers);
+        }, 500);
+      }
+    });
+  };
+
   const handleEditorDidMount = (editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
-    
+
+    // Register language support
+    registerLanguageSupport(monaco);
+
+    // Setup linting
+    setupLinting(editor, monaco);
+
     // Define custom themes
     defineCustomThemes(monaco);
-    
+
     // Set initial theme
     const isDark = document.documentElement.classList.contains('dark');
     monaco.editor.setTheme(isDark ? 'custom-dark' : 'custom-light');
   };
 
   const handleEditorChange = (value) => {
-    setCode(value);
+    const updatedFiles = editorFiles.map(file =>
+      file.name === activeFile ? { ...file, content: value } : file
+    );
+    setEditorFiles(updatedFiles);
+    if (onChange) {
+      onChange(updatedFiles);
+    }
+  };
+
+  const addFile = () => {
+    if (!newFileName.trim()) return;
+
+    if (!newFileName.includes('.')) {
+      alert('Please include a file extension (e.g., script.js)');
+      return;
+    }
+
+    if (editorFiles.find(f => f.name === newFileName)) {
+      alert('File already exists');
+      return;
+    }
+
+    const ext = newFileName.split('.').pop()?.toLowerCase();
+    const defaultContent = {
+      'js': '// JavaScript code here',
+      'jsx': '// React component here',
+      'ts': '// TypeScript code here',
+      'tsx': '// React TypeScript component here',
+      'css': '/* CSS styles here */',
+      'scss': '/* SCSS styles here */',
+      'html': '<!-- HTML markup here -->',
+      'json': '{\n  \n}',
+      'md': '# Markdown content',
+      'py': '# Python code here',
+      'java': '// Java code here',
+      'c': '// C code here',
+      'cpp': '// C++ code here',
+      'txt': ''
+    };
+
+    const newFile = {
+      name: newFileName,
+      content: defaultContent[ext] || ''
+    };
+
+    const updatedFiles = [...editorFiles, newFile];
+    setEditorFiles(updatedFiles);
+    setActiveFile(newFileName);
+    setNewFileName('');
+    setShowAddFile(false);
+
+    if (onChange) {
+      onChange(updatedFiles);
+    }
+  };
+
+  const removeFile = (fileName) => {
+    if (editorFiles.length === 1) {
+      alert('Cannot remove the last file');
+      return;
+    }
+
+    const updatedFiles = editorFiles.filter(f => f.name !== fileName);
+    setEditorFiles(updatedFiles);
+
+    if (activeFile === fileName) {
+      setActiveFile(updatedFiles[0].name);
+    }
+
+    if (onChange) {
+      onChange(updatedFiles);
+    }
   };
 
   // Update theme when it changes
@@ -227,20 +732,97 @@ console.log(result);`);
     }
   }, [theme, isThemeRegistered]);
 
+  const currentFile = editorFiles.find(f => f.name === activeFile);
+  const currentLanguage = getLanguageFromFileName(activeFile);
+
   return (
-    <div className="h-screen w-full flex flex-col bg-background">
+    <div className="w-full flex flex-col bg-background border rounded-lg overflow-hidden">
+      {/* File Tabs */}
+      <div className="flex items-center gap-2 p-2 bg-muted/50 border-b">
+        <Tabs value={activeFile} onValueChange={setActiveFile} className="flex-1">
+          <div className="flex items-center gap-2">
+            <TabsList className="h-8">
+              {editorFiles.map(file => (
+                <div key={file.name} className="flex items-center">
+                  <TabsTrigger value={file.name} className="h-7 text-xs px-3">
+                    <FileCode className="w-3 h-3 mr-1" />
+                    {file.name}
+                  </TabsTrigger>
+                  {editorFiles.length > 1 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 ml-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeFile(file.name);
+                      }}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </TabsList>
+
+            {showAddFile ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={newFileName}
+                  onChange={(e) => setNewFileName(e.target.value)}
+                  placeholder="filename.js"
+                  className="h-7 w-32 text-xs"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') addFile();
+                    if (e.key === 'Escape') {
+                      setShowAddFile(false);
+                      setNewFileName('');
+                    }
+                  }}
+                  autoFocus
+                />
+                <Button size="sm" className="h-7" onClick={addFile}>
+                  Add
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7"
+                  onClick={() => {
+                    setShowAddFile(false);
+                    setNewFileName('');
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7"
+                onClick={() => setShowAddFile(true)}
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                Add File
+              </Button>
+            )}
+          </div>
+        </Tabs>
+      </div>
+
       {/* Editor Container */}
-      <div className="flex-1 relative">
+      <div className="relative" style={{ height }}>
         <MonacoEditor
           height={height}
           width={width}
-          language={language}
-          value={code}
+          language={currentLanguage}
+          value={currentFile?.content || ''}
           onChange={handleEditorChange}
           onMount={handleEditorDidMount}
           theme={theme}
           options={{
-            minimap: { enabled: true },
+            minimap: { enabled: false },
             fontSize: 14,
             lineNumbers: 'on',
             roundedSelection: true,
@@ -272,8 +854,8 @@ console.log(result);`);
       {/* Footer */}
       <div className="border-t border-border bg-card p-2 px-4">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>JavaScript • UTF-8</span>
-          <span>{code.length} characters</span>
+          <span>{currentLanguage.toUpperCase()} • UTF-8</span>
+          <span>{currentFile?.content?.length || 0} characters</span>
         </div>
       </div>
     </div>
