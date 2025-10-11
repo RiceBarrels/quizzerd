@@ -4,7 +4,7 @@ import { auth } from '@clerk/nextjs/server';
 import { googleApiFetch } from '@/lib/google-auth';
 
 // Helper function to extract Google Form ID from URL
-function extractFormId(url) {
+function extractFormId(url: string) {
   // Handle different Google Forms URL formats
   // https://docs.google.com/forms/d/FORM_ID/edit
   // https://docs.google.com/forms/d/e/FORM_ID/viewform
@@ -27,7 +27,7 @@ function extractFormId(url) {
 }
 
 // Helper function to convert Google Forms item to exam question format
-function convertGoogleFormItem(item) {
+function convertGoogleFormItem(item: any) {
   // Handle non-question items
   if (item.textItem) {
     // Section header/description
@@ -56,10 +56,10 @@ function convertGoogleFormItem(item) {
   if (item.questionGroupItem) {
     const group = item.questionGroupItem;
     const gridType = group.grid?.columns?.type;
-    const columnOptions = group.grid?.columns?.options?.map(opt => opt.value) || [];
+    const columnOptions = group.grid?.columns?.options?.map((opt: any) => opt.value) || [];
     
     // Convert each row into a separate question
-    return (group.questions || []).map(gridQuestion => {
+    return (group.questions || []).map((gridQuestion: any) => {
       const question = {
         question_id: crypto.randomUUID(),
         question_text: `${item.title || 'Grid Question'}: ${gridQuestion.rowQuestion?.title || ''}`,
@@ -74,7 +74,7 @@ function convertGoogleFormItem(item) {
       
       // Set correct answer if available
       if (gridQuestion.grading?.correctAnswers?.answers) {
-        const correctValues = gridQuestion.grading.correctAnswers.answers.map(a => a.value);
+        const correctValues = gridQuestion.grading.correctAnswers.answers.map((a: any) => a.value);
         question.correct_answer = gridType === 'CHECKBOX' ? correctValues : correctValues[0];
       }
       
@@ -96,14 +96,14 @@ function convertGoogleFormItem(item) {
 
     // Extract correct answers if available
     if (questionData.grading?.correctAnswers?.answers) {
-      const correctValues = questionData.grading.correctAnswers.answers.map(a => a.value);
+      const correctValues = questionData.grading.correctAnswers.answers.map((a: any) => a.value);
       baseQuestion.correct_answer = correctValues.length === 1 ? correctValues[0] : correctValues;
     }
 
     // Handle different question types
     if (questionData.choiceQuestion) {
       const choiceType = questionData.choiceQuestion.type;
-      const options = questionData.choiceQuestion.options?.map(opt => opt.value) || [];
+      const options = questionData.choiceQuestion.options?.map((opt: any) => opt.value) || [];
       
       if (choiceType === 'RADIO') {
         return {
@@ -196,7 +196,7 @@ function convertGoogleFormItem(item) {
   return null;
 }
 
-export async function POST(request) {
+export async function POST(request: Request) {
   try {
     const { userId } = await auth();
     
@@ -245,7 +245,7 @@ export async function POST(request) {
           console.log('Could not get token from Clerk:', tokenData.message);
         }
       } catch (error) {
-        console.log('Error getting token from Clerk:', error.message);
+        console.log('Error getting token from Clerk:', error instanceof Error ? error.message : String(error));
       }
     }
 

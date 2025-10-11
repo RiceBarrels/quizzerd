@@ -3,7 +3,7 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { createClerkClient } from '@clerk/backend';
 
 // Endpoint to refresh Google OAuth token from Clerk
-export async function POST(request) {
+export async function POST(request: Request) {
   try {
     const { userId } = await auth();
     
@@ -66,7 +66,7 @@ export async function POST(request) {
       );
       console.log('Token refresh successful with "google" provider');
     } catch (error) {
-      console.log('Failed with "google", trying "oauth_google"...', error.message);
+      console.log('Failed with "google", trying "oauth_google"...', error instanceof Error ? error.message : String(error));
       // Fallback to oauth_google if google doesn't work
       try {
         tokens = await clerk.users.getUserOauthAccessToken(
@@ -75,19 +75,19 @@ export async function POST(request) {
         );
         console.log('Token refresh successful with "oauth_google" provider');
       } catch (secondError) {
-        console.error('Both token refresh methods failed:', secondError.message);
+        console.error('Both token refresh methods failed:', secondError instanceof Error ? secondError.message : String(secondError));
         return NextResponse.json({
           success: false,
           message: 'Failed to refresh OAuth token',
-          error: secondError.message
+          error: secondError instanceof Error ? secondError.message : String(secondError)
         }, { status: 500 });
       }
     }
 
     // Handle the response structure from Clerk Backend SDK
-    const tokenList = tokens?.data || tokens;
+    const tokenList: any = tokens?.data || tokens;
     
-    if (tokenList && tokenList.length > 0 && tokenList[0].token) {
+    if (tokenList && Array.isArray(tokenList) && tokenList.length > 0 && tokenList[0].token) {
       const tokenData = tokenList[0];
       const accessToken = tokenData.token;
       const expiresAt = tokenData.expiresAt;
@@ -124,14 +124,14 @@ export async function POST(request) {
   } catch (error) {
     console.error('Error refreshing token:', error);
     return NextResponse.json(
-      { error: 'Internal server error', message: error.message },
+      { error: 'Internal server error', message: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }
 }
 
 // GET endpoint to check token expiration status
-export async function GET(request) {
+export async function GET(request: Request) {
   try {
     const { userId } = await auth();
     
@@ -177,7 +177,7 @@ export async function GET(request) {
   } catch (error) {
     console.error('Error checking token expiration:', error);
     return NextResponse.json(
-      { error: 'Internal server error', message: error.message },
+      { error: 'Internal server error', message: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

@@ -4,7 +4,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import Toolbar from "@/components/ui/toolbar";
 
-export default function navLayout({children}){
+export default function navLayout({children}: {children: React.ReactNode}){
     return (
         <div className="w-screen h-screen notranslate overflow-hidden bg-sidebar">
             <SidebarProvider>

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createSupabaseClient } from '@/lib/supabase';
 import { auth } from '@clerk/nextjs/server';
 
-export async function GET(request) {
+export async function GET(request: Request) {
   try {
     const { userId } = await auth();
     
@@ -78,9 +78,9 @@ export async function GET(request) {
       }
 
       // Create a map of user data for easy lookup
-      const userMap = {};
+      const userMap: any = {};
       if (users) {
-        users.forEach(user => {
+        users.forEach((user: any) => {
           userMap[user.user_id] = user;
         });
       }
@@ -90,9 +90,9 @@ export async function GET(request) {
         ...data,
         role: data.admin_ids?.includes(userId) ? 'admin' : 
               data.teacher_ids?.includes(userId) ? 'teacher' : 'student',
-        admins: data.admin_ids?.map(id => userMap[id] || { user_id: id }) || [],
-        teachers: data.teacher_ids?.map(id => userMap[id] || { user_id: id }) || [],
-        students: data.student_ids?.map(id => userMap[id] || { user_id: id }) || []
+        admins: data.admin_ids?.map((id: any) => userMap[id] || { user_id: id }) || [],
+        teachers: data.teacher_ids?.map((id: any) => userMap[id] || { user_id: id }) || [],
+        students: data.student_ids?.map((id: any) => userMap[id] || { user_id: id }) || []
       };
 
       return NextResponse.json({ 
@@ -150,9 +150,9 @@ export async function GET(request) {
       pagination: {
         page,
         limit,
-        total: count,
-        totalPages: Math.ceil(count / limit),
-        hasMore: offset + limit < count
+        total: count || 0,
+        totalPages: Math.ceil((count || 0) / limit),
+        hasMore: offset + limit < (count || 0)
       }
     });
 

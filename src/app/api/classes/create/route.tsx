@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createSupabaseClient } from '@/lib/supabase';
 import { auth } from '@clerk/nextjs/server';
 
-export async function POST(request) {
+export async function POST(request: Request) {
   try {
     const { userId } = await auth();
     
@@ -30,7 +30,7 @@ export async function POST(request) {
     }
 
     // Convert time strings to timetz format (HH:MM:SS+TZ)
-    const formatTimeWithTimezone = (timeString) => {
+    const formatTimeWithTimezone = (timeString: string) => {
       if (!timeString) return null;
       // Add seconds and timezone offset
       // Using UTC timezone (+00) as default

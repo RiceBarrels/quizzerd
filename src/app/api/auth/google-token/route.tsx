@@ -65,7 +65,7 @@ export async function GET() {
         );
         console.log('Token retrieval successful with "google" provider');
       } catch (error) {
-        console.log('Failed with "google", trying "oauth_google"...', error.message);
+        console.log('Failed with "google", trying "oauth_google"...', error instanceof Error ? error.message : String(error));
         // Fallback to oauth_google if google doesn't work
         try {
           tokens = await clerk.users.getUserOauthAccessToken(
@@ -74,7 +74,7 @@ export async function GET() {
           );
           console.log('Token retrieval successful with "oauth_google" provider');
         } catch (secondError) {
-          console.error('Both token retrieval methods failed:', secondError.message);
+          console.error('Both token retrieval methods failed:', secondError instanceof Error ? secondError.message : String(secondError));
           tokens = null;
         }
       }
@@ -83,9 +83,9 @@ export async function GET() {
 
       // Handle the response structure from Clerk Backend SDK
       // It returns { data: [...], totalCount: n }
-      const tokenList = tokens?.data || tokens;
+      const tokenList: any = tokens?.data || tokens;
       
-      if (tokenList && tokenList.length > 0 && tokenList[0].token) {
+      if (tokenList && Array.isArray(tokenList) && tokenList.length > 0 && tokenList[0].token) {
         const tokenData = tokenList[0];
         const accessToken = tokenData.token;
         const expiresAt = tokenData.expiresAt;
@@ -123,14 +123,14 @@ export async function GET() {
         accessToken: null,
         googleConnected: true,
         email: googleAccount.emailAddress,
-        error: tokenError.message
+        error: tokenError instanceof Error ? tokenError.message : String(tokenError)
       });
     }
 
   } catch (error) {
     console.error('Error in auth check:', error);
     return NextResponse.json(
-      { error: 'Internal server error', message: error.message },
+      { error: 'Internal server error', message: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

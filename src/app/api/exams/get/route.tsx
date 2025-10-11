@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createSupabaseClient } from '@/lib/supabase';
 import { auth } from '@clerk/nextjs/server';
 
-export async function GET(request) {
+export async function GET(request: Request) {
   try {
     const { userId } = await auth();
     
@@ -173,7 +173,7 @@ export async function GET(request) {
     const uniqueClassIds = [...new Set(allClassIds)];
     
     // Fetch all class names at once
-    let classMap = {};
+    let classMap: any = {};
     if (uniqueClassIds.length > 0) {
       const { data: classes } = await supabase
         .from('class')
@@ -181,10 +181,10 @@ export async function GET(request) {
         .in('class_id', uniqueClassIds);
       
       if (classes) {
-        classMap = classes.reduce((acc, cls) => {
+        classMap = classes.reduce((acc: any, cls: any) => {
           acc[cls.class_id] = cls.class_name;
           return acc;
-        }, {});
+        }, {} as any);
       }
     }
     
@@ -212,9 +212,9 @@ export async function GET(request) {
       pagination: {
         page,
         limit,
-        total: count,
-        totalPages: Math.ceil(count / limit),
-        hasMore: offset + limit < count
+        total: count || 0,
+        totalPages: Math.ceil((count || 0) / limit),
+        hasMore: offset + limit < (count || 0)
       }
     });
 

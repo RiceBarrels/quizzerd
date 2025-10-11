@@ -37,16 +37,16 @@ export default function CheatingDetection(
         examLanguage = "en-US",
         onViolation,
     }:{
-        isTesting: boolean, 
-        consoleDetection: boolean, 
-        translationDetection: boolean, 
-        allowWordByWordTranslation: boolean,
-        allowWordByWordDefinition: boolean,
-        visibilityChangeDetection: boolean, 
-        locationDetection: boolean,
-        examLanguage: string,
+        isTesting?: boolean, 
+        consoleDetection?: boolean, 
+        translationDetection?: boolean, 
+        allowWordByWordTranslation?: boolean,
+        allowWordByWordDefinition?: boolean,
+        visibilityChangeDetection?: boolean, 
+        locationDetection?: boolean,
+        examLanguage?: string,
         onViolation?: (violation: Violation) => void;
-    }
+    } = {}
 ){
     // States
     const [violations, setViolations] = useState<Violation[]>([]);

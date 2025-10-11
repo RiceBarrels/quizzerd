@@ -13,11 +13,11 @@ import { Input } from "@/components/ui/input";
 import { Link, useTransitionRouter } from "next-view-transitions";
 
 export default function Home() {
-    const [classes, setClasses] = useState([]);
+    const [classes, setClasses] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(1);
-    const [pagination, setPagination] = useState(null);
+    const [pagination, setPagination] = useState<any>(null);
     const router = useTransitionRouter();
     const limit = 6;
 
@@ -48,12 +48,12 @@ export default function Home() {
         }
     };
 
-    const handleSearch = (e) => {
+    const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
         setSearch(e.target.value);
         setPage(1);
     };
 
-    const formatTime = (timeString) => {
+    const formatTime = (timeString: string | null | undefined) => {
         if (!timeString) return null;
         const time = timeString.split(':');
         const hours = parseInt(time[0]);
@@ -154,7 +154,6 @@ export default function Home() {
                                 {classes.map((classItem) => (
                                     <Link key={classItem.class_id}  href={`class/${classItem.class_code}`}>
                                         <Card 
-                                            variant="outline" 
                                             className={`h-52 flex flex-col gap-2 p-0 overflow-clip bg-sidebar cursor-pointer duration-150`}
                                         >
                                             <CardHeader 

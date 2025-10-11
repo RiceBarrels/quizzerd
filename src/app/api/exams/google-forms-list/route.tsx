@@ -5,7 +5,7 @@ import { googleApiFetch } from '@/lib/google-auth';
 // Google Forms MIME type
 const GOOGLE_FORMS_MIMETYPE = 'application/vnd.google-apps.form';
 
-export async function GET(request) {
+export async function GET(request: Request) {
   try {
     const { userId } = await auth();
     
@@ -18,7 +18,7 @@ export async function GET(request) {
 
     const { searchParams } = new URL(request.url);
     let accessToken = searchParams.get('access_token');
-    let expiresAt = searchParams.get('expires_at') ? parseInt(searchParams.get('expires_at')) : null;
+    let expiresAt = searchParams.get('expires_at') ? parseInt(searchParams.get('expires_at')!) : null;
     const pageToken = searchParams.get('pageToken');
     const searchQuery = searchParams.get('q') || '';
 
@@ -38,7 +38,7 @@ export async function GET(request) {
           expiresAt = tokenData.expiresAt;
         }
       } catch (error) {
-        console.log('Could not get token from Clerk:', error.message);
+        console.log('Could not get token from Clerk:', error instanceof Error ? error.message : String(error));
       }
     }
 
@@ -90,7 +90,7 @@ export async function GET(request) {
       return NextResponse.json({
         success: false,
         error: 'Failed to fetch Google Forms',
-        message: error.message,
+        message: error instanceof Error ? error.message : String(error),
         forms: []
       });
     }
@@ -118,7 +118,7 @@ export async function GET(request) {
     const data = await response.json();
 
     // Format the response
-    const forms = data.files?.map(file => ({
+    const forms = data.files?.map((file: any) => ({
       id: file.id,
       name: file.name,
       createdTime: file.createdTime,
@@ -142,9 +142,9 @@ export async function GET(request) {
     };
 
     // Include new token info if it was refreshed
-    if (response.newAccessToken) {
-      result.newAccessToken = response.newAccessToken;
-      result.newExpiresAt = response.newExpiresAt;
+    if ((response as any).newAccessToken) {
+      (result as any).newAccessToken = (response as any).newAccessToken;
+      (result as any).newExpiresAt = (response as any).newExpiresAt;
     }
 
     return NextResponse.json(result);
@@ -154,7 +154,7 @@ export async function GET(request) {
     return NextResponse.json({
       success: false,
       error: 'Internal server error',
-      message: error.message,
+      message: error instanceof Error ? error.message : String(error),
       forms: []
     });
   }

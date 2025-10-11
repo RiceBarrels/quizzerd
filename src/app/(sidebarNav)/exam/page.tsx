@@ -33,26 +33,26 @@ import {
 import { useTransitionRouter } from "next-view-transitions";
 
 export default function ExamPage() {
-  const [exams, setExams] = useState([]);
+  const [exams, setExams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState(null);
+  const [pagination, setPagination] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("my-exams");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importFormUrl, setImportFormUrl] = useState("");
   const [isImporting, setIsImporting] = useState(false);
-  const [googleForms, setGoogleForms] = useState([]);
-  const [selectedFormId, setSelectedFormId] = useState(null);
+  const [googleForms, setGoogleForms] = useState<any[]>([]);
+  const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
   const [googleAccessToken, setGoogleAccessToken] = useState("");
   const [loadingForms, setLoadingForms] = useState(false);
   const [importMode, setImportMode] = useState('url'); // 'url' or 'browse'
-  const [classes, setClasses] = useState([]);
+  const [classes, setClasses] = useState<any[]>([]);
   const router = useTransitionRouter();
   const limit = 12;
 
-  const [newExam, setNewExam] = useState({
+  const [newExam, setNewExam] = useState<any>({
     exam_name: "",
     exam_description: "",
     class_ids: [],
@@ -144,9 +144,9 @@ export default function ExamPage() {
     }
   };
 
-  const handleSelectForm = async (formId) => {
+  const handleSelectForm = async (formId: string) => {
     setSelectedFormId(formId);
-    const form = googleForms.find(f => f.id === formId);
+    const form = googleForms.find((f: any) => f.id === formId);
     if (form) {
       setImportFormUrl(`https://docs.google.com/forms/d/${formId}/edit`);
     }
@@ -174,7 +174,7 @@ export default function ExamPage() {
 
     setIsImporting(true);
     try {
-      const payload = {
+      const payload: any = {
         class_ids: [],
         is_public: false
       };
@@ -261,13 +261,13 @@ export default function ExamPage() {
     }
   };
 
-  const handleSearch = (e) => {
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value);
     setPage(1);
   };
 
-  const getStatusBadge = (status) => {
-    const variants = {
+  const getStatusBadge = (status: string) => {
+    const variants: any = {
       draft: { variant: "secondary", icon: Edit },
       published: { variant: "success", icon: CheckCircle },
       archived: { variant: "outline", icon: XCircle }
@@ -283,7 +283,7 @@ export default function ExamPage() {
     );
   };
 
-  const getVisibilityBadge = (isPublic) => {
+  const getVisibilityBadge = (isPublic: boolean) => {
     return isPublic ? (
       <Badge variant="outline" className="gap-1">
         <Globe className="h-3 w-3" />
@@ -563,7 +563,7 @@ export default function ExamPage() {
                                 if (checked) {
                                   setNewExam({...newExam, class_ids: [...newExam.class_ids, cls.class_id]});
                                 } else {
-                                  setNewExam({...newExam, class_ids: newExam.class_ids.filter(id => id !== cls.class_id)});
+                                  setNewExam({...newExam, class_ids: newExam.class_ids.filter((id: any) => id !== cls.class_id)});
                                 }
                               }}
                             />

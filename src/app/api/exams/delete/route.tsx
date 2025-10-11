@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createSupabaseClient } from '@/lib/supabase';
 import { auth } from '@clerk/nextjs/server';
 
-export async function DELETE(request) {
+export async function DELETE(request: Request) {
   try {
     const { userId } = await auth();
     

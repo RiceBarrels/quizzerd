@@ -2,11 +2,11 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE!
 );
 
-export async function POST(request) {
+export async function POST(request: Request) {
   try {
     const { classCode, userId, role = 'student' } = await request.json();
 
@@ -44,7 +44,7 @@ export async function POST(request) {
     }
 
     // Add user to the appropriate array based on role
-    let updateData = {};
+    let updateData: any = {};
     if (role === 'student') {
       updateData.student_ids = [...classData.student_ids, userId];
     } else if (role === 'teacher') {

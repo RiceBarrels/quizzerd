@@ -26,9 +26,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 export default function ClassPage() {
   const params = useParams()
   const router = useRouter()
-  const [classData, setClassData] = useState(null)
+  const [classData, setClassData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
   const [isCopied, setIsCopied] = useState(false)
 
   useEffect(() => {
@@ -93,7 +93,7 @@ export default function ClassPage() {
     return null
   }
 
-  const formatTime = (timeString) => {
+  const formatTime = (timeString: string | null | undefined) => {
     if (!timeString) return 'Not set'
     const time = timeString.split(':')
     const hours = parseInt(time[0])
@@ -103,7 +103,7 @@ export default function ClassPage() {
     return `${displayHours}:${minutes} ${ampm}`
   }
 
-  const getRoleBadgeVariant = (role) => {
+  const getRoleBadgeVariant = (role: string) => {
     switch(role) {
       case 'admin': return 'destructive'
       case 'teacher': return 'secondary'
@@ -111,7 +111,7 @@ export default function ClassPage() {
     }
   }
 
-  const getRoleIcon = (role) => {
+  const getRoleIcon = (role: string) => {
     switch(role) {
       case 'admin': return <Shield className="h-4 w-4" />
       case 'teacher': return <UserCheck className="h-4 w-4" />
@@ -298,7 +298,7 @@ export default function ClassPage() {
             <CardContent>
               {classData.assignments && classData.assignments.length > 0 ? (
                 <div className="space-y-4">
-                  {classData.assignments.map((assignment, index) => (
+                  {classData.assignments.map((assignment: any, index: number) => (
                     <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
                       <div>
                         <p className="font-medium">{assignment.title || `Assignment ${index + 1}`}</p>
@@ -329,7 +329,7 @@ export default function ClassPage() {
                     Administrators ({classData.admins.length})
                   </h3>
                   <div className="space-y-3">
-                    {classData.admins.map((admin) => (
+                    {classData.admins.map((admin: any) => (
                       <div key={admin.user_id} className="flex items-center gap-3 p-3 border rounded-lg">
                         {admin.img_url ? (
                           <img 
@@ -345,7 +345,7 @@ export default function ClassPage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <p className="font-medium text-sm">{admin.full_name || admin.email}</p>
-                            <Badge variant="destructive" size="sm">Admin</Badge>
+                            <Badge variant="destructive">Admin</Badge>
                           </div>
                           <p className="text-xs text-muted-foreground">{admin.email}</p>
                         </div>
@@ -362,7 +362,7 @@ export default function ClassPage() {
                     Teachers ({classData.teachers.length})
                   </h3>
                   <div className="space-y-3">
-                    {classData.teachers.map((teacher) => (
+                    {classData.teachers.map((teacher: any) => (
                       <div key={teacher.user_id} className="flex items-center gap-3 p-3 border rounded-lg">
                         {teacher.img_url ? (
                           <img 
@@ -378,7 +378,7 @@ export default function ClassPage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <p className="font-medium text-sm">{teacher.full_name || teacher.email}</p>
-                            <Badge variant="secondary" size="sm">Teacher</Badge>
+                            <Badge variant="secondary">Teacher</Badge>
                           </div>
                           <p className="text-xs text-muted-foreground">{teacher.email}</p>
                         </div>
@@ -395,7 +395,7 @@ export default function ClassPage() {
                     Students ({classData.students.length})
                   </h3>
                   <div className="space-y-3">
-                    {classData.students.map((student) => (
+                    {classData.students.map((student: any) => (
                       <div key={student.user_id} className="flex items-center gap-3 p-3 border rounded-lg">
                         {student.img_url ? (
                           <img 
@@ -411,7 +411,7 @@ export default function ClassPage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <p className="font-medium text-sm">{student.full_name || student.email}</p>
-                            <Badge variant="default" size="sm">Student</Badge>
+                            <Badge variant="default">Student</Badge>
                           </div>
                           <p className="text-xs text-muted-foreground">{student.email}</p>
                         </div>
