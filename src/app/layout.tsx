@@ -11,6 +11,7 @@ import { ViewTransitions } from 'next-view-transitions';
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider"
 import { shadcn } from '@clerk/themes';
+import { ReactNode } from 'react';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,7 +28,23 @@ export const metadata = {
   description: "The next education platform.",
 };
 
-export default function RootLayout({ children }) {
+export interface ComponentProps {
+  children?: ReactNode;
+  className?: string;
+  id?: string;
+  style?: React.CSSProperties;
+  onClick?: () => void;
+  disabled?: boolean;
+  title?: string;
+  ariaLabel?: string;
+}
+
+
+export interface PageParams {
+  examId: string;
+}
+
+export default function RootLayout({ children }:ComponentProps) {
   return (
     <ClerkProvider
         appearance={{

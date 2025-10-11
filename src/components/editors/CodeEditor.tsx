@@ -1,5 +1,5 @@
 import dynamic from 'next/dynamic';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { formatHex, parse } from 'culori';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -85,7 +85,7 @@ const getLanguageFromFileName = (fileName: string): string => {
   return languageMap[ext || ''] || 'plaintext';
 };
 
-export default function CodeEditor({
+const CodeEditor = memo(function CodeEditor({
   files = [{ name: 'index.js', content: '// Write your code here' }],
   onChange,
   height = '400px',
@@ -100,6 +100,8 @@ export default function CodeEditor({
   const [isThemeRegistered, setIsThemeRegistered] = useState<boolean>(false);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof Monaco | null>(null);
+  const modelsRef = useRef<Map<string, Monaco.editor.ITextModel>>(new Map());
+  const isInitializedRef = useRef<boolean>(false);
 
   // Sync external files prop with internal state
   useEffect(() => {
@@ -648,33 +650,111 @@ export default function CodeEditor({
   };
 
   const handleEditorDidMount = (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => {
+    // Check if editor is already disposed
+    if (editor.getModel === undefined) {
+      console.warn('Editor is already disposed, skipping initialization');
+      return;
+    }
+
+    // Prevent double initialization
+    if (isInitializedRef.current) {
+      console.warn('Editor already initialized, skipping...');
+      return;
+    }
+
+    isInitializedRef.current = true;
     editorRef.current = editor;
     monacoRef.current = monaco;
 
-    // Register language support
-    registerLanguageSupport(monaco);
+    // Register language support only once globally
+    if (!(window as any).__monacoLanguageRegistered) {
+      registerLanguageSupport(monaco);
+      (window as any).__monacoLanguageRegistered = true;
+    }
 
     // Setup linting
     setupLinting(editor, monaco);
 
-    // Define custom themes
-    defineCustomThemes(monaco);
+    // Define custom themes only once globally
+    if (!(window as any).__monacoThemesRegistered) {
+      defineCustomThemes(monaco);
+      (window as any).__monacoThemesRegistered = true;
+    }
 
     // Set initial theme
     const isDark = document.documentElement.classList.contains('dark');
     monaco.editor.setTheme(isDark ? 'custom-dark' : 'custom-light');
-  };
 
-  const handleEditorChange = (value: string | undefined) => {
-    if (value === undefined) return;
-    const updatedFiles = editorFiles.map(file =>
-      file.name === activeFile ? { ...file, content: value } : file
-    );
-    setEditorFiles(updatedFiles);
-    if (onChange) {
-      onChange(updatedFiles);
+    // Create models for all files
+    editorFiles.forEach(file => {
+      if (!modelsRef.current.has(file.name)) {
+        const language = getLanguageFromFileName(file.name);
+        const model = monaco.editor.createModel(file.content, language);
+        modelsRef.current.set(file.name, model);
+
+        // Listen to model changes
+        model.onDidChangeContent(() => {
+          const updatedContent = model.getValue();
+          const fileName = Array.from(modelsRef.current.entries()).find(([_, m]) => m === model)?.[0];
+
+          if (fileName) {
+            setEditorFiles(prev => {
+              const updated = prev.map(f =>
+                f.name === fileName ? { ...f, content: updatedContent } : f
+              );
+
+              // Call onChange with updated files
+              if (onChange) {
+                onChange(updated);
+              }
+
+              return updated;
+            });
+          }
+        });
+      }
+    });
+
+    // Set the initial model (wrapped in try-catch for React Strict Mode)
+    try {
+      const initialModel = modelsRef.current.get(activeFile);
+      if (initialModel && !initialModel.isDisposed()) {
+        editor.setModel(initialModel);
+      }
+    } catch (error) {
+      // Editor might be disposed during React Strict Mode double-mounting
+      console.warn('Could not set initial model:', error);
     }
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // Only dispose models if we're truly unmounting (not during drag)
+      // Check if the component is being unmounted due to drag operation
+      const isDragging = document.querySelector('[data-dragging="true"]');
+
+      if (!isDragging) {
+        // Dispose all models to prevent memory leaks
+        modelsRef.current.forEach(model => {
+          try {
+            if (!model.isDisposed()) {
+              model.dispose();
+            }
+          } catch (e) {
+            // Model already disposed
+          }
+        });
+        modelsRef.current.clear();
+      }
+
+      // Clear the refs
+      editorRef.current = null;
+      monacoRef.current = null;
+      isInitializedRef.current = false;
+    };
+  }, []);
+
 
   const addFile = () => {
     if (!newFileName.trim()) return;
@@ -718,6 +798,35 @@ export default function CodeEditor({
     setNewFileName('');
     setShowAddFile(false);
 
+    // Create a model for the new file
+    if (monacoRef.current && !modelsRef.current.has(newFileName)) {
+      const language = getLanguageFromFileName(newFileName);
+      const model = monacoRef.current.editor.createModel(newFile.content, language);
+      modelsRef.current.set(newFileName, model);
+
+      // Listen to model changes
+      model.onDidChangeContent(() => {
+        const updatedContent = model.getValue();
+        setEditorFiles(prev => {
+          const updated = prev.map(f =>
+            f.name === newFileName ? { ...f, content: updatedContent } : f
+          );
+
+          // Call onChange with updated files
+          if (onChange) {
+            onChange(updated);
+          }
+
+          return updated;
+        });
+      });
+
+      // Switch to the new model
+      if (editorRef.current) {
+        editorRef.current.setModel(model);
+      }
+    }
+
     if (onChange) {
       onChange(updatedFiles);
     }
@@ -732,8 +841,22 @@ export default function CodeEditor({
     const updatedFiles = editorFiles.filter(f => f.name !== fileName);
     setEditorFiles(updatedFiles);
 
+    // Dispose the model for the removed file
+    const model = modelsRef.current.get(fileName);
+    if (model) {
+      model.dispose();
+      modelsRef.current.delete(fileName);
+    }
+
     if (activeFile === fileName) {
-      setActiveFile(updatedFiles[0].name);
+      const newActiveFile = updatedFiles[0].name;
+      setActiveFile(newActiveFile);
+
+      // Switch to the new active file's model
+      const newModel = modelsRef.current.get(newActiveFile);
+      if (newModel && editorRef.current) {
+        editorRef.current.setModel(newModel);
+      }
     }
 
     if (onChange) {
@@ -747,6 +870,61 @@ export default function CodeEditor({
       monacoRef.current.editor.setTheme(theme);
     }
   }, [theme, isThemeRegistered]);
+
+  // Handle file switching by changing models
+  useEffect(() => {
+    if (!editorRef.current || !monacoRef.current) return;
+
+    // Check if editor is disposed before trying to use it
+    try {
+      // Check if editor is disposed
+      if (editorRef.current.getModel === undefined) {
+        console.warn('Editor is disposed, skipping model switch');
+        return;
+      }
+
+      const currentModel = editorRef.current.getModel();
+
+      let model = modelsRef.current.get(activeFile);
+
+      // Create model if it doesn't exist
+      if (!model) {
+        const currentFile = editorFiles.find(f => f.name === activeFile);
+        if (currentFile) {
+          const language = getLanguageFromFileName(activeFile);
+          const newModel = monacoRef.current.editor.createModel(currentFile.content, language);
+          modelsRef.current.set(activeFile, newModel);
+
+          // Listen to model changes
+          newModel.onDidChangeContent(() => {
+            const updatedContent = newModel.getValue();
+            setEditorFiles(prev => {
+              const updated = prev.map(f =>
+                f.name === activeFile ? { ...f, content: updatedContent } : f
+              );
+
+              // Call onChange with updated files
+              if (onChange) {
+                onChange(updated);
+              }
+
+              return updated;
+            });
+          });
+
+          model = newModel;
+        }
+      }
+
+      // Switch to the model only if it's different from the current one and not disposed
+      if (model && currentModel !== model && !model.isDisposed()) {
+        editorRef.current.setModel(model);
+      }
+    } catch (error) {
+      // Editor was disposed, ignore the error
+      console.warn('Editor was disposed during model switch:', error);
+    }
+  }, [activeFile, editorFiles]);
 
   const currentFile = editorFiles.find(f => f.name === activeFile);
   const currentLanguage = getLanguageFromFileName(activeFile);
@@ -832,9 +1010,6 @@ export default function CodeEditor({
         <MonacoEditor
           height={height}
           width={width}
-          language={currentLanguage}
-          value={currentFile?.content || ''}
-          onChange={handleEditorChange}
           onMount={handleEditorDidMount}
           theme={theme}
           options={{
@@ -876,4 +1051,6 @@ export default function CodeEditor({
       </div>
     </div>
   );
-}
+});
+
+export default CodeEditor;

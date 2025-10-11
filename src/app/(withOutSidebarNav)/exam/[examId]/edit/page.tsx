@@ -12,16 +12,8 @@ import ExamDetailsTab from '@/components/exam/ExamDetailsTab';
 import QuestionsTab from '@/components/exam/QuestionsTab';
 import ExamSettingsTab from '@/components/exam/ExamSettingsTab';
 import { ExamItem } from '@/types/exam';
-
-interface PageParams {
-  examId: string;
-}
-
-interface ScrollPosition {
-  details: number;
-  questions: number;
-  settings: number;
-}
+import { PageParams } from '@/app/layout';
+import { ScrollPosition } from '../layout';
 
 export default function EditExamPage({ params }: { params: Promise<PageParams> }) {
   const router = useRouter();

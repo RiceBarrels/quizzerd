@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback, RefObject, Dispatch, SetStateAction } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
@@ -157,6 +158,12 @@ export default function FloatingFormatDock() {
   const [showColorDialog, setShowColorDialog] = useState<boolean>(false);
   const [showBgColorDialog, setShowBgColorDialog] = useState<boolean>(false);
   const dockRef = useRef<HTMLDivElement | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   useEffect(() => {
     setIsVisible(!!activeEditor);
@@ -356,7 +363,7 @@ export default function FloatingFormatDock() {
     );
   };
 
-  return (
+  const dockContent = (
     <AnimatePresence>
       {isVisible && (
         <motion.div
@@ -365,7 +372,7 @@ export default function FloatingFormatDock() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 20, opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="floating-format-dock fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 bg-background/95 backdrop-blur-sm border rounded-lg px-2 py-1 shadow-lg"
+          className="floating-format-dock fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-1 bg-background/95 backdrop-blur-sm border rounded-lg px-2 py-1 shadow-lg"
           onMouseDown={(e) => {
             e.preventDefault();
             // Cancel any pending hide timeout
@@ -760,4 +767,8 @@ export default function FloatingFormatDock() {
       )}
     </AnimatePresence>
   );
+
+  // Use portal to render at document body level to avoid clipping by overflow containers
+  if (!mounted) return null;
+  return createPortal(dockContent, document.body);
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, memo } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -13,10 +13,13 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import TextEditor from '@/components/editors/text-editor';
 import VariableContent from '@/components/ui/variable-content';
-import CodeEditor from '@/components/editors/CodeEditor';
-import { Trash2, GripVertical, Plus, ListTodoIcon, ListChecksIcon, TextAlignStartIcon, NotepadTextIcon, CircleSlashIcon, Eye, EyeOff, ChevronDown, SlidersHorizontal, Calendar, Clock, Upload, Star, Heading, Minus, ChevronsUpDown, Check, Heart, ThumbsUp, Code } from 'lucide-react';
+import StableCodeEditor from './StableCodeEditor';
+import { Trash2, Plus, ListTodoIcon, ListChecksIcon, TextAlignStartIcon, NotepadTextIcon, CircleSlashIcon, Eye, EyeOff, ChevronDown, SlidersHorizontal, Calendar, Clock, Upload, Star, Heading, Minus, ChevronsUpDown, Check, Heart, ThumbsUp, Code, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ExamItem, QuestionType, QuestionTypeOption } from '@/types/exam';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { UniqueIdentifier } from '@dnd-kit/core';
 
 const questionTypes: QuestionTypeOption[] = [
   { value: 'multiple_choice', label: 'Multiple Choice', icon: ListTodoIcon },
@@ -43,18 +46,16 @@ interface QuestionCardProps {
   onUpdateOption: (questionIndex: number, optionIndex: number, value: string) => void;
   onRemoveOption: (questionIndex: number, optionIndex: number) => void;
   onRemoveQuestion: (index: number) => void;
-  dragHandleProps?: Record<string, any>;
 }
 
-export default function QuestionCard({
+const QuestionCard = memo(function QuestionCard({
   item,
   index,
   onUpdateQuestion,
   onAddOption,
   onUpdateOption,
   onRemoveOption,
-  onRemoveQuestion,
-  dragHandleProps
+  onRemoveQuestion
 }: QuestionCardProps) {
   const [open, setOpen] = useState(false);
 
@@ -62,13 +63,11 @@ export default function QuestionCard({
   const SelectedIcon = selectedType?.icon;
 
   return (
+
     <Card className="relative">
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-2 flex-1">
-            <div {...dragHandleProps} className="cursor-grab active:cursor-grabbing p-2 -m-2 hover:bg-accent rounded">
-              <GripVertical className="w-5 h-5 text-muted-foreground" />
-            </div>
             <Badge variant="outline">
               {item.question_type === 'section_header' ? 'Section Header' :
                item.question_type === 'page_break' ? 'Page Break' :
@@ -166,7 +165,7 @@ export default function QuestionCard({
         {(item.question_type === 'multiple_choice' || item.question_type === 'multiple_select') && (
           <div className="space-y-2">
             <Label>Options</Label>
-            {item.options.map((option, optionIndex) => (
+            {item.options?.map((option, optionIndex) => (
               <div key={optionIndex} className="flex gap-2 items-center">
                 {item.question_type === 'multiple_choice' ? (
                   <RadioGroup value={item.correct_answer?.toString()} onValueChange={(value) => onUpdateQuestion(index, 'correct_answer', parseInt(value))}>
@@ -176,7 +175,7 @@ export default function QuestionCard({
                   <Checkbox
                     checked={Array.isArray(item.correct_answer) && item.correct_answer.includes(optionIndex)}
                     onCheckedChange={(checked) => {
-                      const currentAnswers = Array.isArray(item.correct_answer) ? item.correct_answer : [];
+                      const currentAnswers = Array.isArray(item.correct_answer) ? item.correct_answer as number[] : [];
                       if (checked) {
                         onUpdateQuestion(index, 'correct_answer', [...currentAnswers, optionIndex]);
                       } else {
@@ -194,7 +193,7 @@ export default function QuestionCard({
                     minHeight={50}
                   />
                 </div>
-                {item.options.length > 2 && (
+                {(item.options?.length ?? 0) > 2 && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -241,7 +240,7 @@ export default function QuestionCard({
             {(Array.isArray(item.correct_answer) ? item.correct_answer : [item.correct_answer || '']).map((answer, answerIndex) => (
               <div key={answerIndex} className="flex gap-2 items-center">
                 <Input
-                  value={answer}
+                  value={String(answer)}
                   onChange={(e) => {
                     const answers = Array.isArray(item.correct_answer) ? [...item.correct_answer] : [item.correct_answer || ''];
                     answers[answerIndex] = e.target.value;
@@ -282,7 +281,7 @@ export default function QuestionCard({
         {item.question_type === 'dropdown' && (
           <div className="space-y-2">
             <Label>Dropdown Options</Label>
-            {item.options.map((option, optionIndex) => (
+            {item.options?.map((option, optionIndex) => (
               <div key={optionIndex} className="flex gap-2 items-center">
                 <RadioGroup value={item.correct_answer?.toString()} onValueChange={(value) => onUpdateQuestion(index, 'correct_answer', parseInt(value))}>
                   <RadioGroupItem value={optionIndex.toString()} />
@@ -292,7 +291,7 @@ export default function QuestionCard({
                   onChange={(e) => onUpdateOption(index, optionIndex, e.target.value)}
                   placeholder={`Option ${optionIndex + 1}`}
                 />
-                {item.options.length > 2 && (
+                {(item.options?.length ?? 0) > 2 && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -405,7 +404,7 @@ export default function QuestionCard({
                 <Input
                   type="number"
                   value={Math.round((item.max_file_size || 10485760) / 1048576)}
-                  onChange={(e) => onUpdateQuestion(index, 'max_file_size', e.target.value * 1048576)}
+                  onChange={(e) => onUpdateQuestion(index, 'max_file_size', parseInt(e.target.value) * 1048576)}
                   min="1"
                 />
               </div>
@@ -480,7 +479,8 @@ export default function QuestionCard({
         {item.question_type === 'coding' && (
           <div className="space-y-2">
             <Label>Starter Code</Label>
-            <CodeEditor
+            <StableCodeEditor
+              questionId={item.question_id}
               files={item.starter_files || [{ name: 'index.js', content: '// Write your code here' }]}
               onChange={(files) => onUpdateQuestion(index, 'starter_files', files)}
               height="400px"
@@ -522,7 +522,7 @@ export default function QuestionCard({
             <Label>Explanation (Optional)</Label>
             <TextEditor
               id={`question-${item.question_id}-explanation`}
-              value={item.explanation}
+              value={item.explanation || ''}
               onChange={(value) => onUpdateQuestion(index, 'explanation', value)}
               placeholder="Provide an explanation for the answer"
               minHeight={80}
@@ -531,5 +531,53 @@ export default function QuestionCard({
         )}
       </CardContent>
     </Card>
+  );
+});
+
+// Sortable wrapper component
+interface SortableQuestionCardProps extends QuestionCardProps {
+  id: UniqueIdentifier;
+}
+
+export default function SortableQuestionCard(props: SortableQuestionCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: props.id,
+    // Disable transform animation for better performance with complex components
+    animateLayoutChanges: () => false,
+  });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    pointerEvents: isDragging ? 'none' : 'auto', // Disable pointer events during drag
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex gap-2 items-start"
+      data-dragging={isDragging ? "true" : "false"}
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        className="mt-3 cursor-grab active:cursor-grabbing hover:bg-accent p-1 rounded shrink-0"
+        style={{ pointerEvents: 'auto' }} // Keep pointer events on drag handle
+      >
+        <GripVertical className="h-5 w-5 text-muted-foreground" />
+      </div>
+      <div className="flex-1">
+        <QuestionCard {...props} />
+      </div>
+    </div>
   );
 }
