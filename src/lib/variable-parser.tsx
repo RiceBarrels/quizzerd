@@ -1,4 +1,4 @@
-export function parseAndRenderVariables(htmlContent, variables = {}) {
+export function parseAndRenderVariables(htmlContent: string, variables: Record<string, any> = {}): string {
   if (!htmlContent || typeof htmlContent !== 'string') {
     return htmlContent;
   }
@@ -19,13 +19,13 @@ export function parseAndRenderVariables(htmlContent, variables = {}) {
   return renderedContent;
 }
 
-export function extractVariablesFromHTML(htmlContent) {
+export function extractVariablesFromHTML(htmlContent: string): string[] {
   if (!htmlContent || typeof htmlContent !== 'string') {
     return [];
   }
 
   const variablePattern = /\{\{(\w+)\}\}/g;
-  const variables = new Set();
+  const variables = new Set<string>();
   let match;
   
   while ((match = variablePattern.exec(htmlContent)) !== null) {
@@ -35,7 +35,7 @@ export function extractVariablesFromHTML(htmlContent) {
   return Array.from(variables);
 }
 
-export function generateSampleVariables(variableNames) {
+export function generateSampleVariables(variableNames: string[]): Record<string, any> {
   const sampleValues = {
     // Common math/physics variables
     x: Math.floor(Math.random() * 100),
@@ -59,10 +59,10 @@ export function generateSampleVariables(variableNames) {
     year: 2020 + Math.floor(Math.random() * 5),
   };
   
-  const result = {};
+  const result: Record<string, any> = {};
   variableNames.forEach(varName => {
-    if (sampleValues[varName] !== undefined) {
-      result[varName] = sampleValues[varName];
+    if ((sampleValues as any)[varName] !== undefined) {
+      result[varName] = (sampleValues as any)[varName];
     } else {
       // Generate a random value for unknown variables
       result[varName] = Math.floor(Math.random() * 100);

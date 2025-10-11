@@ -117,7 +117,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Error logging violation:', error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

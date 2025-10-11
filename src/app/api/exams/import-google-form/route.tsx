@@ -318,15 +318,16 @@ export async function POST(request: Request) {
           };
         }
       } catch (error) {
-        console.error('Error fetching form from Google Forms API:', error.message);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('Error fetching form from Google Forms API:', errorMessage);
         
         // If it's an authentication error, return a more specific message
-        if (error.message.includes('401') || error.message.includes('unauthorized')) {
+        if (errorMessage.includes('401') || errorMessage.includes('unauthorized')) {
           return NextResponse.json(
             { 
               error: 'Google Forms API authorization failed',
               message: 'Unable to access the Google Form. Please ensure you have the necessary permissions and that Forms API scope is enabled.',
-              details: error.message
+              details: errorMessage
             },
             { status: 401 }
           );

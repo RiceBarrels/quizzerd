@@ -1,4 +1,5 @@
-"use client";;
+"use client";
+
 /**
  * @author: @dorian_baffier
  * @description: Smooth Tab
@@ -12,6 +13,16 @@
 import * as React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { cn } from "@/lib/utils";
+import type { LucideIcon } from "lucide-react";
+
+interface TabItem {
+    id: string;
+    title: string;
+    icon?: LucideIcon;
+    content?: React.ReactNode;
+    cardContent?: React.ReactNode;
+    color: string;
+}
 
 const WaveformPath = () => (
     <motion.path
@@ -32,10 +43,11 @@ const WaveformPath = () => (
                 ease: "linear",
                 repeat: Number.POSITIVE_INFINITY,
             },
-        }} />
+        }}
+    />
 );
 
-const DEFAULT_TABS = [
+const DEFAULT_TABS: TabItem[] = [
     {
         id: "Models",
         title: "Models",
@@ -48,13 +60,15 @@ const DEFAULT_TABS = [
                         viewBox="0 0 420 100"
                         preserveAspectRatio="none"
                         aria-hidden="true"
-                        role="presentation">
+                        role="presentation"
+                    >
                         <motion.g
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 0.15 }}
                             transition={{ duration: 0.5 }}
                             className="fill-blue-500 stroke-blue-500"
-                            style={{ strokeWidth: 1 }}>
+                            style={{ strokeWidth: 1 }}
+                        >
                             <WaveformPath />
                         </motion.g>
                         <motion.g
@@ -65,19 +79,18 @@ const DEFAULT_TABS = [
                             style={{
                                 strokeWidth: 1,
                                 transform: "translateY(10px)",
-                            }}>
+                            }}
+                        >
                             <WaveformPath />
                         </motion.g>
                     </svg>
                 </div>
                 <div className="p-6 h-full relative flex flex-col">
                     <div className="space-y-2">
-                        <h3
-                            className="text-2xl font-semibold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 [text-shadow:_0_1px_1px_rgb(0_0_0_/_10%)]">
+                        <h3 className="text-2xl font-semibold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 [text-shadow:_0_1px_1px_rgb(0_0_0_/_10%)]">
                             Models
                         </h3>
-                        <p
-                            className="text-sm text-black/50 dark:text-white/50 leading-relaxed max-w-[90%]">
+                        <p className="text-sm text-black/50 dark:text-white/50 leading-relaxed max-w-[90%]">
                             Choose the model you want to use
                         </p>
                     </div>
@@ -97,13 +110,15 @@ const DEFAULT_TABS = [
                         viewBox="0 0 420 100"
                         preserveAspectRatio="none"
                         aria-hidden="true"
-                        role="presentation">
+                        role="presentation"
+                    >
                         <motion.g
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 0.15 }}
                             transition={{ duration: 0.5 }}
                             className="fill-purple-500 stroke-purple-500"
-                            style={{ strokeWidth: 1 }}>
+                            style={{ strokeWidth: 1 }}
+                        >
                             <WaveformPath />
                         </motion.g>
                         <motion.g
@@ -114,19 +129,18 @@ const DEFAULT_TABS = [
                             style={{
                                 strokeWidth: 1,
                                 transform: "translateY(10px)",
-                            }}>
+                            }}
+                        >
                             <WaveformPath />
                         </motion.g>
                     </svg>
                 </div>
                 <div className="p-6 h-full relative flex flex-col">
                     <div className="space-y-2">
-                        <h3
-                            className="text-xl font-semibold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 [text-shadow:_0_1px_1px_rgb(0_0_0_/_10%)]">
+                        <h3 className="text-xl font-semibold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 [text-shadow:_0_1px_1px_rgb(0_0_0_/_10%)]">
                             MCPs
                         </h3>
-                        <p
-                            className="text-sm text-black/50 dark:text-white/50 leading-relaxed max-w-[90%]">
+                        <p className="text-sm text-black/50 dark:text-white/50 leading-relaxed max-w-[90%]">
                             Choose the MCP you want to use
                         </p>
                     </div>
@@ -146,13 +160,15 @@ const DEFAULT_TABS = [
                         viewBox="0 0 420 100"
                         preserveAspectRatio="none"
                         aria-hidden="true"
-                        role="presentation">
+                        role="presentation"
+                    >
                         <motion.g
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 0.15 }}
                             transition={{ duration: 0.5 }}
                             className="fill-emerald-500 stroke-emerald-500"
-                            style={{ strokeWidth: 1 }}>
+                            style={{ strokeWidth: 1 }}
+                        >
                             <WaveformPath />
                         </motion.g>
                         <motion.g
@@ -163,19 +179,18 @@ const DEFAULT_TABS = [
                             style={{
                                 strokeWidth: 1,
                                 transform: "translateY(10px)",
-                            }}>
+                            }}
+                        >
                             <WaveformPath />
                         </motion.g>
                     </svg>
                 </div>
                 <div className="p-6 h-full relative flex flex-col">
                     <div className="space-y-2">
-                        <h3
-                            className="text-2xl font-semibold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 [text-shadow:_0_1px_1px_rgb(0_0_0_/_10%)]">
+                        <h3 className="text-2xl font-semibold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 [text-shadow:_0_1px_1px_rgb(0_0_0_/_10%)]">
                             Agents
                         </h3>
-                        <p
-                            className="text-sm text-black/50 dark:text-white/50 leading-relaxed max-w-[90%]">
+                        <p className="text-sm text-black/50 dark:text-white/50 leading-relaxed max-w-[90%]">
                             Choose the agent you want to use
                         </p>
                     </div>
@@ -195,13 +210,15 @@ const DEFAULT_TABS = [
                         viewBox="0 0 420 100"
                         preserveAspectRatio="none"
                         aria-hidden="true"
-                        role="presentation">
+                        role="presentation"
+                    >
                         <motion.g
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 0.15 }}
                             transition={{ duration: 0.5 }}
                             className="fill-amber-500 stroke-amber-500"
-                            style={{ strokeWidth: 1 }}>
+                            style={{ strokeWidth: 1 }}
+                        >
                             <WaveformPath />
                         </motion.g>
                         <motion.g
@@ -212,19 +229,18 @@ const DEFAULT_TABS = [
                             style={{
                                 strokeWidth: 1,
                                 transform: "translateY(10px)",
-                            }}>
+                            }}
+                        >
                             <WaveformPath />
                         </motion.g>
                     </svg>
                 </div>
                 <div className="p-6 h-full relative flex flex-col">
                     <div className="space-y-2">
-                        <h3
-                            className="text-2xl font-semibold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 [text-shadow:_0_1px_1px_rgb(0_0_0_/_10%)]">
+                        <h3 className="text-2xl font-semibold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 [text-shadow:_0_1px_1px_rgb(0_0_0_/_10%)]">
                             Users
                         </h3>
-                        <p
-                            className="text-sm text-black/50 dark:text-white/50 leading-relaxed max-w-[90%]">
+                        <p className="text-sm text-black/50 dark:text-white/50 leading-relaxed max-w-[90%]">
                             Choose the user you want to use
                         </p>
                     </div>
@@ -234,27 +250,35 @@ const DEFAULT_TABS = [
     },
 ];
 
+interface SmoothTabProps {
+    items?: TabItem[];
+    defaultTabId?: string;
+    className?: string;
+    activeColor?: string;
+    onChange?: (tabId: string) => void;
+}
+
 const slideVariants = {
-    enter: (direction) => ({
+    enter: (direction: number) => ({
         x: direction > 0 ? "100%" : "-100%",
         opacity: 0,
         filter: "blur(8px)",
         scale: 0.95,
-        position: "absolute",
+        position: "absolute" as const,
     }),
     center: {
         x: 0,
         opacity: 1,
         filter: "blur(0px)",
         scale: 1,
-        position: "absolute",
+        position: "absolute" as const,
     },
-    exit: (direction) => ({
+    exit: (direction: number) => ({
         x: direction < 0 ? "100%" : "-100%",
         opacity: 0,
         filter: "blur(8px)",
         scale: 0.95,
-        position: "absolute",
+        position: "absolute" as const,
     }),
 };
 
@@ -267,16 +291,16 @@ export default function SmoothTab({
     items = DEFAULT_TABS,
     defaultTabId = DEFAULT_TABS[0].id,
     className,
-    activeColor = "bg-primary",
-    onChange
-}) {
-    const [selected, setSelected] = React.useState(defaultTabId);
+    activeColor = "bg-[#1F9CFE]",
+    onChange,
+}: SmoothTabProps) {
+    const [selected, setSelected] = React.useState<string>(defaultTabId);
     const [direction, setDirection] = React.useState(0);
     const [dimensions, setDimensions] = React.useState({ width: 0, left: 0 });
 
     // Reference for the selected button
-    const buttonRefs = React.useRef(new Map());
-    const containerRef = React.useRef(null);
+    const buttonRefs = React.useRef<Map<string, HTMLButtonElement>>(new Map());
+    const containerRef = React.useRef<HTMLDivElement>(null);
 
     // Update dimensions whenever selected tab changes or on mount
     React.useLayoutEffect(() => {
@@ -305,7 +329,7 @@ export default function SmoothTab({
         return () => window.removeEventListener("resize", updateDimensions);
     }, [selected]);
 
-    const handleTabClick = (tabId) => {
+    const handleTabClick = (tabId: string) => {
         const currentIndex = items.findIndex((item) => item.id === selected);
         const newIndex = items.findIndex((item) => item.id === tabId);
         setDirection(newIndex > currentIndex ? 1 : -1);
@@ -314,8 +338,8 @@ export default function SmoothTab({
     };
 
     const handleKeyDown = (
-        e,
-        tabId
+        e: React.KeyboardEvent<HTMLButtonElement>,
+        tabId: string
     ) => {
         if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
@@ -331,26 +355,32 @@ export default function SmoothTab({
             <div className="flex-1 mb-4 relative">
                 <div className="bg-card border rounded-lg h-[200px] w-full relative">
                     <div className="absolute inset-0 overflow-hidden rounded-lg">
-                        <AnimatePresence initial={false} mode="popLayout" custom={direction}>
+                        <AnimatePresence
+                            initial={false}
+                            mode="popLayout"
+                            custom={direction}
+                        >
                             <motion.div
                                 key={`card-${selected}`}
                                 custom={direction}
-                                variants={slideVariants}
+                                variants={slideVariants as any}
                                 initial="enter"
                                 animate="center"
                                 exit="exit"
-                                transition={transition}
+                                transition={transition as any}
                                 className="absolute inset-0 w-full h-full will-change-transform bg-card"
                                 style={{
                                     backfaceVisibility: "hidden",
                                     WebkitBackfaceVisibility: "hidden",
-                                }}>
+                                }}
+                            >
                                 {selectedItem?.cardContent}
                             </motion.div>
                         </AnimatePresence>
                     </div>
                 </div>
             </div>
+
             {/* Bottom Toolbar */}
             <div
                 ref={containerRef}
@@ -362,10 +392,14 @@ export default function SmoothTab({
                     "border rounded-xl",
                     "transition-all duration-200",
                     className
-                )}>
+                )}
+            >
                 {/* Sliding Background */}
                 <motion.div
-                    className={cn("absolute rounded-lg z-[1]", selectedItem?.color || activeColor)}
+                    className={cn(
+                        "absolute rounded-lg z-[1]",
+                        selectedItem?.color || activeColor
+                    )}
                     initial={false}
                     animate={{
                         width: dimensions.width - 8,
@@ -377,7 +411,8 @@ export default function SmoothTab({
                         stiffness: 400,
                         damping: 30,
                     }}
-                    style={{ height: "calc(100% - 8px)", top: "4px" }} />
+                    style={{ height: "calc(100% - 8px)", top: "4px" }}
+                />
 
                 <div className="grid grid-cols-4 w-full gap-1 relative z-[2]">
                     {items.map((item) => {
@@ -405,7 +440,8 @@ export default function SmoothTab({
                                     isSelected
                                         ? "text-white"
                                         : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                                )}>
+                                )}
+                            >
                                 <span className="truncate">{item.title}</span>
                             </motion.button>
                         );

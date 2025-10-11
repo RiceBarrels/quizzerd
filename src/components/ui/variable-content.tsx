@@ -4,15 +4,22 @@ import { useEffect, useState } from 'react';
 import { parseAndRenderVariables, extractVariablesFromHTML, generateSampleVariables } from '@/lib/variable-parser';
 import { Badge } from '@/components/ui/badge';
 
+interface VariableContentProps {
+  htmlContent: string;
+  variables?: Record<string, any> | null;
+  showVariableList?: boolean;
+  className?: string;
+}
+
 export default function VariableContent({ 
   htmlContent, 
   variables = null, 
   showVariableList = false,
   className = '' 
-}) {
-  const [renderedContent, setRenderedContent] = useState('');
-  const [usedVariables, setUsedVariables] = useState([]);
-  const [sampleVariables, setSampleVariables] = useState({});
+}: VariableContentProps) {
+  const [renderedContent, setRenderedContent] = useState<string>('');
+  const [usedVariables, setUsedVariables] = useState<string[]>([]);
+  const [sampleVariables, setSampleVariables] = useState<Record<string, any>>({});
 
   useEffect(() => {
     if (!htmlContent) {

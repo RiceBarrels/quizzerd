@@ -8,7 +8,7 @@ export default function TestEditorPage() {
   const [content, setContent] = useState('');
   const [rawContent, setRawContent] = useState('');
 
-  const handleChange = (value) => {
+  const handleChange = (value: string) => {
     console.log('Editor value changed:', value);
     setContent(value);
     // Also store raw for debugging

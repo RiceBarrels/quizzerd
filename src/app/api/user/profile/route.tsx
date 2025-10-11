@@ -51,7 +51,7 @@ export async function GET() {
   }
 }
 
-export async function POST(request) {
+export async function POST(request: Request) {
   try {
     const { userId } = await auth()
     
@@ -85,7 +85,7 @@ export async function POST(request) {
   }
 }
 
-export async function PATCH(request) {
+export async function PATCH(request: Request) {
   try {
     const { userId } = await auth()
     

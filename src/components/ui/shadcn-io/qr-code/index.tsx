@@ -1,12 +1,20 @@
-'use client';;
+'use client';
+
 import { formatHex, oklch } from 'culori';
 import QR from 'qrcode';
-import { useEffect, useState } from 'react';
+import { type HTMLAttributes, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+
+export type QRCodeProps = HTMLAttributes<HTMLDivElement> & {
+  data: string;
+  foreground?: string;
+  background?: string;
+  robustness?: 'L' | 'M' | 'Q' | 'H';
+};
 
 const oklchRegex = /oklch\(([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\)/;
 
-const getOklch = (color, fallback) => {
+const getOklch = (color: string, fallback: [number, number, number]) => {
   const oklchMatch = color.match(oklchRegex);
 
   if (!oklchMatch) {
@@ -27,8 +35,8 @@ export const QRCode = ({
   robustness = 'M',
   className,
   ...props
-}) => {
-  const [svg, setSVG] = useState(null);
+}: QRCodeProps) => {
+  const [svg, setSVG] = useState<string | null>(null);
 
   useEffect(() => {
     const generateQR = async () => {
@@ -39,7 +47,10 @@ export const QRCode = ({
         const backgroundColor =
           background ?? styles.getPropertyValue('--background');
 
-        const foregroundOklch = getOklch(foregroundColor, [0.21, 0.006, 285.885]);
+        const foregroundOklch = getOklch(
+          foregroundColor,
+          [0.21, 0.006, 285.885]
+        );
         const backgroundOklch = getOklch(backgroundColor, [0.985, 0, 0]);
 
         const newSvg = await QR.toString(data, {
@@ -71,6 +82,7 @@ export const QRCode = ({
       className={cn('size-full', '[&_svg]:size-full', className)}
       // biome-ignore lint/security/noDangerouslySetInnerHtml: "Required for SVG"
       dangerouslySetInnerHTML={{ __html: svg }}
-      {...props} />
+      {...props}
+    />
   );
 };

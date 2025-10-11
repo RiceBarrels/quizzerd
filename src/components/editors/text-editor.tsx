@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, RefObject } from 'react';
 import { registerEditor } from './floating-format-dock';
 import { cn } from '@/lib/utils';
 import './text-editor.css';
@@ -80,20 +80,20 @@ export default function TextEditor({
               bindings: {
                 enter: {
                   key: 'Enter',
-                  handler: function(range) {
+                  handler: function(this: { quill: Quill }, range: { index: number; length: number }) {
                     const format = this.quill.getFormat(range);
                     
                     // Define block formats that should NOT persist to new line
                     const blockFormats = ['header', 'blockquote', 'code-block', 'list', 'align'];
                     
                     // Keep all inline formats including 'code' (inline code, not code-block)
-                    const inlineFormats = Object.keys(format).reduce((acc, key) => {
+                    const inlineFormats = Object.keys(format).reduce((acc: Record<string, any>, key) => {
                       // Preserve all formats that are not block formats
                       if (!blockFormats.includes(key)) {
                         acc[key] = format[key];
                       }
                       return acc;
-                    }, {});
+                    }, {} as Record<string, any>);
                     
                     // Insert a newline
                     this.quill.insertText(range.index, '\n');
@@ -125,7 +125,7 @@ export default function TextEditor({
                 'shift enter': {
                   key: 'Enter',
                   shiftKey: true,
-                  handler: function(range) {
+                  handler: function(this: { quill: Quill }, range: { index: number; length: number }) {
                     const format = this.quill.getFormat(range);
                     
                     // Insert newline
@@ -144,7 +144,7 @@ export default function TextEditor({
                 },
                 'tab': {
                   key: 'Tab',
-                  handler: function(range) {
+                  handler: function(this: { quill: Quill }, range: { index: number; length: number }) {
                     // Insert two non-breaking spaces instead of tab
                     this.quill.insertText(range.index, '\u00A0\u00A0');
                     // Move cursor after the spaces
@@ -155,7 +155,7 @@ export default function TextEditor({
                 'shift tab': {
                   key: 'Tab',
                   shiftKey: true,
-                  handler: function(range) {
+                  handler: function(this: { quill: Quill }, range: { index: number; length: number }) {
                     // Check if there are two non-breaking spaces before cursor that we can remove
                     if (range.index >= 2) {
                       const prevText = this.quill.getText(range.index - 2, 2);
@@ -177,7 +177,9 @@ export default function TextEditor({
         const el = quillRef.current.root;
         const delayedChange = () => setTimeout(handleChange, 10);
         
-        const { handleFocus, handleBlur, updateFormats } = registerEditor(quillRef, editorId.current);
+        if (!quillRef.current) return;
+        
+        const { handleFocus, handleBlur, updateFormats } = registerEditor(quillRef as RefObject<Quill>, editorId.current);
         
         // Add MutationObserver for better change detection
         observerRef.current = new MutationObserver(handleChange);
@@ -197,7 +199,7 @@ export default function TextEditor({
           cut: () => { delayedChange(); setTimeout(updateFormats, 20); },
           focus: () => { handleFocus(); updateFormats(); },
           click: () => { handleFocus(); updateFormats(); },
-          blur: (e) => setTimeout(() => !el.contains(document.activeElement) && handleBlur({ relatedTarget: e.relatedTarget }), 100)
+          blur: (e: Event) => setTimeout(() => !el.contains(document.activeElement) && handleBlur({ relatedTarget: (e as FocusEvent).relatedTarget }), 100)
         };
         
         Object.entries(handlers).forEach(([event, handler]) => {

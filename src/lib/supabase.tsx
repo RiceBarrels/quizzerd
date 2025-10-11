@@ -24,11 +24,11 @@ export async function createSupabaseClient() {
 
   // If still no token, use service role key for server-side operations
   if (!token && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY)
+    return createClient(supabaseUrl!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
   }
 
   // Use anon key without auth if no tokens available
-  return createClient(supabaseUrl, supabaseKey, {
+  return createClient(supabaseUrl!, supabaseKey!, {
     global: {
       headers: token ? {
         Authorization: `Bearer ${token}`
@@ -37,8 +37,8 @@ export async function createSupabaseClient() {
   })
 }
 
-export async function createSupabaseClientWithToken(token) {
-  return createClient(supabaseUrl, supabaseKey, {
+export async function createSupabaseClientWithToken(token: string) {
+  return createClient(supabaseUrl!, supabaseKey!, {
     global: {
       headers: {
         Authorization: `Bearer ${token}`

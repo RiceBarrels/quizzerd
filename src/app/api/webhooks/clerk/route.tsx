@@ -10,7 +10,7 @@ const supabase = createClient(
 
 export async function POST(request: Request) {
   // Get the headers
-  const headerPayload = headers();
+  const headerPayload = await headers();
   const svix_id = headerPayload.get("svix-id");
   const svix_timestamp = headerPayload.get("svix-timestamp");
   const svix_signature = headerPayload.get("svix-signature");
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   // Create a new Svix instance with your webhook secret
   const wh = new Webhook(process.env.CLERK_WEBHOOK_SECRET || '');
 
-  let evt;
+  let evt: any;
 
   // Verify the webhook
   try {
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     } = evt.data;
 
     // Get primary email
-    const primaryEmail = email_addresses?.find(email => email.id === evt.data.primary_email_address_id);
+    const primaryEmail = email_addresses?.find((email: any) => email.id === evt.data.primary_email_address_id);
     const email = primaryEmail?.email_address || '';
 
     // Prepare user data for Supabase

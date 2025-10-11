@@ -183,7 +183,7 @@ export default function FloatingFormatDock() {
         if (!skipSizeUpdate) {
           if (formats.size) {
             // Extract number from size string (e.g., "18px" -> 18)
-            const sizeNum = parseInt(formats.size);
+            const sizeNum = parseInt(String(formats.size));
             if (!isNaN(sizeNum)) {
               setFontSize(sizeNum);
             }
@@ -196,7 +196,7 @@ export default function FloatingFormatDock() {
     }
   }, [activeEditor]);
 
-  const applyFormat = useCallback((format, value = true) => {
+  const applyFormat = useCallback((format: string, value: any = true) => {
     if (activeEditor?.ref?.current) {
       const quill = activeEditor.ref.current;
       const selection = quill.getSelection();
@@ -328,13 +328,15 @@ export default function FloatingFormatDock() {
     if (activeEditor?.ref?.current && imageUrl) {
       const quill = activeEditor.ref.current;
       const range = quill.getSelection();
-      quill.insertEmbed(range.index, 'image', imageUrl);
-      setImageUrl('');
-      setShowImageDialog(false);
+      if (range) {
+        quill.insertEmbed(range.index, 'image', imageUrl);
+        setImageUrl('');
+        setShowImageDialog(false);
+      }
     }
   };
 
-  const FormatButton = ({ format, icon: Icon, title, formatValue, className }) => {
+  const FormatButton = ({ format, icon: Icon, title, formatValue, className }: any) => {
     const isPressed = formatValue !== undefined ? activeFormats[format] === formatValue : activeFormats[format];
     
     return (
@@ -378,14 +380,14 @@ export default function FloatingFormatDock() {
             // Cancel any pending hide timeout
             if (dockInstance?.hideTimeout) {
               clearTimeout(dockInstance.hideTimeout);
-              dockInstance.hideTimeout = null;
+              dockInstance.hideTimeout = undefined;
             }
           }}
           onClick={() => {
             // Keep dock visible and re-focus the editor if needed
             if (dockInstance?.hideTimeout) {
               clearTimeout(dockInstance.hideTimeout);
-              dockInstance.hideTimeout = null;
+              dockInstance.hideTimeout = undefined;
             }
             // Ensure editor stays active
             if (activeEditor?.ref?.current) {
@@ -396,14 +398,14 @@ export default function FloatingFormatDock() {
             // Cancel hide when dock gains focus
             if (dockInstance?.hideTimeout) {
               clearTimeout(dockInstance.hideTimeout);
-              dockInstance.hideTimeout = null;
+              dockInstance.hideTimeout = undefined;
             }
           }}
           onMouseEnter={() => {
             // Cancel hide when mouse enters dock
             if (dockInstance?.hideTimeout) {
               clearTimeout(dockInstance.hideTimeout);
-              dockInstance.hideTimeout = null;
+              dockInstance.hideTimeout = undefined;
             }
           }}
         >
@@ -601,7 +603,7 @@ export default function FloatingFormatDock() {
                       onClick={() => setShowImageDialog(true)}
                       className="justify-start h-8 px-2"
                     >
-                      <Image className="h-3.5 w-3.5 mr-2" alt="" />
+                      <Image className="h-3.5 w-3.5 mr-2" />
                       Insert Image
                     </Button>
                   </PopoverTrigger>

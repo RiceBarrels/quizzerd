@@ -14,8 +14,8 @@ export function useSupabase() {
   const { session } = useSession()
 
   const supabaseClient = createClient(
-    supabaseUrl,
-    supabasePublishableKey,
+    supabaseUrl!,
+    supabasePublishableKey!,
     {
       accessToken: async () => {
         const token = await session?.getToken({ template: 'supabase' })

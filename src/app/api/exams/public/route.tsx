@@ -51,7 +51,7 @@ export async function GET(request: Request) {
       const uniqueClassIds = [...new Set(allClassIds)];
       
       // Fetch all class names at once
-      let classMap = {};
+      let classMap: any = {};
       if (uniqueClassIds.length > 0) {
         const { data: classes } = await supabase
           .from('class')
@@ -59,10 +59,10 @@ export async function GET(request: Request) {
           .in('class_id', uniqueClassIds);
         
         if (classes) {
-          classMap = classes.reduce((acc, cls) => {
+          classMap = classes.reduce((acc: any, cls: any) => {
             acc[cls.class_id] = cls.class_name;
             return acc;
-          }, {});
+          }, {} as any);
         }
       }
       
@@ -94,12 +94,12 @@ export async function GET(request: Request) {
       pagination: {
         page,
         limit,
-        total: count,
-        totalPages: Math.ceil(count / limit),
-        hasMore: offset + limit < count
+        total: count || 0,
+        totalPages: Math.ceil((count || 0) / limit),
+        hasMore: offset + limit < (count || 0)
       },
       summary: {
-        totalPublicExams: count,
+        totalPublicExams: count || 0,
         uniqueCreators: creatorIds.length,
         statuses: {
           draft: data.filter(e => e.status === 'draft').length,

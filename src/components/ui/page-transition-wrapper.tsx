@@ -2,10 +2,15 @@
 
 import { useEffect, useRef } from 'react'
 import { usePathname } from 'next/navigation'
+import { ReactNode } from 'react'
 
-export default function PageTransitionWrapper({ children }) {
+interface PageTransitionWrapperProps {
+  children: ReactNode
+}
+
+export default function PageTransitionWrapper({ children }: PageTransitionWrapperProps) {
   const pathname = usePathname()
-  const contentRef = useRef(null)
+  const contentRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (contentRef.current) {
@@ -14,7 +19,9 @@ export default function PageTransitionWrapper({ children }) {
       
       setTimeout(() => {
         // Trigger enter animation
-        contentRef.current.style.animation = 'contentFadeIn 0.3s cubic-bezier(0.22, 0.61, 0.36, 1) forwards'
+        if (contentRef.current) {
+          contentRef.current.style.animation = 'contentFadeIn 0.3s cubic-bezier(0.22, 0.61, 0.36, 1) forwards'
+        }
       }, 200)
     }
   }, [pathname])

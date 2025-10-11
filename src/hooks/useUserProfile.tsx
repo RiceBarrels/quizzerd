@@ -5,9 +5,9 @@ import { useUser } from '@clerk/nextjs'
 
 export function useUserProfile() {
   const { user, isLoaded } = useUser()
-  const [profile, setProfile] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [profile, setProfile] = useState<any>(null)
+  const [loading, setLoading] = useState<boolean>(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isLoaded) return
@@ -46,7 +46,7 @@ export function useUserProfile() {
     }
   }
 
-  const updateProfile = async (updates) => {
+  const updateProfile = async (updates: Record<string, any>) => {
     try {
       setError(null)
       
@@ -72,7 +72,7 @@ export function useUserProfile() {
     }
   }
 
-  const createProfile = async (profileData) => {
+  const createProfile = async (profileData: Record<string, any>) => {
     try {
       setError(null)
       

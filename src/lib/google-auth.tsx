@@ -6,7 +6,7 @@ import { createClerkClient } from '@clerk/backend';
  * @param {number} bufferMinutes - Buffer time in minutes before actual expiration (default 5)
  * @returns {boolean} - True if token is expired or about to expire
  */
-export function isTokenExpired(expiresAt, bufferMinutes = 5) {
+export function isTokenExpired(expiresAt: number | null, bufferMinutes: number = 5): boolean {
   if (!expiresAt) return true;
   
   const now = Date.now();
@@ -21,7 +21,7 @@ export function isTokenExpired(expiresAt, bufferMinutes = 5) {
  * @param {number} expiresAt - Token expiration timestamp (optional)
  * @returns {Promise<{success: boolean, accessToken: string|null, expiresAt: number|null, error?: string}>}
  */
-export async function getValidGoogleToken(userId, currentToken = null, expiresAt = null) {
+export async function getValidGoogleToken(userId: string, currentToken: string | null = null, expiresAt: number | null = null) {
   try {
     // Check if current token is still valid
     if (currentToken && expiresAt && !isTokenExpired(expiresAt)) {
@@ -57,7 +57,7 @@ export async function getValidGoogleToken(userId, currentToken = null, expiresAt
       try {
         tokens = await clerk.users.getUserOauthAccessToken(userId, 'oauth_google');
       } catch (secondError) {
-        console.error('Failed to get OAuth token:', secondError.message);
+        console.error('Failed to get OAuth token:', secondError instanceof Error ? secondError.message : 'Unknown error');
         return {
           success: false,
           accessToken: null,
@@ -89,7 +89,7 @@ export async function getValidGoogleToken(userId, currentToken = null, expiresAt
     return {
       success: false,
       accessToken: null,
-      error: error.message
+      error: error instanceof Error ? error.message : 'Unknown error'
     };
   }
 }
@@ -103,7 +103,7 @@ export async function getValidGoogleToken(userId, currentToken = null, expiresAt
  * @param {number} expiresAt - Token expiration timestamp
  * @returns {Promise<Response>}
  */
-export async function googleApiFetch(url, options = {}, userId, accessToken, expiresAt) {
+export async function googleApiFetch(url: string, options: RequestInit = {}, userId: string, accessToken: string | null, expiresAt: number | null) {
   // Get a valid token (refresh if needed)
   const tokenResult = await getValidGoogleToken(userId, accessToken, expiresAt);
   
@@ -137,16 +137,16 @@ export async function googleApiFetch(url, options = {}, userId, accessToken, exp
       });
       
       // Attach token info to response for client to cache
-      retryResponse.newAccessToken = freshTokenResult.accessToken;
-      retryResponse.newExpiresAt = freshTokenResult.expiresAt;
+      (retryResponse as any).newAccessToken = freshTokenResult.accessToken;
+      (retryResponse as any).newExpiresAt = freshTokenResult.expiresAt;
       return retryResponse;
     }
   }
 
   // Attach token info if it was refreshed
   if (tokenResult.refreshed) {
-    response.newAccessToken = tokenResult.accessToken;
-    response.newExpiresAt = tokenResult.expiresAt;
+    (response as any).newAccessToken = tokenResult.accessToken;
+    (response as any).newExpiresAt = tokenResult.expiresAt;
   }
 
   return response;

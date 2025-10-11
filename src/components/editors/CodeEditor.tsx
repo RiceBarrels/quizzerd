@@ -468,49 +468,63 @@ const CodeEditor = memo(function CodeEditor({
 
     // Python IntelliSense
     monaco.languages.registerCompletionItemProvider('python', {
-      provideCompletionItems: () => {
+      provideCompletionItems: (model, position) => {
+        const word = model.getWordUntilPosition(position);
+        const range = {
+          startLineNumber: position.lineNumber,
+          endLineNumber: position.lineNumber,
+          startColumn: word.startColumn,
+          endColumn: word.endColumn
+        };
+        
         const suggestions = [
           {
             label: 'def',
             kind: monaco.languages.CompletionItemKind.Keyword,
             insertText: 'def ${1:function_name}(${2:params}):\n    ${3:pass}',
             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            documentation: 'Define a function'
+            documentation: 'Define a function',
+            range: range
           },
           {
             label: 'class',
             kind: monaco.languages.CompletionItemKind.Keyword,
             insertText: 'class ${1:ClassName}:\n    def __init__(self${2:, params}):\n        ${3:pass}',
             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            documentation: 'Define a class'
+            documentation: 'Define a class',
+            range: range
           },
           {
             label: 'if',
             kind: monaco.languages.CompletionItemKind.Keyword,
             insertText: 'if ${1:condition}:\n    ${2:pass}',
             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            documentation: 'If statement'
+            documentation: 'If statement',
+            range: range
           },
           {
             label: 'for',
             kind: monaco.languages.CompletionItemKind.Keyword,
             insertText: 'for ${1:item} in ${2:iterable}:\n    ${3:pass}',
             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            documentation: 'For loop'
+            documentation: 'For loop',
+            range: range
           },
           {
             label: 'while',
             kind: monaco.languages.CompletionItemKind.Keyword,
             insertText: 'while ${1:condition}:\n    ${2:pass}',
             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            documentation: 'While loop'
+            documentation: 'While loop',
+            range: range
           },
           {
             label: 'try',
             kind: monaco.languages.CompletionItemKind.Keyword,
             insertText: 'try:\n    ${1:pass}\nexcept ${2:Exception} as ${3:e}:\n    ${4:pass}',
             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            documentation: 'Try-except block'
+            documentation: 'Try-except block',
+            range: range
           }
         ];
         return { suggestions };
@@ -519,42 +533,55 @@ const CodeEditor = memo(function CodeEditor({
 
     // Java IntelliSense
     monaco.languages.registerCompletionItemProvider('java', {
-      provideCompletionItems: () => {
+      provideCompletionItems: (model, position) => {
+        const word = model.getWordUntilPosition(position);
+        const range = {
+          startLineNumber: position.lineNumber,
+          endLineNumber: position.lineNumber,
+          startColumn: word.startColumn,
+          endColumn: word.endColumn
+        };
+        
         const suggestions = [
           {
             label: 'main',
             kind: monaco.languages.CompletionItemKind.Snippet,
             insertText: 'public static void main(String[] args) {\n    ${1}\n}',
             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            documentation: 'Main method'
+            documentation: 'Main method',
+            range: range
           },
           {
             label: 'sysout',
             kind: monaco.languages.CompletionItemKind.Snippet,
             insertText: 'System.out.println(${1});',
             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            documentation: 'Print to console'
+            documentation: 'Print to console',
+            range: range
           },
           {
             label: 'for',
             kind: monaco.languages.CompletionItemKind.Keyword,
             insertText: 'for (${1:int i = 0}; ${2:i < length}; ${3:i++}) {\n    ${4}\n}',
             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            documentation: 'For loop'
+            documentation: 'For loop',
+            range: range
           },
           {
             label: 'if',
             kind: monaco.languages.CompletionItemKind.Keyword,
             insertText: 'if (${1:condition}) {\n    ${2}\n}',
             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            documentation: 'If statement'
+            documentation: 'If statement',
+            range: range
           },
           {
             label: 'class',
             kind: monaco.languages.CompletionItemKind.Keyword,
             insertText: 'public class ${1:ClassName} {\n    ${2}\n}',
             insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            documentation: 'Class definition'
+            documentation: 'Class definition',
+            range: range
           }
         ];
         return { suggestions };
@@ -579,7 +606,7 @@ const CodeEditor = memo(function CodeEditor({
         clearTimeout(pythonValidationTimeout);
         pythonValidationTimeout = setTimeout(() => {
           const code = model.getValue();
-          const markers = [];
+          const markers: any[] = [];
           const lines = code.split('\n');
 
           lines.forEach((line, lineNumber) => {
@@ -598,16 +625,19 @@ const CodeEditor = memo(function CodeEditor({
 
             // Check for inconsistent indentation
             if (line.trim() && /^\s+/.test(line)) {
-              const spaces = line.match(/^\s+/)[0];
-              if (spaces.includes('\t') && spaces.includes(' ')) {
-                markers.push({
-                  severity: monaco.MarkerSeverity.Warning,
-                  startLineNumber: lineNumber + 1,
-                  startColumn: 1,
-                  endLineNumber: lineNumber + 1,
-                  endColumn: spaces.length + 1,
-                  message: 'Mixed tabs and spaces in indentation'
-                });
+              const matchResult = line.match(/^\s+/);
+              if (matchResult) {
+                const spaces = matchResult[0];
+                if (spaces.includes('\t') && spaces.includes(' ')) {
+                  markers.push({
+                    severity: monaco.MarkerSeverity.Warning,
+                    startLineNumber: lineNumber + 1,
+                    startColumn: 1,
+                    endLineNumber: lineNumber + 1,
+                    endColumn: spaces.length + 1,
+                    message: 'Mixed tabs and spaces in indentation'
+                  });
+                }
               }
             }
           });
@@ -621,7 +651,7 @@ const CodeEditor = memo(function CodeEditor({
         clearTimeout(javaValidationTimeout);
         javaValidationTimeout = setTimeout(() => {
           const code = model.getValue();
-          const markers = [];
+          const markers: any[] = [];
           const lines = code.split('\n');
 
           lines.forEach((line, lineNumber) => {

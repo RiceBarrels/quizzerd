@@ -10,10 +10,14 @@ import { Separator } from "./separator"
 import { motion } from "motion/react"
 import { useState, useEffect, useRef } from "react"
 
-export default function Toolbar({sideBarButton = false}){
+interface ToolbarProps {
+    sideBarButton?: boolean
+}
+
+export default function Toolbar({sideBarButton = false}: ToolbarProps){
     const [isToolbarHidden, setIsToolbarHidden] = useState(false)
     const [showToolbar, setShowToolbar] = useState(true)
-    const toolbarRef = useRef(null)
+    const toolbarRef = useRef<HTMLDivElement>(null)
 
     // Sync with localStorage after mount to avoid hydration mismatch
     useEffect(() => {
@@ -23,7 +27,7 @@ export default function Toolbar({sideBarButton = false}){
     }, [])
 
     useEffect(() => {
-        const handleMouseMove = (e) => {
+        const handleMouseMove = (e: MouseEvent) => {
             if (isToolbarHidden) {
                 // Show toolbar when mouse is near the top (within 10px)
                 if (e.clientY <= 10) {
