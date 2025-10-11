@@ -13,12 +13,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Label } from '@/components/ui/label';
-import { Star, Heart, ThumbsUp, Loader2, ArrowLeft, Clock, Calendar, Upload, Heading, Eye, EyeOff } from 'lucide-react';
+import { Star, Heart, ThumbsUp, Loader2, ArrowLeft, Clock, Calendar, Upload, Heading, Eye, EyeOff, Code2, ChevronDown, ChevronUp } from 'lucide-react';
 import { ExamItem } from '@/types/exam';
 import { toast } from 'sonner';
 import VariableContent from '@/components/ui/variable-content';
 import { cn } from '@/lib/utils';
 import CodeEditor from '@/components/editors/CodeEditor';
+import CheatingDetection from '@/components/ui/cheating-detection';
 import '@/components/editors/text-editor.css';
 
 interface ExamData {
@@ -29,6 +30,13 @@ interface ExamData {
     total_points: number;
     start_date: string | null;
     end_date: string | null;
+    // Cheating detection settings
+    console_detection?: boolean;
+    translation_detection?: boolean;
+    allow_word_by_word_translation?: boolean;
+    allow_word_by_word_definition?: boolean;
+    visibility_change_detection?: boolean;
+    location_detection?: boolean;
 }
 
 export default function ExamPreviewPage({ params }: { params: Promise<PageParams> }) {
@@ -38,6 +46,7 @@ export default function ExamPreviewPage({ params }: { params: Promise<PageParams
     const [examData, setExamData] = useState<ExamData | null>(null);
     const [currentPage, setCurrentPage] = useState(0);
     const [showExplanations, setShowExplanations] = useState(false);
+    const [expandedCodeEditors, setExpandedCodeEditors] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         fetchExam();
@@ -266,13 +275,57 @@ export default function ExamPreviewPage({ params }: { params: Promise<PageParams
                 );
 
             case 'coding':
+                const isExpanded = expandedCodeEditors.has(item.question_id);
                 return (
                     <div className="space-y-2">
-                        <CodeEditor
-                            files={item.starter_files || [{ name: 'index.js', content: '// Write your code here' }]}
-                            onChange={() => {}} // Read-only in preview
-                            height="400px"
-                        />
+                        {!isExpanded ? (
+                            <Button
+                                variant="outline"
+                                className="w-full h-24 flex flex-col items-center justify-center gap-2 hover:bg-accent"
+                                onClick={() => {
+                                    setExpandedCodeEditors(prev => {
+                                        const next = new Set(prev);
+                                        next.add(item.question_id);
+                                        return next;
+                                    });
+                                }}
+                            >
+                                <Code2 className="h-8 w-8" />
+                                <div className="text-sm font-medium">Click to Show Code Editor</div>
+                                <div className="text-xs text-muted-foreground">
+                                    {item.starter_files?.length || 1} file(s)
+                                </div>
+                            </Button>
+                        ) : (
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Code2 className="h-4 w-4" />
+                                        <span>Code Editor</span>
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                            setExpandedCodeEditors(prev => {
+                                                const next = new Set(prev);
+                                                next.delete(item.question_id);
+                                                return next;
+                                            });
+                                        }}
+                                    >
+                                        <ChevronUp className="h-4 w-4 mr-1" />
+                                        Hide Editor
+                                    </Button>
+                                </div>
+                                <CodeEditor
+                                    key={`preview-code-${item.question_id}`}
+                                    files={item.starter_files || [{ name: 'index.js', content: '// Write your code here' }]}
+                                    onChange={() => {}} // Read-only in preview
+                                    height="400px"
+                                />
+                            </div>
+                        )}
                         {item.test_cases && (
                             <div className="mt-4 p-4 bg-muted/50 rounded-lg">
                                 <p className="text-sm font-medium mb-2">Test Cases:</p>
@@ -382,6 +435,28 @@ export default function ExamPreviewPage({ params }: { params: Promise<PageParams
                             </Button>
                         </div>
                         <div className="flex items-center gap-2">
+                            {examData && examData.items.some(item => item.question_type === 'coding') && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                        const codingQuestions = examData.items.filter(item => item.question_type === 'coding');
+                                        const allExpanded = codingQuestions.every(item => expandedCodeEditors.has(item.question_id));
+                                        
+                                        if (allExpanded) {
+                                            // Collapse all
+                                            setExpandedCodeEditors(new Set());
+                                        } else {
+                                            // Expand all
+                                            setExpandedCodeEditors(new Set(codingQuestions.map(item => item.question_id)));
+                                        }
+                                    }}
+                                    className="gap-2"
+                                >
+                                    <Code2 className="h-4 w-4" />
+                                    {expandedCodeEditors.size === 0 ? 'Show All Editors' : 'Hide All Editors'}
+                                </Button>
+                            )}
                             <Button
                                 variant="outline"
                                 size="sm"
@@ -391,6 +466,19 @@ export default function ExamPreviewPage({ params }: { params: Promise<PageParams
                                 {showExplanations ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                 {showExplanations ? 'Hide' : 'Show'} Explanations
                             </Button>
+                            
+                            {/* Cheating Detection Status */}
+                            {examData && (
+                                examData.console_detection ||
+                                examData.translation_detection ||
+                                examData.visibility_change_detection ||
+                                examData.location_detection
+                            ) && (
+                                <Badge variant="outline" className="text-sm gap-1.5 border-orange-500 text-orange-700 dark:text-orange-400">
+                                    🔒 Detection Active
+                                </Badge>
+                            )}
+                            
                             <Badge variant="secondary" className="text-sm">
                                 Preview Mode
                             </Badge>
@@ -435,6 +523,90 @@ export default function ExamPreviewPage({ params }: { params: Promise<PageParams
                         )}
                     </CardHeader>
                 </Card>
+
+                {/* Cheating Detection Info */}
+                {examData && (
+                    examData.console_detection ||
+                    examData.translation_detection ||
+                    examData.visibility_change_detection ||
+                    examData.location_detection ||
+                    !examData.allow_word_by_word_translation ||
+                    !examData.allow_word_by_word_definition
+                ) && (
+                    <Card className="mb-6 border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/20">
+                        <CardHeader>
+                            <CardTitle className="text-lg flex items-center gap-2">
+                                🔒 Cheating Detection Enabled
+                            </CardTitle>
+                            <CardDescription className="text-base">
+                                The following security measures are active for this exam:
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {examData.console_detection && (
+                                    <div className="flex items-start gap-2 text-sm">
+                                        <Badge variant="secondary" className="mt-0.5">✓</Badge>
+                                        <div>
+                                            <p className="font-medium">Developer Console Detection</p>
+                                            <p className="text-muted-foreground text-xs">Opening DevTools will trigger a warning</p>
+                                        </div>
+                                    </div>
+                                )}
+                                {examData.visibility_change_detection && (
+                                    <div className="flex items-start gap-2 text-sm">
+                                        <Badge variant="secondary" className="mt-0.5">✓</Badge>
+                                        <div>
+                                            <p className="font-medium">Tab Switch Detection</p>
+                                            <p className="text-muted-foreground text-xs">Switching tabs will be logged</p>
+                                        </div>
+                                    </div>
+                                )}
+                                {examData.translation_detection && (
+                                    <div className="flex items-start gap-2 text-sm">
+                                        <Badge variant="secondary" className="mt-0.5">✓</Badge>
+                                        <div>
+                                            <p className="font-medium">Translation Detection</p>
+                                            <p className="text-muted-foreground text-xs">Translation tools will be detected</p>
+                                        </div>
+                                    </div>
+                                )}
+                                {examData.location_detection && (
+                                    <div className="flex items-start gap-2 text-sm">
+                                        <Badge variant="secondary" className="mt-0.5">✓</Badge>
+                                        <div>
+                                            <p className="font-medium">Location Tracking</p>
+                                            <p className="text-muted-foreground text-xs">Physical location will be monitored</p>
+                                        </div>
+                                    </div>
+                                )}
+                                {!examData.allow_word_by_word_translation && (
+                                    <div className="flex items-start gap-2 text-sm">
+                                        <Badge variant="secondary" className="mt-0.5">✓</Badge>
+                                        <div>
+                                            <p className="font-medium">Word Translation Disabled</p>
+                                            <p className="text-muted-foreground text-xs">Text selection for translation blocked</p>
+                                        </div>
+                                    </div>
+                                )}
+                                {!examData.allow_word_by_word_definition && (
+                                    <div className="flex items-start gap-2 text-sm">
+                                        <Badge variant="secondary" className="mt-0.5">✓</Badge>
+                                        <div>
+                                            <p className="font-medium">Word Definitions Disabled</p>
+                                            <p className="text-muted-foreground text-xs">Text selection for definitions blocked</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="mt-4 p-3 bg-yellow-100 dark:bg-yellow-900/20 rounded-md border border-yellow-300 dark:border-yellow-800">
+                                <p className="text-sm text-yellow-900 dark:text-yellow-200">
+                                    <strong>Preview Mode:</strong> Try triggering these detections to see how warnings appear to students. Violations are logged in testing mode but not saved.
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
 
                 {/* Questions */}
                 <div className="space-y-6">
@@ -565,6 +737,20 @@ export default function ExamPreviewPage({ params }: { params: Promise<PageParams
                 </div>
             </div>
         </div>
+
+        {/* Cheating Detection in Testing/Preview Mode */}
+        {examData && (
+            <CheatingDetection
+                isTesting={true}
+                consoleDetection={examData.console_detection || false}
+                translationDetection={examData.translation_detection || false}
+                allowWordByWordTranslation={examData.allow_word_by_word_translation || false}
+                allowWordByWordDefinition={examData.allow_word_by_word_definition || false}
+                visibilityChangeDetection={examData.visibility_change_detection || false}
+                locationDetection={examData.location_detection || false}
+                examLanguage="en-US"
+            />
+        )}
         </>
     );
 }

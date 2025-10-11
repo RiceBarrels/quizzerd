@@ -5,8 +5,11 @@ import { useRouter } from 'next/navigation';
 import FloatingFormatDock from '@/components/editors/floating-format-dock';
 import { Tabs, TabsList, TabsTrigger, TabsContents, TabsContent } from '@/components/ui/shadcn-io/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, X, FileText, ListTodoIcon, ListChecksIcon, TextAlignStartIcon, NotepadTextIcon, CircleSlashIcon, ChevronDown, SlidersHorizontal, Calendar, Clock, Upload, Star, Code, Heading, Minus } from 'lucide-react';
+import { QuestionTypeOption } from '@/types/exam';
+import CodeEditor from '@/components/editors/CodeEditor';
 import ExamHeader from '@/components/exam/ExamHeader';
 import ExamDetailsTab from '@/components/exam/ExamDetailsTab';
 import QuestionsTab from '@/components/exam/QuestionsTab';
@@ -14,6 +17,7 @@ import ExamSettingsTab from '@/components/exam/ExamSettingsTab';
 import { ExamItem } from '@/types/exam';
 import { PageParams } from '@/app/layout';
 import { ScrollPosition } from '../layout';
+import { AnimatePresence, motion } from 'motion/react';
 
 export default function EditExamPage({ params }: { params: Promise<PageParams> }) {
   const router = useRouter();
@@ -38,15 +42,56 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
   const [isPublished, setIsPublished] = useState<boolean>(false);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  
+  // Cheating detection settings
+  const [consoleDetection, setConsoleDetection] = useState<boolean>(false);
+  const [translationDetection, setTranslationDetection] = useState<boolean>(false);
+  const [allowWordByWordTranslation, setAllowWordByWordTranslation] = useState<boolean>(false);
+  const [allowWordByWordDefinition, setAllowWordByWordDefinition] = useState<boolean>(false);
+  const [visibilityChangeDetection, setVisibilityChangeDetection] = useState<boolean>(false);
+  const [locationDetection, setLocationDetection] = useState<boolean>(false);
   const [lastScrollPosition, setLastScrollPosition] = useState<ScrollPosition>({
     details: 0,
     questions: 0,
     settings: 0
   });
 
+  // Sidebar state
+  const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
+  const scrollToQuestionRef = useRef<((questionId: string, isManualClick?: boolean) => void) | null>(null);
+  const [sidebarPosition, setSidebarPosition] = useState({ top: 64, maxHeight: 'calc(100vh - 312px)' });
+  const sidebarScrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const sidebarQuestionRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
 
   // Items (questions)
   const [items, setItems] = useState<ExamItem[]>([]);
+  const [codeEditorModal, setCodeEditorModal] = useState<{
+    isOpen: boolean;
+    questionIndex: number | null;
+    files: { name: string; content: string }[];
+  }>({
+    isOpen: false,
+    questionIndex: null,
+    files: []
+  });
+
+  // Question types for sidebar
+  const questionTypes: QuestionTypeOption[] = [
+    { value: 'multiple_choice', label: 'Multiple Choice', icon: ListTodoIcon },
+    { value: 'multiple_select', label: 'Multiple Select', icon: ListChecksIcon },
+    { value: 'short_answer', label: 'Short Answer', icon: TextAlignStartIcon },
+    { value: 'long_answer', label: 'Long Answer', icon: NotepadTextIcon },
+    { value: 'true_false', label: 'True/False', icon: CircleSlashIcon },
+    { value: 'dropdown', label: 'Dropdown', icon: ChevronDown },
+    { value: 'scale', label: 'Scale', icon: SlidersHorizontal },
+    { value: 'date', label: 'Date', icon: Calendar },
+    { value: 'time', label: 'Time', icon: Clock },
+    { value: 'file_upload', label: 'File Upload', icon: Upload },
+    { value: 'rating', label: 'Rating', icon: Star },
+    { value: 'coding', label: 'Coding', icon: Code },
+    { value: 'section_header', label: 'Section Header', icon: Heading },
+    { value: 'page_break', label: 'Page Break', icon: Minus },
+  ];
 
   useEffect(() => {
     fetchExam();
@@ -80,6 +125,14 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
         setStartDate(examData.start_date ? new Date(examData.start_date).toISOString().slice(0, 16) : '');
         setEndDate(examData.end_date ? new Date(examData.end_date).toISOString().slice(0, 16) : '');
         setItems(examData.items || []);
+        
+        // Load cheating detection settings
+        setConsoleDetection(examData.console_detection || false);
+        setTranslationDetection(examData.translation_detection || false);
+        setAllowWordByWordTranslation(examData.allow_word_by_word_translation || false);
+        setAllowWordByWordDefinition(examData.allow_word_by_word_definition || false);
+        setVisibilityChangeDetection(examData.visibility_change_detection || false);
+        setLocationDetection(examData.location_detection || false);
       } else {
         toast.error('Failed to load exam');
         router.push('/exam');
@@ -175,8 +228,110 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     setItems(newItems);
   };
 
+  const openCodeEditor = (questionIndex: number) => {
+    const question = items[questionIndex];
+    if (question && question.question_type === 'coding') {
+      setCodeEditorModal({
+        isOpen: true,
+        questionIndex,
+        files: question.starter_files || [{ name: 'index.js', content: '// Write your code here' }]
+      });
+    }
+  };
+
+  const closeCodeEditor = () => {
+    setCodeEditorModal({
+      isOpen: false,
+      questionIndex: null,
+      files: []
+    });
+  };
+
+  const handleCodeEditorChange = (files: { name: string; content: string }[]) => {
+    if (codeEditorModal.questionIndex !== null) {
+      updateQuestion(codeEditorModal.questionIndex, 'starter_files', files);
+      // Also update the modal state so the CodeEditor's files prop reflects the changes
+      setCodeEditorModal(prev => ({
+        ...prev,
+        files: files
+      }));
+    }
+  };
+
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && codeEditorModal.isOpen) {
+        closeCodeEditor();
+      }
+    };
+
+    if (codeEditorModal.isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [codeEditorModal.isOpen]);
+
   const calculateTotalPoints = () => {
     return items.reduce((sum, item) => sum + (item.points || 0), 0);
+  };
+
+  // Sidebar helper functions
+  const getQuestionTitle = (item: ExamItem): string => {
+    if (item.question_type === 'section_header') return 'Section Header';
+    if (item.question_type === 'page_break') return 'Page Break';
+    
+    // Strip HTML tags and get first 50 characters
+    const text = item.question_text?.replace(/<[^>]*>/g, '') || 'Untitled Question';
+    return text.length > 50 ? text.substring(0, 50) + '...' : text;
+  };
+
+  // Group questions by pages (separated by page breaks)
+  const groupQuestionsByPages = () => {
+    const pages: ExamItem[][] = [];
+    let currentPage: ExamItem[] = [];
+
+    items.forEach((item) => {
+      if (item.question_type === 'page_break') {
+        if (currentPage.length > 0) {
+          pages.push(currentPage);
+          currentPage = [];
+        }
+      } else {
+        currentPage.push(item);
+      }
+    });
+
+    // Add the last page if it has items
+    if (currentPage.length > 0) {
+      pages.push(currentPage);
+    }
+
+    // If no pages, create one default page with all items
+    if (pages.length === 0 && items.length > 0) {
+      pages.push(items.filter(item => item.question_type !== 'page_break'));
+    }
+
+    return pages;
+  };
+
+  const handleSidebarQuestionClick = (questionId: string) => {
+    console.log('🖱️  Sidebar question clicked:', questionId);
+    setActiveQuestionId(questionId);
+    if (scrollToQuestionRef.current) {
+      console.log('📞 Calling scrollToQuestionRef with isManualClick=true');
+      scrollToQuestionRef.current(questionId, true); // true indicates manual click
+    } else {
+      console.log('⚠️  scrollToQuestionRef.current is null');
+    }
+  };
+
+  // Helper function to get the page index for a given question
+  const getPageIndexForQuestion = (questionId: string) => {
+    const pages = groupQuestionsByPages();
+    return pages.findIndex(page => 
+      page.some(item => item.question_id === questionId)
+    );
   };
 
   const deleteExam = async () => {
@@ -230,7 +385,14 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
           end_date: endDate || null,
           items: items,
           total_points: calculateTotalPoints(),
-          status: publish ? 'published' : 'draft'
+          status: publish ? 'published' : 'draft',
+          // Cheating detection settings
+          console_detection: consoleDetection,
+          translation_detection: translationDetection,
+          allow_word_by_word_translation: allowWordByWordTranslation,
+          allow_word_by_word_definition: allowWordByWordDefinition,
+          visibility_change_detection: visibilityChangeDetection,
+          location_detection: locationDetection
         }),
       });
 
@@ -286,7 +448,9 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
       }
     }, 3000);
   }, [examName, examDescription, durationMinutes, attemptsAllowed, passingScore, 
-      shuffleItems, showResultsImmediately, isPublic, startDate, endDate, items]);
+      shuffleItems, showResultsImmediately, isPublic, startDate, endDate, items,
+      consoleDetection, translationDetection, allowWordByWordTranslation, 
+      allowWordByWordDefinition, visibilityChangeDetection, locationDetection]);
 
   // Watch for changes and trigger auto-save
   useEffect(() => {
@@ -300,7 +464,10 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
       }
     };
   }, [examName, examDescription, durationMinutes, attemptsAllowed, passingScore,
-      shuffleItems, showResultsImmediately, isPublic, startDate, endDate, items, triggerAutoSave, loading]);
+      shuffleItems, showResultsImmediately, isPublic, startDate, endDate, items,
+      consoleDetection, translationDetection, allowWordByWordTranslation,
+      allowWordByWordDefinition, visibilityChangeDetection, locationDetection,
+      triggerAutoSave, loading]);
 
   // Save scroll position while scrolling
   useEffect(() => {
@@ -326,6 +493,67 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     };
   }, [activeTab]);
 
+  // Calculate sidebar position based on tabs-list position
+  useEffect(() => {
+    if (activeTab !== 'questions') return;
+
+    const updateSidebarPosition = () => {
+      const tabsList = document.getElementById('tabs-list');
+      if (tabsList) {
+        const rect = tabsList.getBoundingClientRect();
+        const topPosition = rect.bottom + 16; // 16px spacing below tabs
+        const maxHeight = `calc(100vh - ${topPosition + 48}px)`; // 48px bottom padding
+        
+        setSidebarPosition({
+          top: topPosition,
+          maxHeight: maxHeight
+        });
+      }
+    };
+
+    // Initial calculation
+    updateSidebarPosition();
+
+    // Recalculate on scroll and resize
+    window.addEventListener('scroll', updateSidebarPosition, true);
+    window.addEventListener('resize', updateSidebarPosition);
+
+    return () => {
+      window.removeEventListener('scroll', updateSidebarPosition, true);
+      window.removeEventListener('resize', updateSidebarPosition);
+    };
+  }, [activeTab, items.length]);
+
+  // Auto-scroll sidebar to keep active question visible
+  useEffect(() => {
+    if (!activeQuestionId || activeTab !== 'questions') return;
+
+    // Use requestAnimationFrame to ensure DOM is updated
+    requestAnimationFrame(() => {
+      const sidebarButton = sidebarQuestionRefs.current[activeQuestionId];
+      const sidebarContainer = sidebarScrollContainerRef.current;
+
+      if (sidebarButton && sidebarContainer) {
+        // Center the active question in the sidebar
+        const buttonOffset = sidebarButton.offsetTop;
+        const containerHeight = sidebarContainer.clientHeight;
+        const buttonHeight = sidebarButton.clientHeight;
+        
+        // Calculate scroll position to center the button
+        const scrollTarget = buttonOffset - (containerHeight / 2) + (buttonHeight / 2);
+
+        // Ensure we don't scroll beyond bounds
+        const maxScroll = sidebarContainer.scrollHeight - containerHeight;
+        const clampedScroll = Math.max(0, Math.min(scrollTarget, maxScroll));
+
+        sidebarContainer.scrollTo({
+          top: clampedScroll,
+          behavior: 'smooth'
+        });
+      }
+    });
+  }, [activeQuestionId, activeTab]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -337,6 +565,48 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
   return (
     <>
       <FloatingFormatDock />
+      
+      {/* Fullscreen Code Editor Modal */}
+      {codeEditorModal.isOpen && (
+        <div className="fixed inset-0 z-[9999] bg-background flex flex-col">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b bg-muted/50">
+            <div className="flex items-center gap-4">
+              <h2 className="text-lg font-semibold">
+                Code Editor - Question {codeEditorModal.questionIndex !== null ? codeEditorModal.questionIndex + 1 : ''}
+              </h2>
+              <Badge variant="secondary">
+                {codeEditorModal.files.length} file(s)
+              </Badge>
+              <Badge variant="outline" className="text-xs font-normal">
+                Press ESC to close
+              </Badge>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={closeCodeEditor}
+              className="gap-2"
+            >
+              <X className="h-4 w-4" />
+              Close Editor
+            </Button>
+          </div>
+          
+          {/* Modal Content */}
+          <div className="flex-1 p-6 overflow-auto">
+            <div className="max-w-7xl mx-auto h-full">
+              <CodeEditor
+                key={`modal-code-editor-${codeEditorModal.questionIndex}`}
+                files={codeEditorModal.files}
+                onChange={handleCodeEditorChange}
+                height="calc(100vh - 160px)"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="w-full py-8 flex-1 flex flex-col">
       <ExamHeader
         examId={examId}
@@ -348,6 +618,115 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
         canPublish={!!(examName && items.length > 0)}
         lastSaved={lastSaved}
       />
+
+      {/* Questions Sidebar - Only visible on questions tab */}
+      <AnimatePresence initial={false} mode="wait">
+        {activeTab === 'questions' && (
+          <motion.div
+            key="questions-sidebar"
+            className="w-72 z-50 fixed left-8" 
+            style={{ top: `${sidebarPosition.top}px` }}
+            initial={{ opacity: 0, x: "-32rem" }} 
+            animate={{ opacity: 1, x: 0 }} 
+            transition={{ duration: 0.3, ease: "easeOut" }} 
+            exit={{ opacity: 0, x: "-32rem" }}
+          >
+            <div 
+              ref={sidebarScrollContainerRef}
+              className="bg-card overflow-y-auto border rounded-lg p-4 shadow-lg scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground/40" 
+              style={{ maxHeight: sidebarPosition.maxHeight }}
+            >
+              <h3 className="text-sm font-semibold mb-3">Questions Overview</h3>
+              <div className="space-y-3">
+                {items.length === 0 ? (
+                  <div className="text-sm text-muted-foreground p-3 text-center">
+                    No questions yet. Add your first question to get started.
+                  </div>
+                ) : groupQuestionsByPages().length === 0 ? (
+                  <div className="text-sm text-muted-foreground p-3 text-center">
+                    No questions to display.
+                  </div>
+                ) : (
+                  groupQuestionsByPages().map((pageItems, pageIndex) => {
+                    const pagePoints = pageItems.reduce((sum, item) => 
+                      sum + (item.question_type !== 'section_header' ? (item.points || 0) : 0), 0
+                    );
+                    const isPageActive = activeQuestionId ? getPageIndexForQuestion(activeQuestionId) === pageIndex : false;
+                    
+                    return (
+                      <div key={`page-${pageIndex}`} className="space-y-1.5">
+                        {pageIndex > 0 && (
+                          <div className="border-t my-2" />
+                        )}
+                        <div className={`flex items-center justify-between px-2 py-1.5 rounded-md transition-all duration-200 border ${
+                          isPageActive ? 'bg-primary/10 border-primary/20' : 'bg-muted/70 border-transparent'
+                        }`}>
+                          <div className="flex items-center gap-1.5">
+                            <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-xs font-semibold text-foreground">
+                              Page {pageIndex + 1}
+                            </span>
+                          </div>
+                          <span className="text-xs font-medium text-primary">
+                            {pagePoints} pts
+                          </span>
+                        </div>
+                        <div className="space-y-0.5 pl-1">
+                          {pageItems.map((item) => {
+                            const itemIndex = items.findIndex(i => i.question_id === item.question_id);
+                            const questionNumber = items
+                              .slice(0, itemIndex + 1)
+                              .filter(i => i.question_type !== 'section_header' && i.question_type !== 'page_break')
+                              .length;
+                            
+                            const questionTypeInfo = questionTypes.find(qt => qt.value === item.question_type);
+                            const QuestionIcon = questionTypeInfo?.icon;
+                            
+                            return (
+                              <button
+                                key={item.question_id}
+                                ref={(el) => {
+                                  sidebarQuestionRefs.current[item.question_id] = el;
+                                }}
+                                onClick={() => handleSidebarQuestionClick(item.question_id)}
+                                className={`w-full text-left px-2.5 py-2 rounded-md border transition-all hover:bg-accent/70 ${
+                                  activeQuestionId === item.question_id
+                                    ? 'bg-accent border-primary shadow-sm'
+                                    : 'border-transparent hover:border-border'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                      {QuestionIcon && <QuestionIcon className="h-3 w-3 text-muted-foreground" />}
+                                      <div className="text-xs font-medium text-muted-foreground">
+                                        {item.question_type === 'section_header' ? 'Section' :
+                                        `Q${questionNumber}`}
+                                      </div>
+                                    </div>
+                                    <div className="text-xs font-medium truncate leading-relaxed">
+                                      {getQuestionTitle(item)}
+                                    </div>
+                                  </div>
+                                  {item.question_type !== 'section_header' && (
+                                    <div className="text-xs font-semibold text-primary mt-0.5">
+                                      {item.points}
+                                    </div>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <Tabs value={activeTab} onValueChange={(value) => {
         const scrollContainer = document.querySelector('.overflow-y-auto');
@@ -372,7 +751,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
           setActiveTab(value);
         }
       }} className="flex-1">
-        <TabsList className="ml-8 sticky top-8 z-10">
+        <TabsList id="tabs-list" className="ml-8 sticky top-8 z-10">
           <TabsTrigger value="details">Exam Details</TabsTrigger>
           <TabsTrigger value="questions">
             <span className="flex items-center gap-2 flex-1">
@@ -401,7 +780,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
             />
           </TabsContent>
 
-          <TabsContent value="questions" className="container mx-auto px-12 max-w-6xl overflow-y-auto flex-1 space-y-4">
+          <TabsContent value="questions" className="w-full px-12 flex-1">
             <QuestionsTab
               items={items}
               onUpdateQuestion={updateQuestion}
@@ -412,6 +791,12 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
               onAddNewQuestion={addNewQuestion}
               onAddPageBreak={addPageBreak}
               onReorderQuestions={reorderQuestions}
+              onOpenCodeEditor={openCodeEditor}
+              onScrollToQuestionRef={(scrollFn) => {
+                scrollToQuestionRef.current = scrollFn;
+              }}
+              activeQuestionId={activeQuestionId}
+              onActiveQuestionIdChange={setActiveQuestionId}
             />
           </TabsContent>
 
@@ -423,12 +808,24 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
               shuffleItems={shuffleItems}
               showResultsImmediately={showResultsImmediately}
               isPublic={isPublic}
+              consoleDetection={consoleDetection}
+              translationDetection={translationDetection}
+              allowWordByWordTranslation={allowWordByWordTranslation}
+              allowWordByWordDefinition={allowWordByWordDefinition}
+              visibilityChangeDetection={visibilityChangeDetection}
+              locationDetection={locationDetection}
               onDurationChange={setDurationMinutes}
               onAttemptsChange={setAttemptsAllowed}
               onPassingScoreChange={setPassingScore}
               onShuffleChange={setShuffleItems}
               onShowResultsChange={setShowResultsImmediately}
               onPublicChange={setIsPublic}
+              onConsoleDetectionChange={setConsoleDetection}
+              onTranslationDetectionChange={setTranslationDetection}
+              onAllowWordByWordTranslationChange={setAllowWordByWordTranslation}
+              onAllowWordByWordDefinitionChange={setAllowWordByWordDefinition}
+              onVisibilityChangeDetectionChange={setVisibilityChangeDetection}
+              onLocationDetectionChange={setLocationDetection}
               onDeleteExam={deleteExam}
             />
           </TabsContent>

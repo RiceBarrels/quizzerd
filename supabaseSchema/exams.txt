@@ -18,6 +18,14 @@ CREATE TABLE IF NOT EXISTS exams (
     shuffle_questions BOOLEAN DEFAULT false,
     show_results_immediately BOOLEAN DEFAULT true,
     
+    -- Cheating detection settings
+    console_detection BOOLEAN DEFAULT false, -- Detect developer console usage
+    translation_detection BOOLEAN DEFAULT false, -- Detect translation tools
+    allow_word_by_word_translation BOOLEAN DEFAULT false, -- Allow text selection for translation
+    allow_word_by_word_definition BOOLEAN DEFAULT false, -- Allow text selection for definitions
+    visibility_change_detection BOOLEAN DEFAULT false, -- Detect tab switching
+    location_detection BOOLEAN DEFAULT false, -- Monitor location changes
+    
     -- Questions and content
     questions JSONB DEFAULT '[]'::jsonb, -- Array of question objects
     total_points DECIMAL(10, 2) DEFAULT 0,
@@ -179,3 +187,59 @@ CREATE POLICY "Students update own attempts" ON exam_attempts
 -- Trigger for exam_attempts updated_at
 CREATE TRIGGER update_exam_attempts_updated_at BEFORE UPDATE ON exam_attempts
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Exam violations table to track cheating detection events
+CREATE TABLE IF NOT EXISTS exam_violations (
+    violation_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    exam_id UUID REFERENCES exams(exam_id) ON DELETE CASCADE,
+    attempt_id UUID REFERENCES exam_attempts(attempt_id) ON DELETE CASCADE,
+    student_id TEXT NOT NULL, -- Clerk user ID
+    
+    -- Violation details
+    violation_type VARCHAR(50) NOT NULL, -- console, visibility, translation, location, context_menu
+    timestamp TIMESTAMPTZ DEFAULT NOW(),
+    acknowledged BOOLEAN DEFAULT false,
+    details JSONB DEFAULT '{}'::jsonb, -- Additional data (e.g., location coordinates)
+    
+    -- Metadata
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create indexes for exam_violations
+CREATE INDEX idx_exam_violations_exam ON exam_violations(exam_id);
+CREATE INDEX idx_exam_violations_attempt ON exam_violations(attempt_id);
+CREATE INDEX idx_exam_violations_student ON exam_violations(student_id);
+CREATE INDEX idx_exam_violations_type ON exam_violations(violation_type);
+CREATE INDEX idx_exam_violations_timestamp ON exam_violations(timestamp);
+
+-- RLS Policies for exam_violations
+ALTER TABLE exam_violations ENABLE ROW LEVEL SECURITY;
+
+-- Students can view their own violations
+CREATE POLICY "Students view own violations" ON exam_violations
+    FOR SELECT
+    USING (student_id = (auth.jwt() ->> 'sub'::text));
+
+-- Teachers/admins can view all violations for their exams
+CREATE POLICY "Teachers view exam violations" ON exam_violations
+    FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM exams
+            WHERE exams.exam_id = exam_violations.exam_id
+            AND (
+                exams.creator_id = (auth.jwt() ->> 'sub'::text)
+                OR exams.collaborator_ids::jsonb ? (auth.jwt() ->> 'sub'::text)
+            )
+        )
+    );
+
+-- Students can create their own violations (logged automatically)
+CREATE POLICY "Students create violations" ON exam_violations
+    FOR INSERT
+    WITH CHECK (student_id = (auth.jwt() ->> 'sub'::text));
+
+-- Students can update acknowledgement of their violations
+CREATE POLICY "Students update own violations" ON exam_violations
+    FOR UPDATE
+    USING (student_id = (auth.jwt() ->> 'sub'::text));

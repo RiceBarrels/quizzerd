@@ -102,13 +102,23 @@ const CodeEditor = memo(function CodeEditor({
   const monacoRef = useRef<typeof Monaco | null>(null);
   const modelsRef = useRef<Map<string, Monaco.editor.ITextModel>>(new Map());
   const isInitializedRef = useRef<boolean>(false);
+  const lastSyncedFilesRef = useRef<string>('');
 
-  // Sync external files prop with internal state
+  // Sync external files prop with internal state only when files structurally change
   useEffect(() => {
     if (files && files.length > 0) {
-      setEditorFiles(files);
-      if (!files.find(f => f.name === activeFile)) {
-        setActiveFile(files[0].name);
+      // Create a signature of the files to detect actual changes
+      const filesSignature = files.map(f => f.name).join(',');
+      
+      // Only update if the structure has actually changed
+      if (filesSignature !== lastSyncedFilesRef.current) {
+        lastSyncedFilesRef.current = filesSignature;
+        setEditorFiles(files);
+        
+        // Update active file if current one doesn't exist
+        if (!files.find(f => f.name === activeFile)) {
+          setActiveFile(files[0].name);
+        }
       }
     }
   }, [files, activeFile]);
@@ -651,13 +661,18 @@ const CodeEditor = memo(function CodeEditor({
 
   const handleEditorDidMount = (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => {
     // Check if editor is already disposed
-    if (editor.getModel === undefined) {
-      console.warn('Editor is already disposed, skipping initialization');
+    try {
+      if (!editor || typeof editor.getModel !== 'function' || (editor as any)._isDisposed) {
+        console.warn('Editor is already disposed, skipping initialization');
+        return;
+      }
+    } catch (e) {
+      console.warn('Editor validation failed:', e);
       return;
     }
 
-    // Prevent double initialization
-    if (isInitializedRef.current) {
+    // Prevent double initialization (but allow re-init if previous was disposed)
+    if (isInitializedRef.current && editorRef.current && !(editorRef.current as any)._isDisposed) {
       console.warn('Editor already initialized, skipping...');
       return;
     }
@@ -735,7 +750,16 @@ const CodeEditor = memo(function CodeEditor({
       const isDragging = document.querySelector('[data-dragging="true"]');
 
       if (!isDragging) {
-        // Dispose all models to prevent memory leaks
+        // Dispose the editor instance first
+        if (editorRef.current) {
+          try {
+            editorRef.current.dispose();
+          } catch (e) {
+            console.warn('Error disposing editor:', e);
+          }
+        }
+
+        // Then dispose all models to prevent memory leaks
         modelsRef.current.forEach(model => {
           try {
             if (!model.isDisposed()) {
@@ -797,6 +821,9 @@ const CodeEditor = memo(function CodeEditor({
     setActiveFile(newFileName);
     setNewFileName('');
     setShowAddFile(false);
+    
+    // Update the ref to prevent re-sync from overwriting
+    lastSyncedFilesRef.current = updatedFiles.map(f => f.name).join(',');
 
     // Create a model for the new file
     if (monacoRef.current && !modelsRef.current.has(newFileName)) {
@@ -804,29 +831,39 @@ const CodeEditor = memo(function CodeEditor({
       const model = monacoRef.current.editor.createModel(newFile.content, language);
       modelsRef.current.set(newFileName, model);
 
-      // Listen to model changes
+      // Listen to model changes - use a function to get the current fileName
       model.onDidChangeContent(() => {
         const updatedContent = model.getValue();
-        setEditorFiles(prev => {
-          const updated = prev.map(f =>
-            f.name === newFileName ? { ...f, content: updatedContent } : f
-          );
+        // Find the fileName from the model map
+        const fileName = Array.from(modelsRef.current.entries()).find(([_, m]) => m === model)?.[0];
+        
+        if (fileName) {
+          setEditorFiles(prev => {
+            const updated = prev.map(f =>
+              f.name === fileName ? { ...f, content: updatedContent } : f
+            );
 
-          // Call onChange with updated files
-          if (onChange) {
-            onChange(updated);
-          }
+            // Call onChange with updated files
+            if (onChange) {
+              onChange(updated);
+            }
 
-          return updated;
-        });
+            return updated;
+          });
+        }
       });
 
-      // Switch to the new model
-      if (editorRef.current) {
-        editorRef.current.setModel(model);
+      // Switch to the new model only if editor exists and isn't disposed
+      if (editorRef.current && !(editorRef.current as any)._isDisposed) {
+        try {
+          editorRef.current.setModel(model);
+        } catch (e) {
+          console.warn('Could not set model for new file:', e);
+        }
       }
     }
 
+    // Call onChange with updated files list
     if (onChange) {
       onChange(updatedFiles);
     }
@@ -840,22 +877,38 @@ const CodeEditor = memo(function CodeEditor({
 
     const updatedFiles = editorFiles.filter(f => f.name !== fileName);
     setEditorFiles(updatedFiles);
+    
+    // Update the ref to prevent re-sync from overwriting
+    lastSyncedFilesRef.current = updatedFiles.map(f => f.name).join(',');
 
     // Dispose the model for the removed file
     const model = modelsRef.current.get(fileName);
     if (model) {
-      model.dispose();
-      modelsRef.current.delete(fileName);
+      try {
+        if (!model.isDisposed()) {
+          model.dispose();
+        }
+        modelsRef.current.delete(fileName);
+      } catch (e) {
+        console.warn('Error disposing model:', e);
+        modelsRef.current.delete(fileName);
+      }
     }
 
     if (activeFile === fileName) {
       const newActiveFile = updatedFiles[0].name;
       setActiveFile(newActiveFile);
 
-      // Switch to the new active file's model
-      const newModel = modelsRef.current.get(newActiveFile);
-      if (newModel && editorRef.current) {
-        editorRef.current.setModel(newModel);
+      // Switch to the new active file's model only if editor is not disposed
+      if (editorRef.current && !(editorRef.current as any)._isDisposed) {
+        const newModel = modelsRef.current.get(newActiveFile);
+        if (newModel && !newModel.isDisposed()) {
+          try {
+            editorRef.current.setModel(newModel);
+          } catch (e) {
+            console.warn('Could not set model after file removal:', e);
+          }
+        }
       }
     }
 
@@ -878,7 +931,7 @@ const CodeEditor = memo(function CodeEditor({
     // Check if editor is disposed before trying to use it
     try {
       // Check if editor is disposed
-      if (editorRef.current.getModel === undefined) {
+      if (!editorRef.current || (editorRef.current as any)._isDisposed || typeof editorRef.current.getModel !== 'function') {
         console.warn('Editor is disposed, skipping model switch');
         return;
       }
@@ -895,21 +948,26 @@ const CodeEditor = memo(function CodeEditor({
           const newModel = monacoRef.current.editor.createModel(currentFile.content, language);
           modelsRef.current.set(activeFile, newModel);
 
-          // Listen to model changes
+          // Listen to model changes - use a closure-safe approach
           newModel.onDidChangeContent(() => {
             const updatedContent = newModel.getValue();
-            setEditorFiles(prev => {
-              const updated = prev.map(f =>
-                f.name === activeFile ? { ...f, content: updatedContent } : f
-              );
+            // Find the fileName from the model map to avoid closure issues
+            const fileName = Array.from(modelsRef.current.entries()).find(([_, m]) => m === newModel)?.[0];
+            
+            if (fileName) {
+              setEditorFiles(prev => {
+                const updated = prev.map(f =>
+                  f.name === fileName ? { ...f, content: updatedContent } : f
+                );
 
-              // Call onChange with updated files
-              if (onChange) {
-                onChange(updated);
-              }
+                // Call onChange with updated files
+                if (onChange) {
+                  onChange(updated);
+                }
 
-              return updated;
-            });
+                return updated;
+              });
+            }
           });
 
           model = newModel;

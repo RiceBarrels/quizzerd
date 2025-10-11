@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, FilePlus } from 'lucide-react';
 import QuestionCard from './QuestionCard';
 import { ExamItem } from '@/types/exam';
+import { useRef, useEffect, useCallback } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -31,6 +32,10 @@ interface QuestionsTabProps {
   onAddNewQuestion: () => void;
   onAddPageBreak: () => void;
   onReorderQuestions?: (items: ExamItem[]) => void;
+  onOpenCodeEditor?: (questionIndex: number) => void;
+  onScrollToQuestionRef?: (scrollFn: (questionId: string, isManualClick?: boolean) => void) => void;
+  activeQuestionId?: string | null;
+  onActiveQuestionIdChange?: (id: string | null) => void;
 }
 
 export default function QuestionsTab({
@@ -42,7 +47,11 @@ export default function QuestionsTab({
   onRemoveQuestion,
   onAddNewQuestion,
   onAddPageBreak,
-  onReorderQuestions
+  onReorderQuestions,
+  onOpenCodeEditor,
+  onScrollToQuestionRef,
+  activeQuestionId,
+  onActiveQuestionIdChange
 }: QuestionsTabProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -54,6 +63,12 @@ export default function QuestionsTab({
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  const questionRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const manualScrollRef = useRef(false);
+  const manualScrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const observerDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const scrollEndTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   function handleDragEnd(event: DragEndEvent): void {
     const { active, over } = event;
@@ -67,62 +82,255 @@ export default function QuestionsTab({
     }
   }
 
+  // Function to find and highlight the most visible question
+  const highlightMostVisibleQuestion = useCallback(() => {
+    if (!onActiveQuestionIdChange || manualScrollRef.current) return;
+
+    const viewportHeight = window.innerHeight;
+    const viewportCenter = viewportHeight / 2;
+    
+    let closestQuestionId = '';
+    let closestDistance = Infinity;
+
+    Object.entries(questionRefs.current).forEach(([questionId, element]) => {
+      if (element) {
+        const rect = element.getBoundingClientRect();
+        const elementCenter = rect.top + rect.height / 2;
+        const distance = Math.abs(elementCenter - viewportCenter);
+
+        // Check if element is in viewport
+        if (rect.top < viewportHeight && rect.bottom > 0) {
+          if (distance < closestDistance) {
+            closestQuestionId = questionId;
+            closestDistance = distance;
+          }
+        }
+      }
+    });
+
+    if (closestQuestionId) {
+      // Update even if it's the same to ensure consistency
+      onActiveQuestionIdChange(closestQuestionId);
+    }
+  }, [onActiveQuestionIdChange]);
+
+  const scrollToQuestion = useCallback((questionId: string, isManualClick?: boolean) => {
+    console.log('📍 scrollToQuestion called:', { questionId, isManualClick });
+    const element = questionRefs.current[questionId];
+    if (element) {
+      if (onActiveQuestionIdChange) {
+        onActiveQuestionIdChange(questionId);
+      }
+      
+      // If this is a manual click, pause the Intersection Observer temporarily
+      if (isManualClick) {
+        console.log('👆 Manual click detected - pausing auto-sync');
+        manualScrollRef.current = true;
+        
+        // Clear any existing timeout
+        if (manualScrollTimeoutRef.current) {
+          console.log('🧹 Clearing existing manual scroll timeout:', manualScrollTimeoutRef.current);
+          clearTimeout(manualScrollTimeoutRef.current);
+        }
+        
+        // Clear scroll end timeout to prevent interference
+        if (scrollEndTimeoutRef.current) {
+          console.log('🧹 Clearing scroll end timeout:', scrollEndTimeoutRef.current);
+          clearTimeout(scrollEndTimeoutRef.current);
+        }
+        
+        // Resume automatic highlighting after a shorter delay (800ms should be enough for smooth scroll)
+        console.log('⏱️  Setting 800ms timeout to resume auto-sync');
+        const timeoutId = setTimeout(() => {
+          console.log('🔄 After 800ms → Auto-sync resumes AND immediately syncs the sidebar');
+          manualScrollRef.current = false;
+          // Immediately trigger highlighting after resuming
+          highlightMostVisibleQuestion();
+        }, 800);
+        manualScrollTimeoutRef.current = timeoutId;
+        console.log('✅ Timeout created with ID:', timeoutId);
+      }
+      
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      console.log('❌ Element not found for questionId:', questionId);
+    }
+  }, [onActiveQuestionIdChange, highlightMostVisibleQuestion]);
+
+  // Expose scroll function to parent via callback
+  useEffect(() => {
+    if (onScrollToQuestionRef) {
+      onScrollToQuestionRef(scrollToQuestion);
+    }
+  }, [onScrollToQuestionRef]);
+
+  // Detect scroll end and highlight the most visible question
+  useEffect(() => {
+    if (!onActiveQuestionIdChange) return;
+
+    const handleScroll = () => {
+      // Clear existing timeout
+      if (scrollEndTimeoutRef.current) {
+        clearTimeout(scrollEndTimeoutRef.current);
+      }
+
+      // Wait for scroll to end (200ms after last scroll event)
+      scrollEndTimeoutRef.current = setTimeout(() => {
+        highlightMostVisibleQuestion();
+      }, 200);
+    };
+
+    // Listen to scroll events on the window
+    window.addEventListener('scroll', handleScroll, true);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll, true);
+      if (scrollEndTimeoutRef.current) {
+        clearTimeout(scrollEndTimeoutRef.current);
+      }
+    };
+  }, [onActiveQuestionIdChange, highlightMostVisibleQuestion]);
+
+  // Intersection Observer to highlight questions in sidebar based on scroll position
+  useEffect(() => {
+    if (!onActiveQuestionIdChange) return;
+
+    const observerOptions = {
+      root: null, // viewport
+      rootMargin: '-10% 0px -60% 0px', // Trigger when question is in the upper portion of viewport
+      threshold: [0, 0.1, 0.5, 0.9, 1], // Simplified thresholds for better stability
+    };
+
+    const observerCallback = (entries: IntersectionObserverEntry[]) => {
+      // Skip automatic highlighting if user manually clicked a question
+      if (manualScrollRef.current) return;
+
+      // Clear existing debounce timer
+      if (observerDebounceRef.current) {
+        clearTimeout(observerDebounceRef.current);
+      }
+
+      // Debounce the highlighting update to prevent flashing
+      observerDebounceRef.current = setTimeout(() => {
+        // Skip if manual scroll is still active
+        if (manualScrollRef.current) return;
+
+        // Find the most visible question
+        const intersectingEntries = entries.filter(entry => entry.isIntersecting);
+        
+        if (intersectingEntries.length === 0) return;
+
+        // Get the entry with the highest intersection ratio
+        const mostVisibleEntry = intersectingEntries.reduce((prev, current) => {
+          return current.intersectionRatio > prev.intersectionRatio ? current : prev;
+        });
+
+        // Only update if intersection ratio is significant enough (prevents micro-scrolling changes)
+        if (mostVisibleEntry.intersectionRatio < 0.1) return;
+
+        const element = mostVisibleEntry.target as HTMLElement;
+        const questionId = element.getAttribute('data-question-id');
+        
+        // Only update if the question ID is different from current
+        if (questionId && questionId !== activeQuestionId) {
+          onActiveQuestionIdChange(questionId);
+        }
+      }, 150); // 150ms debounce delay for smoother experience
+    };
+
+    const observer = new IntersectionObserver(observerCallback, observerOptions);
+
+    // Observe all question elements
+    Object.entries(questionRefs.current).forEach(([questionId, element]) => {
+      if (element) {
+        observer.observe(element);
+      }
+    });
+
+    return () => {
+      observer.disconnect();
+      // Clear timeouts on cleanup
+      if (manualScrollTimeoutRef.current) {
+        console.log('🧹 CLEANUP: Clearing manual scroll timeout');
+        clearTimeout(manualScrollTimeoutRef.current);
+      }
+      if (observerDebounceRef.current) {
+        clearTimeout(observerDebounceRef.current);
+      }
+      if (scrollEndTimeoutRef.current) {
+        clearTimeout(scrollEndTimeoutRef.current);
+      }
+    };
+  }, [items, onActiveQuestionIdChange]);
+
   // Extract item IDs for SortableContext
   const itemIds: UniqueIdentifier[] = items.map(item => item.question_id);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">Exam Questions</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Add and manage exam questions.
-          </p>
-        </div>
-      </div>
+    <div className="flex gap-6 min-h-full py-4">
+      {/* Spacer for fixed sidebar (from parent) */}
+      <div className="w-72 shrink-0"></div>
 
-
-
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
-          <div className="space-y-4">
-            {items.map((item, index) => (
-              <QuestionCard
-                key={item.question_id}
-                id={item.question_id}
-                item={item}
-                index={index}
-                onUpdateQuestion={onUpdateQuestion}
-                onAddOption={onAddOption}
-                onUpdateOption={onUpdateOption}
-                onRemoveOption={onRemoveOption}
-                onRemoveQuestion={onRemoveQuestion}
-              />
-            ))}
+      {/* Main Content */}
+      <div className="flex-1 space-y-6">
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">Exam Questions</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Add and manage exam questions.
+            </p>
           </div>
-        </SortableContext>
-      </DndContext>
+        </div>
 
-      <div className="flex gap-2">
-        <Button
-          onClick={onAddNewQuestion}
-          className="flex-1"
-          variant="outline"
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
         >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Question
-        </Button>
-        <Button
-          onClick={onAddPageBreak}
-          variant="outline"
-        >
-          <FilePlus className="w-4 h-4 mr-2" />
-          Add Page Break
-        </Button>
+          <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+            <div className="space-y-4">
+              {items.map((item, index) => (
+                <div
+                  key={item.question_id}
+                  data-question-id={item.question_id}
+                  ref={(el) => {
+                    questionRefs.current[item.question_id] = el;
+                  }}
+                >
+                  <QuestionCard
+                    id={item.question_id}
+                    item={item}
+                    index={index}
+                    onUpdateQuestion={onUpdateQuestion}
+                    onAddOption={onAddOption}
+                    onUpdateOption={onUpdateOption}
+                    onRemoveOption={onRemoveOption}
+                    onRemoveQuestion={onRemoveQuestion}
+                    onOpenCodeEditor={onOpenCodeEditor}
+                  />
+                </div>
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+
+        <div className="flex gap-2">
+          <Button
+            onClick={onAddNewQuestion}
+            className="flex-1"
+            variant="outline"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add Question
+          </Button>
+          <Button
+            onClick={onAddPageBreak}
+            variant="outline"
+          >
+            <FilePlus className="w-4 h-4 mr-2" />
+            Add Page Break
+          </Button>
+        </div>
       </div>
     </div>
   );

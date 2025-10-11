@@ -46,6 +46,7 @@ interface QuestionCardProps {
   onUpdateOption: (questionIndex: number, optionIndex: number, value: string) => void;
   onRemoveOption: (questionIndex: number, optionIndex: number) => void;
   onRemoveQuestion: (index: number) => void;
+  onOpenCodeEditor?: (questionIndex: number) => void;
 }
 
 const QuestionCard = memo(function QuestionCard({
@@ -55,7 +56,8 @@ const QuestionCard = memo(function QuestionCard({
   onAddOption,
   onUpdateOption,
   onRemoveOption,
-  onRemoveQuestion
+  onRemoveQuestion,
+  onOpenCodeEditor
 }: QuestionCardProps) {
   const [open, setOpen] = useState(false);
 
@@ -173,7 +175,7 @@ const QuestionCard = memo(function QuestionCard({
                   </RadioGroup>
                 ) : (
                   <Checkbox
-                    checked={Array.isArray(item.correct_answer) && item.correct_answer.includes(optionIndex)}
+                    checked={Array.isArray(item.correct_answer) && (item.correct_answer as number[]).includes(optionIndex)}
                     onCheckedChange={(checked) => {
                       const currentAnswers = Array.isArray(item.correct_answer) ? item.correct_answer as number[] : [];
                       if (checked) {
@@ -479,12 +481,19 @@ const QuestionCard = memo(function QuestionCard({
         {item.question_type === 'coding' && (
           <div className="space-y-2">
             <Label>Starter Code</Label>
-            <StableCodeEditor
-              questionId={item.question_id}
-              files={item.starter_files || [{ name: 'index.js', content: '// Write your code here' }]}
-              onChange={(files) => onUpdateQuestion(index, 'starter_files', files)}
-              height="400px"
-            />
+            <Button
+              variant="outline"
+              className="w-full h-32 flex flex-col items-center justify-center gap-3 border-2 border-dashed hover:border-primary hover:bg-accent/50 transition-all"
+              onClick={() => onOpenCodeEditor?.(index)}
+            >
+              <Code className="h-12 w-12 text-muted-foreground" />
+              <div className="text-center">
+                <div className="text-base font-medium">Open Fullscreen Code Editor</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {item.starter_files?.length || 1} file(s) • Click to edit code
+                </div>
+              </div>
+            </Button>
             <div className="space-y-2 mt-4">
               <Label>Test Cases (Optional)</Label>
               <TextEditor

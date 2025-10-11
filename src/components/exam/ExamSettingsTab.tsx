@@ -26,12 +26,26 @@ interface ExamSettingsTabProps {
   shuffleItems: boolean;
   showResultsImmediately: boolean;
   isPublic: boolean;
+  // Cheating detection settings
+  consoleDetection?: boolean;
+  translationDetection?: boolean;
+  allowWordByWordTranslation?: boolean;
+  allowWordByWordDefinition?: boolean;
+  visibilityChangeDetection?: boolean;
+  locationDetection?: boolean;
   onDurationChange: (value: number) => void;
   onAttemptsChange: (value: number) => void;
   onPassingScoreChange: (value: number) => void;
   onShuffleChange: (value: boolean) => void;
   onShowResultsChange: (value: boolean) => void;
   onPublicChange: (value: boolean) => void;
+  // Cheating detection handlers
+  onConsoleDetectionChange?: (value: boolean) => void;
+  onTranslationDetectionChange?: (value: boolean) => void;
+  onAllowWordByWordTranslationChange?: (value: boolean) => void;
+  onAllowWordByWordDefinitionChange?: (value: boolean) => void;
+  onVisibilityChangeDetectionChange?: (value: boolean) => void;
+  onLocationDetectionChange?: (value: boolean) => void;
   onDeleteExam?: () => void;
 }
 
@@ -42,12 +56,24 @@ export default function ExamSettingsTab({
   shuffleItems,
   showResultsImmediately,
   isPublic,
+  consoleDetection = false,
+  translationDetection = false,
+  allowWordByWordTranslation = false,
+  allowWordByWordDefinition = false,
+  visibilityChangeDetection = false,
+  locationDetection = false,
   onDurationChange,
   onAttemptsChange,
   onPassingScoreChange,
   onShuffleChange,
   onShowResultsChange,
   onPublicChange,
+  onConsoleDetectionChange,
+  onTranslationDetectionChange,
+  onAllowWordByWordTranslationChange,
+  onAllowWordByWordDefinitionChange,
+  onVisibilityChangeDetectionChange,
+  onLocationDetectionChange,
   onDeleteExam
 }: ExamSettingsTabProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -140,6 +166,95 @@ export default function ExamSettingsTab({
             <Switch
               checked={isPublic}
               onCheckedChange={onPublicChange}
+            />
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold mb-1">Cheating Detection</h3>
+            <p className="text-sm text-muted-foreground">
+              Configure security measures to prevent cheating during the exam
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Developer Console Detection</Label>
+              <p className="text-sm text-muted-foreground">
+                Detect if student opens browser developer tools
+              </p>
+            </div>
+            <Switch
+              checked={consoleDetection}
+              onCheckedChange={onConsoleDetectionChange}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Tab Switch Detection</Label>
+              <p className="text-sm text-muted-foreground">
+                Alert when student switches tabs or minimizes window
+              </p>
+            </div>
+            <Switch
+              checked={visibilityChangeDetection}
+              onCheckedChange={onVisibilityChangeDetectionChange}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Translation Detection</Label>
+              <p className="text-sm text-muted-foreground">
+                Detect if student uses translation tools
+              </p>
+            </div>
+            <Switch
+              checked={translationDetection}
+              onCheckedChange={onTranslationDetectionChange}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Allow Word Translation</Label>
+              <p className="text-sm text-muted-foreground">
+                Permit students to translate individual words
+              </p>
+            </div>
+            <Switch
+              checked={allowWordByWordTranslation}
+              onCheckedChange={onAllowWordByWordTranslationChange}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Allow Word Definitions</Label>
+              <p className="text-sm text-muted-foreground">
+                Permit students to look up word definitions
+              </p>
+            </div>
+            <Switch
+              checked={allowWordByWordDefinition}
+              onCheckedChange={onAllowWordByWordDefinitionChange}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Location Tracking</Label>
+              <p className="text-sm text-muted-foreground">
+                Monitor student location during exam (requires permission)
+              </p>
+            </div>
+            <Switch
+              checked={locationDetection}
+              onCheckedChange={onLocationDetectionChange}
             />
           </div>
         </div>

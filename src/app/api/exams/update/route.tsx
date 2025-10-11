@@ -32,7 +32,14 @@ export async function PUT(request) {
       total_points,
       status,
       start_date,
-      end_date
+      end_date,
+      // Cheating detection settings
+      console_detection,
+      translation_detection,
+      allow_word_by_word_translation,
+      allow_word_by_word_definition,
+      visibility_change_detection,
+      location_detection
     } = body;
 
     // Validate required fields
@@ -128,6 +135,13 @@ export async function PUT(request) {
       status: status || 'draft',
       start_date: start_date || null,
       end_date: end_date || null,
+      // Cheating detection settings
+      console_detection: console_detection || false,
+      translation_detection: translation_detection || false,
+      allow_word_by_word_translation: allow_word_by_word_translation || false,
+      allow_word_by_word_definition: allow_word_by_word_definition || false,
+      visibility_change_detection: visibility_change_detection || false,
+      location_detection: location_detection || false,
       updated_at: new Date().toISOString()
     };
 
