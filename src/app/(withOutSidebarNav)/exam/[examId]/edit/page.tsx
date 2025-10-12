@@ -7,7 +7,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContents, TabsContent } from '@/compon
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Loader2, X, FileText, ListTodoIcon, ListChecksIcon, TextAlignStartIcon, NotepadTextIcon, CircleSlashIcon, ChevronDown, SlidersHorizontal, Calendar, Clock, Upload, Star, Code, Heading, Minus } from 'lucide-react';
+import { Loader2, X, FileText, ListTodoIcon, ListChecksIcon, TextAlignStartIcon, NotepadTextIcon, CircleSlashIcon, ChevronDown, SlidersHorizontal, Calendar, Clock, Upload, Star, Code, Heading, Minus, GripVertical } from 'lucide-react';
 import { QuestionTypeOption } from '@/types/exam';
 import CodeEditor from '@/components/editors/CodeEditor';
 import ExamHeader from '@/components/exam/ExamHeader';
@@ -18,6 +18,23 @@ import { ExamItem } from '@/types/exam';
 import { PageParams } from '@/app/layout';
 import { ScrollPosition } from '../layout';
 import { AnimatePresence, motion } from 'motion/react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 export default function EditExamPage({ params }: { params: Promise<PageParams> }) {
   const router = useRouter();
@@ -61,7 +78,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
   const scrollToQuestionRef = useRef<((questionId: string, isManualClick?: boolean) => void) | null>(null);
   const [sidebarPosition, setSidebarPosition] = useState({ top: 64, maxHeight: 'calc(100vh - 312px)' });
   const sidebarScrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const sidebarQuestionRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
+  const sidebarQuestionRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   // Items (questions)
   const [items, setItems] = useState<ExamItem[]>([]);
@@ -92,6 +109,18 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     { value: 'section_header', label: 'Section Header', icon: Heading },
     { value: 'page_break', label: 'Page Break', icon: Minus },
   ];
+
+  // Sensors for drag and drop in sidebar
+  const sidebarSensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   useEffect(() => {
     fetchExam();
@@ -157,7 +186,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
       explanation: '',
       required: true
     };
-    setItems([...items, newQuestion]);
+    setItems(prevItems => [...prevItems, newQuestion]);
     setActiveTab('questions');
   };
 
@@ -170,58 +199,65 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
       points: 0,
       required: false
     };
-    setItems([...items, pageBreak]);
+    setItems(prevItems => [...prevItems, pageBreak]);
     setActiveTab('questions');
   };
 
   const updateQuestion = (index: number, field: keyof ExamItem, value: any) => {
-    console.log(`📝 updateQuestion called:`, {
-      index,
-      field,
-      value: field === 'question_text' ? value.substring(0, 100) + '...' : value,
-      currentValue: items[index]?.[field]
+    setItems(prevItems => {
+      console.log(`📝 updateQuestion called:`, {
+        index,
+        field,
+        value: field === 'question_text' ? value.substring(0, 100) + '...' : value,
+        currentValue: prevItems[index]?.[field]
+      });
+      
+      const updatedItems = [...prevItems];
+      updatedItems[index] = {
+        ...updatedItems[index],
+        [field]: value
+      };
+      return updatedItems;
     });
-    
-    const updatedItems = [...items];
-    updatedItems[index] = {
-      ...updatedItems[index],
-      [field]: value
-    };
-    setItems(updatedItems);
   };
 
   const addOption = (questionIndex: number) => {
-    const updatedItems = [...items];
-    if (updatedItems[questionIndex]?.options) {
-      updatedItems[questionIndex].options!.push('');
-      setItems(updatedItems);
-    }
+    setItems(prevItems => {
+      const updatedItems = [...prevItems];
+      if (updatedItems[questionIndex]?.options) {
+        updatedItems[questionIndex].options!.push('');
+      }
+      return updatedItems;
+    });
   };
 
   const updateOption = (questionIndex: number, optionIndex: number, value: string) => {
-    const updatedItems = [...items];
-    if (updatedItems[questionIndex]?.options) {
-      updatedItems[questionIndex].options![optionIndex] = value;
-      setItems(updatedItems);
-    }
+    setItems(prevItems => {
+      const updatedItems = [...prevItems];
+      if (updatedItems[questionIndex]?.options) {
+        updatedItems[questionIndex].options![optionIndex] = value;
+      }
+      return updatedItems;
+    });
   };
 
   const removeOption = (questionIndex: number, optionIndex: number) => {
-    const updatedItems = [...items];
-    if (updatedItems[questionIndex]?.options) {
-      updatedItems[questionIndex].options!.splice(optionIndex, 1);
-      // Adjust correct answer if needed
-      const correctAnswer = updatedItems[questionIndex].correct_answer;
-      if (typeof correctAnswer === 'number' && correctAnswer >= optionIndex && correctAnswer > 0) {
-        updatedItems[questionIndex].correct_answer = correctAnswer - 1;
+    setItems(prevItems => {
+      const updatedItems = [...prevItems];
+      if (updatedItems[questionIndex]?.options) {
+        updatedItems[questionIndex].options!.splice(optionIndex, 1);
+        // Adjust correct answer if needed
+        const correctAnswer = updatedItems[questionIndex].correct_answer;
+        if (typeof correctAnswer === 'number' && correctAnswer >= optionIndex && correctAnswer > 0) {
+          updatedItems[questionIndex].correct_answer = correctAnswer - 1;
+        }
       }
-      setItems(updatedItems);
-    }
+      return updatedItems;
+    });
   };
 
   const removeQuestion = (index: number) => {
-    const updatedItems = items.filter((_, i) => i !== index);
-    setItems(updatedItems);
+    setItems(prevItems => prevItems.filter((_, i) => i !== index));
   };
 
   const reorderQuestions = (newItems: ExamItem[]) => {
@@ -323,6 +359,20 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
       scrollToQuestionRef.current(questionId, true); // true indicates manual click
     } else {
       console.log('⚠️  scrollToQuestionRef.current is null');
+    }
+  };
+
+  const handleSidebarDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (active.id !== over?.id) {
+      const oldIndex = items.findIndex((item) => item.question_id === active.id);
+      const newIndex = items.findIndex((item) => item.question_id === over!.id);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const reorderedItems = arrayMove(items, oldIndex, newIndex);
+        reorderQuestions(reorderedItems);
+      }
     }
   };
 
@@ -554,6 +604,117 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     });
   }, [activeQuestionId, activeTab]);
 
+  // Sortable Sidebar Button Component
+  const SortableSidebarButton = ({ item, questionNumber }: { item: ExamItem; questionNumber: number }) => {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({
+      id: item.question_id,
+    });
+
+    const style: React.CSSProperties = {
+      transform: transform
+        ? CSS.Transform.toString({
+            ...transform,
+            scaleX: 1,
+            scaleY: 1,
+          })
+        : undefined,
+      transition,
+      opacity: isDragging ? 0.5 : 1,
+      pointerEvents: isDragging ? 'none' : 'auto', // Disable pointer events during drag
+    };
+
+    const questionTypeInfo = questionTypes.find(qt => qt.value === item.question_type);
+    const QuestionIcon = questionTypeInfo?.icon;
+
+    // Special rendering for page breaks
+    if (item.question_type === 'page_break') {
+      return (
+        <div
+          ref={setNodeRef}
+          style={style}
+          className="flex items-center gap-1 my-2"
+        >
+          <div
+            {...attributes}
+            {...listeners}
+            className={`flex-shrink-0 p-1 rounded hover:bg-accent/50 ${
+              isDragging ? 'cursor-grabbing' : 'cursor-grab'
+            }`}
+          >
+            <GripVertical className="h-3 w-3 text-muted-foreground" />
+          </div>
+          <div
+            onClick={() => handleSidebarQuestionClick(item.question_id)}
+            className={`flex-1 flex items-center gap-2 px-2.5 py-2 rounded-md border-2 border-dashed transition-all cursor-pointer hover:bg-accent/70 min-w-0 ${
+              activeQuestionId === item.question_id
+                ? 'bg-accent border-primary shadow-sm'
+                : 'border-muted-foreground/30 hover:border-border'
+            }`}
+          >
+            <Minus className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+            <span className="text-xs font-medium text-muted-foreground truncate overflow-hidden text-ellipsis whitespace-nowrap">Page Break</span>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        className="flex items-center gap-1"
+      >
+        <div
+          {...attributes}
+          {...listeners}
+          className={`flex-shrink-0 p-1 rounded hover:bg-accent/50 ${
+            isDragging ? 'cursor-grabbing' : 'cursor-grab'
+          }`}
+        >
+          <GripVertical className="h-3 w-3 text-muted-foreground" />
+        </div>
+        <button
+          onClick={() => handleSidebarQuestionClick(item.question_id)}
+          className={`flex-1 text-left px-2.5 py-2 rounded-md border transition-all hover:bg-accent/70 min-w-0 ${
+            activeQuestionId === item.question_id
+              ? 'bg-accent border-primary shadow-sm'
+              : 'border-transparent hover:border-border'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-2 min-w-0">
+            <div className="flex-1 min-w-0 overflow-hidden">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                {QuestionIcon && <QuestionIcon className="h-3 w-3 flex-shrink-0 text-muted-foreground" />}
+                <div className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                  {item.question_type === 'section_header' ? 'Section' : `Q${questionNumber}`}
+                </div>
+              </div>
+              <div className="text-xs font-medium truncate leading-relaxed overflow-hidden text-ellipsis whitespace-nowrap">
+                {getQuestionTitle(item)}
+              </div>
+            </div>
+            {item.question_type !== 'section_header' && (
+              <div className="text-xs font-semibold text-primary mt-0.5 flex-shrink-0">
+                {item.points}
+              </div>
+            )}
+          </div>
+        </button>
+      </div>
+    );
+  };
+
+  const groupedPages = groupQuestionsByPages();
+  const sortableQuestionIds = items.map(item => item.question_id); // Include all items including page breaks
+  const hasSidebarQuestions = items.filter(item => item.question_type !== 'page_break').length > 0;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -626,104 +787,142 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
             key="questions-sidebar"
             className="w-72 z-50 fixed left-8" 
             style={{ top: `${sidebarPosition.top}px` }}
-            initial={{ opacity: 0, x: "-32rem" }} 
-            animate={{ opacity: 1, x: 0 }} 
-            transition={{ duration: 0.3, ease: "easeOut" }} 
-            exit={{ opacity: 0, x: "-32rem" }}
+            initial={{ opacity: 0, x: "-32rem", filter: "blur(8px)" }} 
+            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }} 
+            transition={{ duration: 0.3, type: "spring", visualDuration: 0.25, bounce: 0.3 }} 
+            exit={{ opacity: 0, x: "-32rem", filter: "blur(8px)" }}
           >
-            <div 
-              ref={sidebarScrollContainerRef}
-              className="bg-card overflow-y-auto border rounded-lg p-4 shadow-lg scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground/40" 
-              style={{ maxHeight: sidebarPosition.maxHeight }}
+            <DndContext
+              sensors={sidebarSensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleSidebarDragEnd}
             >
-              <h3 className="text-sm font-semibold mb-3">Questions Overview</h3>
-              <div className="space-y-3">
-                {items.length === 0 ? (
-                  <div className="text-sm text-muted-foreground p-3 text-center">
-                    No questions yet. Add your first question to get started.
-                  </div>
-                ) : groupQuestionsByPages().length === 0 ? (
-                  <div className="text-sm text-muted-foreground p-3 text-center">
-                    No questions to display.
-                  </div>
-                ) : (
-                  groupQuestionsByPages().map((pageItems, pageIndex) => {
-                    const pagePoints = pageItems.reduce((sum, item) => 
-                      sum + (item.question_type !== 'section_header' ? (item.points || 0) : 0), 0
-                    );
-                    const isPageActive = activeQuestionId ? getPageIndexForQuestion(activeQuestionId) === pageIndex : false;
-                    
-                    return (
-                      <div key={`page-${pageIndex}`} className="space-y-1.5">
-                        {pageIndex > 0 && (
-                          <div className="border-t my-2" />
-                        )}
-                        <div className={`flex items-center justify-between px-2 py-1.5 rounded-md transition-all duration-200 border ${
-                          isPageActive ? 'bg-primary/10 border-primary/20' : 'bg-muted/70 border-transparent'
-                        }`}>
-                          <div className="flex items-center gap-1.5">
-                            <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span className="text-xs font-semibold text-foreground">
-                              Page {pageIndex + 1}
-                            </span>
-                          </div>
-                          <span className="text-xs font-medium text-primary">
-                            {pagePoints} pts
-                          </span>
-                        </div>
-                        <div className="space-y-0.5 pl-1">
-                          {pageItems.map((item) => {
-                            const itemIndex = items.findIndex(i => i.question_id === item.question_id);
-                            const questionNumber = items
-                              .slice(0, itemIndex + 1)
-                              .filter(i => i.question_type !== 'section_header' && i.question_type !== 'page_break')
-                              .length;
-                            
-                            const questionTypeInfo = questionTypes.find(qt => qt.value === item.question_type);
-                            const QuestionIcon = questionTypeInfo?.icon;
-                            
-                            return (
-                              <button
+              <div 
+                ref={sidebarScrollContainerRef}
+                className="bg-card overflow-y-auto border rounded-lg p-4 shadow-lg scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground/40" 
+                style={{ maxHeight: sidebarPosition.maxHeight }}
+              >
+                <h3 className="text-sm font-semibold mb-3">Questions Overview</h3>
+                <div className="space-y-3">
+                  {items.length === 0 ? (
+                    <div className="text-sm text-muted-foreground p-3 text-center">
+                      No questions yet. Add your first question to get started.
+                    </div>
+                  ) : (
+                    <SortableContext
+                      items={sortableQuestionIds}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {(() => {
+                        let currentPageIndex = 0;
+                        let currentPageItems: React.ReactElement[] = [];
+                        const allPageGroups: React.ReactElement[] = [];
+
+                        items.forEach((item, idx) => {
+                          const questionNumber = items
+                            .slice(0, idx + 1)
+                            .filter(i => i.question_type !== 'section_header' && i.question_type !== 'page_break')
+                            .length;
+
+                          if (item.question_type === 'page_break') {
+                            // Push current page if it has items
+                            if (currentPageItems.length > 0) {
+                              const pagePoints = items
+                                .slice(currentPageIndex === 0 ? 0 : items.findIndex((it, i) => i < idx && items[i - 1]?.question_type === 'page_break') + 1, idx)
+                                .filter(it => it.question_type !== 'page_break')
+                                .reduce((sum, it) => sum + (it.question_type !== 'section_header' ? (it.points || 0) : 0), 0);
+
+                              allPageGroups.push(
+                                <div key={`page-group-${currentPageIndex}`} className="space-y-1.5">
+                                  {currentPageIndex > 0 && <div className="border-t my-2" />}
+                                  <div className="flex items-center justify-between px-2 py-1.5 rounded-md transition-all duration-200 border bg-muted/70 border-transparent">
+                                    <div className="flex items-center gap-1.5">
+                                      <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                                      <span className="text-xs font-semibold text-foreground">
+                                        Page {currentPageIndex + 1}
+                                      </span>
+                                    </div>
+                                    <span className="text-xs font-medium text-primary">
+                                      {pagePoints} pts
+                                    </span>
+                                  </div>
+                                  <div className="space-y-0.5 pl-1">
+                                    {currentPageItems}
+                                  </div>
+                                </div>
+                              );
+                              currentPageItems = [];
+                              currentPageIndex++;
+                            }
+
+                            // Add the page break itself as a draggable item
+                            allPageGroups.push(
+                              <div
                                 key={item.question_id}
                                 ref={(el) => {
                                   sidebarQuestionRefs.current[item.question_id] = el;
                                 }}
-                                onClick={() => handleSidebarQuestionClick(item.question_id)}
-                                className={`w-full text-left px-2.5 py-2 rounded-md border transition-all hover:bg-accent/70 ${
-                                  activeQuestionId === item.question_id
-                                    ? 'bg-accent border-primary shadow-sm'
-                                    : 'border-transparent hover:border-border'
-                                }`}
                               >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-1.5 mb-0.5">
-                                      {QuestionIcon && <QuestionIcon className="h-3 w-3 text-muted-foreground" />}
-                                      <div className="text-xs font-medium text-muted-foreground">
-                                        {item.question_type === 'section_header' ? 'Section' :
-                                        `Q${questionNumber}`}
-                                      </div>
-                                    </div>
-                                    <div className="text-xs font-medium truncate leading-relaxed">
-                                      {getQuestionTitle(item)}
-                                    </div>
-                                  </div>
-                                  {item.question_type !== 'section_header' && (
-                                    <div className="text-xs font-semibold text-primary mt-0.5">
-                                      {item.points}
-                                    </div>
-                                  )}
-                                </div>
-                              </button>
+                                <SortableSidebarButton
+                                  item={item}
+                                  questionNumber={questionNumber}
+                                />
+                              </div>
                             );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
+                          } else {
+                            // Regular question or section header
+                            currentPageItems.push(
+                              <div
+                                key={item.question_id}
+                                ref={(el) => {
+                                  sidebarQuestionRefs.current[item.question_id] = el;
+                                }}
+                              >
+                                <SortableSidebarButton
+                                  item={item}
+                                  questionNumber={questionNumber}
+                                />
+                              </div>
+                            );
+                          }
+                        });
+
+                        // Push the last page if it has items
+                        if (currentPageItems.length > 0) {
+                          const lastPageStartIdx = items.findLastIndex(it => it.question_type === 'page_break') + 1;
+                          const pagePoints = items
+                            .slice(lastPageStartIdx)
+                            .filter(it => it.question_type !== 'page_break')
+                            .reduce((sum, it) => sum + (it.question_type !== 'section_header' ? (it.points || 0) : 0), 0);
+
+                          allPageGroups.push(
+                            <div key={`page-group-${currentPageIndex}`} className="space-y-1.5">
+                              {currentPageIndex > 0 && <div className="border-t my-2" />}
+                              <div className="flex items-center justify-between px-2 py-1.5 rounded-md transition-all duration-200 border bg-muted/70 border-transparent">
+                                <div className="flex items-center gap-1.5">
+                                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                                  <span className="text-xs font-semibold text-foreground">
+                                    Page {currentPageIndex + 1}
+                                  </span>
+                                </div>
+                                <span className="text-xs font-medium text-primary">
+                                  {pagePoints} pts
+                                </span>
+                              </div>
+                              <div className="space-y-0.5 pl-1">
+                                {currentPageItems}
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return allPageGroups;
+                      })()}
+                    </SortableContext>
+                  )}
+                </div>
               </div>
-            </div>
+            </DndContext>
           </motion.div>
         )}
       </AnimatePresence>

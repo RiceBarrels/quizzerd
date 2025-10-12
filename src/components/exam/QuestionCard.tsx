@@ -563,7 +563,13 @@ export default function SortableQuestionCard(props: SortableQuestionCardProps) {
   });
 
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
+    transform: transform
+      ? CSS.Transform.toString({
+          ...transform,
+          scaleX: 1,
+          scaleY: 1,
+        })
+      : undefined,
     transition,
     opacity: isDragging ? 0.5 : 1,
     pointerEvents: isDragging ? 'none' : 'auto', // Disable pointer events during drag
