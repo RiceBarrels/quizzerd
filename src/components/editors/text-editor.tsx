@@ -38,12 +38,16 @@ export default function TextEditor({
   const editorId = useRef<string>(id || `editor-${Date.now()}`);
   const prevValueRef = useRef<string>(value);
   const observerRef = useRef<MutationObserver | null>(null);
+  const onChangeRef = useRef(onChange);
 
   const handleChange = useCallback(() => {
-    if (!quillRef.current || !onChange) return;
-    
-    const html = quillRef.current.root.innerHTML;
-    const text = quillRef.current.getText();
+    const quill = quillRef.current;
+    const onChangeFn = onChangeRef.current;
+
+    if (!quill || !onChangeFn) return;
+
+    const html = quill.root.innerHTML;
+    const text = quill.getText();
     const isEmpty = ['<p><br></p>', '<p></p>', ''].includes(html) || !text.trim();
     const newValue = isEmpty ? '' : html;
     
@@ -55,7 +59,11 @@ export default function TextEditor({
     });
     
     prevValueRef.current = newValue;
-    onChange(newValue);
+    onChangeFn(newValue);
+  }, []);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
   }, [onChange]);
 
   useEffect(() => {

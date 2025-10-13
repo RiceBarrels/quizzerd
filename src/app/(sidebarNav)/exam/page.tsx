@@ -1,15 +1,33 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useUser } from "@clerk/nextjs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { 
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { toast } from "sonner";
 import { 
   FileTextIcon, 
@@ -28,17 +46,23 @@ import {
   FileUp,
   Link2,
   AlertCircle,
-  Key
+  Key,
+  Copy,
+  Trash2,
+  Eye,
+  Share2,
+  Archive
 } from "lucide-react";
 import { useTransitionRouter } from "next-view-transitions";
 
 export default function ExamPage() {
+  const { isSignedIn, isLoaded } = useUser();
   const [exams, setExams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState("my-exams");
+  const [activeTab, setActiveTab] = useState(isSignedIn ? "my-exams" : "public");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importFormUrl, setImportFormUrl] = useState("");
@@ -49,6 +73,8 @@ export default function ExamPage() {
   const [loadingForms, setLoadingForms] = useState(false);
   const [importMode, setImportMode] = useState('url'); // 'url' or 'browse'
   const [classes, setClasses] = useState<any[]>([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [examToDelete, setExamToDelete] = useState<{id: string, name: string} | null>(null);
   const router = useTransitionRouter();
   const limit = 12;
 
@@ -71,6 +97,9 @@ export default function ExamPage() {
   }, [page, search, activeTab]);
 
   const fetchClasses = async () => {
+    // Only fetch classes if user is signed in
+    if (!isSignedIn) return;
+    
     try {
       const response = await fetch('/api/classes/get');
       const data = await response.json();
@@ -266,6 +295,98 @@ export default function ExamPage() {
     setPage(1);
   };
 
+  const handleDeleteExam = (examId: string, examName: string) => {
+    setExamToDelete({ id: examId, name: examName });
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteExam = async () => {
+    if (!examToDelete) return;
+
+    try {
+      const response = await fetch(`/api/exams/delete?examId=${examToDelete.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("Exam deleted successfully");
+        fetchExams();
+      } else {
+        toast.error(data.error || "Failed to delete exam");
+      }
+    } catch (error) {
+      console.error("Error deleting exam:", error);
+      toast.error("Failed to delete exam");
+    } finally {
+      setDeleteDialogOpen(false);
+      setExamToDelete(null);
+    }
+  };
+
+  const handleDuplicateExam = async (exam: any) => {
+    try {
+      const duplicatedExam = {
+        ...exam,
+        exam_name: `${exam.exam_name} (Copy)`,
+        status: 'draft',
+        created_at: undefined,
+        updated_at: undefined,
+        exam_id: undefined
+      };
+
+      const response = await fetch('/api/exams/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(duplicatedExam)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("Exam duplicated successfully");
+        fetchExams();
+      } else {
+        toast.error(data.error || "Failed to duplicate exam");
+      }
+    } catch (error) {
+      console.error("Error duplicating exam:", error);
+      toast.error("Failed to duplicate exam");
+    }
+  };
+
+  const handleTogglePublish = async (examId: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'published' ? 'draft' : 'published';
+    
+    try {
+      const response = await fetch('/api/exams/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exam_id: examId, status: newStatus })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success(`Exam ${newStatus === 'published' ? 'published' : 'unpublished'} successfully`);
+        fetchExams();
+      } else {
+        toast.error(data.error || "Failed to update exam status");
+      }
+    } catch (error) {
+      console.error("Error updating exam status:", error);
+      toast.error("Failed to update exam status");
+    }
+  };
+
+  const handleCopyPublicLink = (examId: string) => {
+    const publicUrl = `${window.location.origin}/exam/${examId}/public`;
+    navigator.clipboard.writeText(publicUrl);
+    toast.success("Public link copied to clipboard");
+  };
+
   const getStatusBadge = (status: string) => {
     const variants: any = {
       draft: { variant: "secondary", icon: Edit },
@@ -318,13 +439,15 @@ export default function ExamPage() {
               />
             </div>
             
-            <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline">
-                  <FileUp className="h-4 w-4 mr-2" />
-                  Import from Google Forms
-                </Button>
-              </DialogTrigger>
+            {isSignedIn && (
+              <>
+                <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline">
+                      <FileUp className="h-4 w-4 mr-2" />
+                      Import from Google Forms
+                    </Button>
+                  </DialogTrigger>
               <DialogContent className="sm:max-w-[600px]">
                 <DialogHeader>
                   <DialogTitle>Import from Google Forms</DialogTitle>
@@ -661,14 +784,32 @@ export default function ExamPage() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+              </>
+            )}
           </div>
         </div>
 
+        {!isSignedIn && (
+          <div className="mb-4 p-4 bg-primary/10 border border-primary/20 rounded-lg">
+            <p className="text-sm">
+              <strong>Welcome!</strong> You&apos;re viewing public exams. 
+              <Button 
+                variant="link" 
+                className="px-1 h-auto" 
+                onClick={() => router.push('/sign-in')}
+              >
+                Sign in
+              </Button>
+              to create your own exams or view exams shared with you.
+            </p>
+          </div>
+        )}
+
         <Tabs value={activeTab} onValueChange={(value) => { setActiveTab(value); setPage(1); }}>
-          <TabsList className="grid w-full max-w-md grid-cols-3">
-            <TabsTrigger value="my-exams">My Exams</TabsTrigger>
+          <TabsList className={`grid w-full max-w-md ${isSignedIn ? 'grid-cols-3' : 'grid-cols-1'}`}>
+            {isSignedIn && <TabsTrigger value="my-exams">My Exams</TabsTrigger>}
             <TabsTrigger value="public">Public Exams</TabsTrigger>
-            <TabsTrigger value="shared">Shared with Me</TabsTrigger>
+            {isSignedIn && <TabsTrigger value="shared">Shared with Me</TabsTrigger>}
           </TabsList>
 
           <TabsContent value={activeTab} className="mt-4">
@@ -692,68 +833,152 @@ export default function ExamPage() {
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {exams.map((exam) => (
-                    <Card 
-                      key={exam.exam_id} 
-                      className="hover:shadow-lg transition-shadow cursor-pointer"
-                      onClick={() => router.push(`/exam/${exam.exam_id}/${activeTab === "my-exams" ? "edit" : "view"}`)}
-                    >
-                      <CardHeader>
-                        <div className="flex justify-between items-start mb-2">
-                          <CardTitle className="text-lg line-clamp-2">
-                            {exam.exam_name}
-                          </CardTitle>
-                          {activeTab === "my-exams" && (
-                            <div className="flex gap-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  router.push(`/exam/${exam.exam_id}/edit`);
-                                }}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
+                    <ContextMenu key={exam.exam_id}>
+                      <ContextMenuTrigger>
+                        <Card 
+                          className="hover:shadow-lg transition-shadow cursor-pointer"
+                          onClick={() => router.push(`/exam/${exam.exam_id}/${activeTab === "my-exams" ? "edit" : "view"}`)}
+                        >
+                          <CardHeader>
+                            <div className="flex justify-between items-start mb-2">
+                              <CardTitle className="text-lg line-clamp-2">
+                                {exam.exam_name}
+                              </CardTitle>
+                              {activeTab === "my-exams" && (
+                                <div className="flex gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      router.push(`/exam/${exam.exam_id}/edit`);
+                                    }}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                        <CardDescription className="line-clamp-2">
-                          {exam.exam_description || "No description"}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2">
-                          <div className="flex gap-2 flex-wrap">
-                            {getStatusBadge(exam.status)}
-                            {getVisibilityBadge(exam.is_public)}
-                          </div>
-                          
-                          {exam.class_names && exam.class_names.length > 0 && (
-                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                              <Users className="h-3 w-3" />
-                              {exam.class_names.join(", ")}
+                            <CardDescription className="line-clamp-2">
+                              {exam.exam_description || "No description"}
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2">
+                              <div className="flex gap-2 flex-wrap">
+                                {getStatusBadge(exam.status)}
+                                {getVisibilityBadge(exam.is_public)}
+                              </div>
+                              
+                              {exam.class_names && exam.class_names.length > 0 && (
+                                <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                                  <Users className="h-3 w-3" />
+                                  {exam.class_names.join(", ")}
+                                </div>
+                              )}
+                              
+                              <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                                <Clock className="h-3 w-3" />
+                                {exam.duration_minutes} minutes
+                              </div>
+                              
+                              {exam.total_points > 0 && (
+                                <div className="text-sm text-muted-foreground">
+                                  Total: {exam.total_points} points
+                                </div>
+                              )}
+                              
+                              {exam.questions && (
+                                <div className="text-sm text-muted-foreground">
+                                  {exam.questions.length} questions
+                                </div>
+                              )}
                             </div>
-                          )}
-                          
-                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                            <Clock className="h-3 w-3" />
-                            {exam.duration_minutes} minutes
-                          </div>
-                          
-                          {exam.total_points > 0 && (
-                            <div className="text-sm text-muted-foreground">
-                              Total: {exam.total_points} points
-                            </div>
-                          )}
-                          
-                          {exam.questions && (
-                            <div className="text-sm text-muted-foreground">
-                              {exam.questions.length} questions
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
+                          </CardContent>
+                        </Card>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent className="w-56">
+                        <ContextMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/exam/${exam.exam_id}/edit`);
+                          }}
+                        >
+                          <Edit className="h-4 w-4" />
+                          Edit Exam
+                        </ContextMenuItem>
+                        
+                        <ContextMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/exam/${exam.exam_id}/preview`);
+                          }}
+                        >
+                          <Eye className="h-4 w-4" />
+                          Preview
+                        </ContextMenuItem>
+                        
+                        {activeTab === "my-exams" && (
+                          <>
+                            <ContextMenuSeparator />
+                            
+                            <ContextMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDuplicateExam(exam);
+                              }}
+                            >
+                              <Copy className="h-4 w-4" />
+                              Duplicate
+                            </ContextMenuItem>
+                            
+                            <ContextMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTogglePublish(exam.exam_id, exam.status);
+                              }}
+                            >
+                              {exam.status === 'published' ? (
+                                <>
+                                  <Archive className="h-4 w-4" />
+                                  Unpublish
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle className="h-4 w-4" />
+                                  Publish
+                                </>
+                              )}
+                            </ContextMenuItem>
+                            
+                            <ContextMenuSeparator />
+                            
+                            <ContextMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCopyPublicLink(exam.exam_id);
+                              }}
+                            >
+                              <Share2 className="h-4 w-4" />
+                              Copy Public Link
+                            </ContextMenuItem>
+                            
+                            <ContextMenuSeparator />
+                            
+                            <ContextMenuItem
+                              variant="destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteExam(exam.exam_id, exam.exam_name);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Delete
+                            </ContextMenuItem>
+                          </>
+                        )}
+                      </ContextMenuContent>
+                    </ContextMenu>
                   ))}
                 </div>
 
@@ -789,6 +1014,29 @@ export default function ExamPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete &quot;{examToDelete?.name}&quot;? This action cannot be undone.
+              All questions and associated data will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setExamToDelete(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteExam}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

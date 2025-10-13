@@ -260,6 +260,260 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     setItems(prevItems => prevItems.filter((_, i) => i !== index));
   };
 
+  const duplicateQuestion = (index: number) => {
+    setItems(prevItems => {
+      const questionToDuplicate = prevItems[index];
+      if (!questionToDuplicate) return prevItems;
+      
+      // Create a deep copy of the question with a new ID
+      const duplicatedQuestion: ExamItem = {
+        ...questionToDuplicate,
+        question_id: `question-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        options: questionToDuplicate.options ? [...questionToDuplicate.options] : undefined,
+        correct_answer: Array.isArray(questionToDuplicate.correct_answer) 
+          ? ([...questionToDuplicate.correct_answer] as number[] | string[])
+          : questionToDuplicate.correct_answer,
+        starter_files: questionToDuplicate.starter_files 
+          ? questionToDuplicate.starter_files.map(f => ({ ...f }))
+          : undefined,
+      };
+      
+      // Insert the duplicated question right after the original
+      const updatedItems = [...prevItems];
+      updatedItems.splice(index + 1, 0, duplicatedQuestion);
+      
+      toast.success('Question duplicated successfully');
+      return updatedItems;
+    });
+  };
+
+  const copyQuestion = (index: number) => {
+    const questionToCopy = items[index];
+    if (!questionToCopy) return;
+    
+    // Copy question data to clipboard with a marker
+    const questionData = {
+      __quizzerd_question__: true,
+      ...questionToCopy,
+      question_id: undefined, // Will be regenerated when pasted
+    };
+    
+    navigator.clipboard.writeText(JSON.stringify(questionData, null, 2))
+      .then(() => {
+        toast.success('Question copied to clipboard');
+      })
+      .catch(() => {
+        toast.error('Failed to copy question');
+      });
+  };
+
+  const pasteQuestion = async (afterIndex: number) => {
+    try {
+      const clipboardText = await navigator.clipboard.readText();
+      const parsedData = JSON.parse(clipboardText);
+      
+      // Check if it's a valid question
+      if (!parsedData.__quizzerd_question__ && !parsedData.question_type) {
+        toast.error('Clipboard does not contain a valid question');
+        return;
+      }
+      
+      // Remove the marker and create the question
+      const { __quizzerd_question__, question_id, ...questionData } = parsedData;
+      const newQuestion: ExamItem = {
+        ...questionData,
+        question_id: `question-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        question_type: questionData.question_type || 'short_answer',
+        question_text: questionData.question_text || '',
+        points: questionData.points || 1,
+        required: questionData.required ?? true,
+      };
+      
+      // Insert the pasted question after the specified index
+      setItems(prevItems => {
+        const updatedItems = [...prevItems];
+        updatedItems.splice(afterIndex + 1, 0, newQuestion);
+        return updatedItems;
+      });
+      
+      toast.success('Question pasted successfully');
+    } catch (error) {
+      toast.error('Failed to paste question - invalid format');
+      console.error('Paste error:', error);
+    }
+  };
+
+  const cutQuestion = (index: number) => {
+    const questionToCut = items[index];
+    if (!questionToCut) return;
+    
+    // Copy question data to clipboard with a marker
+    const questionData = {
+      __quizzerd_question__: true,
+      ...questionToCut,
+      question_id: undefined,
+    };
+    
+    navigator.clipboard.writeText(JSON.stringify(questionData, null, 2))
+      .then(() => {
+        // Remove the question after copying
+        setItems(prevItems => prevItems.filter((_, i) => i !== index));
+        toast.success('Question cut to clipboard');
+      })
+      .catch(() => {
+        toast.error('Failed to cut question');
+      });
+  };
+
+  const moveUp = (index: number) => {
+    if (index <= 0) return;
+    
+    setItems(prevItems => {
+      const newItems = [...prevItems];
+      const temp = newItems[index];
+      newItems[index] = newItems[index - 1];
+      newItems[index - 1] = temp;
+      return newItems;
+    });
+    
+    toast.success('Question moved up');
+  };
+
+  const moveDown = (index: number) => {
+    if (index >= items.length - 1) return;
+    
+    setItems(prevItems => {
+      const newItems = [...prevItems];
+      const temp = newItems[index];
+      newItems[index] = newItems[index + 1];
+      newItems[index + 1] = temp;
+      return newItems;
+    });
+    
+    toast.success('Question moved down');
+  };
+
+  const insertAbove = (index: number) => {
+    const newQuestion: ExamItem = {
+      question_id: `question-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      question_text: '',
+      question_type: 'short_answer',
+      points: 1,
+      required: true,
+    };
+    
+    setItems(prevItems => {
+      const updatedItems = [...prevItems];
+      updatedItems.splice(index, 0, newQuestion);
+      return updatedItems;
+    });
+    
+    toast.success('New question inserted above');
+  };
+
+  const insertBelow = (index: number) => {
+    const newQuestion: ExamItem = {
+      question_id: `question-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      question_text: '',
+      question_type: 'short_answer',
+      points: 1,
+      required: true,
+    };
+    
+    setItems(prevItems => {
+      const updatedItems = [...prevItems];
+      updatedItems.splice(index + 1, 0, newQuestion);
+      return updatedItems;
+    });
+    
+    toast.success('New question inserted below');
+  };
+
+  const resetQuestion = (index: number) => {
+    const question = items[index];
+    if (!question) return;
+    
+    const resetQuestion: ExamItem = {
+      ...question,
+      question_text: '',
+      options: question.options ? question.options.map(() => '') : undefined,
+      correct_answer: undefined,
+      explanation: '',
+    };
+    
+    setItems(prevItems => {
+      const updatedItems = [...prevItems];
+      updatedItems[index] = resetQuestion;
+      return updatedItems;
+    });
+    
+    toast.success('Question reset to empty state');
+  };
+
+  const shuffleOptions = (index: number) => {
+    const question = items[index];
+    if (!question || !question.options) return;
+    
+    // Fisher-Yates shuffle algorithm
+    const shuffled = [...question.options];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    
+    setItems(prevItems => {
+      const updatedItems = [...prevItems];
+      updatedItems[index] = {
+        ...updatedItems[index],
+        options: shuffled,
+      };
+      return updatedItems;
+    });
+    
+    toast.success('Options shuffled');
+  };
+
+  const clearOptions = (index: number) => {
+    const question = items[index];
+    if (!question || !question.options) return;
+    
+    setItems(prevItems => {
+      const updatedItems = [...prevItems];
+      updatedItems[index] = {
+        ...updatedItems[index],
+        options: ['', ''],
+        correct_answer: undefined,
+      };
+      return updatedItems;
+    });
+    
+    toast.success('All options cleared');
+  };
+
+  const exportQuestion = (index: number) => {
+    const question = items[index];
+    if (!question) return;
+    
+    const exportData = {
+      ...question,
+      exported_at: new Date().toISOString(),
+      app: 'QuizZered'
+    };
+    
+    const dataStr = JSON.stringify(exportData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `question-${question.question_id}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    toast.success('Question exported as JSON');
+  };
+
   const reorderQuestions = (newItems: ExamItem[]) => {
     setItems(newItems);
   };
@@ -491,12 +745,12 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     // Mark as having unsaved changes
     hasUnsavedChangesRef.current = true;
     
-    // Set new timer for 3 seconds
+    // Set new timer for 1 second
     autoSaveTimerRef.current = setTimeout(() => {
       if (hasUnsavedChangesRef.current && examName) {
         saveExam(false, true);
       }
-    }, 3000);
+    }, 1000);
   }, [examName, examDescription, durationMinutes, attemptsAllowed, passingScore, 
       shuffleItems, showResultsImmediately, isPublic, startDate, endDate, items,
       consoleDetection, translationDetection, allowWordByWordTranslation, 
@@ -987,6 +1241,18 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
               onUpdateOption={updateOption}
               onRemoveOption={removeOption}
               onRemoveQuestion={removeQuestion}
+              onDuplicateQuestion={duplicateQuestion}
+              onCopyQuestion={copyQuestion}
+              onCutQuestion={cutQuestion}
+              onPasteQuestion={pasteQuestion}
+              onMoveUp={moveUp}
+              onMoveDown={moveDown}
+              onInsertAbove={insertAbove}
+              onInsertBelow={insertBelow}
+              onResetQuestion={resetQuestion}
+              onShuffleOptions={shuffleOptions}
+              onClearOptions={clearOptions}
+              onExportQuestion={exportQuestion}
               onAddNewQuestion={addNewQuestion}
               onAddPageBreak={addPageBreak}
               onReorderQuestions={reorderQuestions}

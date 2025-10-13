@@ -107,26 +107,33 @@ export function registerEditor(editorRef: RefObject<Quill>, editorId: string) {
   };
   
   const handleBlur = (e: { relatedTarget?: EventTarget | null }) => {
-    // Don't hide if clicking within the dock, its popovers, or select dropdowns
+    // Don't hide if clicking within the dock, its popovers, select dropdowns, or context menus
     const relatedTarget = e?.relatedTarget as Element | null;
     if (!relatedTarget?.closest('.floating-format-dock') &&
         !relatedTarget?.closest('[role="dialog"]') &&
-        !relatedTarget?.closest('[data-radix-select-content]')) {
+        !relatedTarget?.closest('[data-radix-select-content]') &&
+        !relatedTarget?.closest('[data-radix-popover-content]') &&
+        !relatedTarget?.closest('[data-radix-context-menu-content]') &&
+        !relatedTarget?.closest('[data-slot="context-menu"]')) {
       const timeoutId = setTimeout(() => {
-        // Double check that focus hasn't returned to dock, editor, or select
+        // Double check that focus hasn't returned to dock, editor, select, popover, or context menu
         const activeEl = document.activeElement;
         const isInDock = activeEl?.closest('.floating-format-dock');
         const isInPopover = activeEl?.closest('[role="dialog"]');
         const isInEditor = activeEl?.closest('.ql-editor');
         const isInSelect = activeEl?.closest('[data-radix-select-content]');
+        const isInRadixPopover = activeEl?.closest('[data-radix-popover-content]');
+        const isInContextMenu = activeEl?.closest('[data-radix-context-menu-content]');
+        const isInTextEditor = activeEl?.closest('.text-editor-wrapper');
         
-        if (!isInDock && !isInPopover && !isInEditor && !isInSelect) {
+        if (!isInDock && !isInPopover && !isInEditor && !isInSelect && 
+            !isInRadixPopover && !isInContextMenu && !isInTextEditor) {
           if (dockInstance?.activeEditor?.id === editorId) {
             dockInstance.activeEditor = null;
             dockInstance.setActiveEditor?.(null);
           }
         }
-      }, 200);
+      }, 300); // Increased timeout for better stability
       
       // Store timeout ID so it can be cancelled
       if (dockInstance) {
@@ -374,7 +381,8 @@ export default function FloatingFormatDock() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 20, opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="floating-format-dock fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-1 bg-background/95 backdrop-blur-sm border rounded-lg px-2 py-1 shadow-lg"
+          className="floating-format-dock fixed bottom-6 left-1/2 -translate-x-1/2 z-[99999] flex items-center gap-1 bg-background/95 backdrop-blur-sm border rounded-lg px-2 py-1 shadow-lg"
+          style={{ isolation: 'isolate' }}
           onMouseDown={(e) => {
             e.preventDefault();
             // Cancel any pending hide timeout
@@ -435,6 +443,13 @@ export default function FloatingFormatDock() {
               activeFormats.header === 3 ? 'h3' :
               'normal'
             }
+            onOpenChange={(open) => {
+              // Cancel hide timeout when select opens
+              if (open && dockInstance?.hideTimeout) {
+                clearTimeout(dockInstance.hideTimeout);
+                dockInstance.hideTimeout = undefined;
+              }
+            }}
             onValueChange={(value) => {
               // First clear all text style formats
               applyFormat('header', false);
@@ -454,12 +469,18 @@ export default function FloatingFormatDock() {
                   applyFormat('header', 3);
                   break;
               }
+              // Keep editor focused after selection
+              if (activeEditor?.ref?.current) {
+                setTimeout(() => {
+                  activeEditor.ref.current?.focus();
+                }, 50);
+              }
             }}
           >
             <SelectTrigger className="h-8 w-32">
               <SelectValue placeholder="Normal" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="z-[100000]">
               <SelectItem value="normal">
                 <span className="flex items-center gap-2">
                   <Type className="h-3.5 w-3.5" />

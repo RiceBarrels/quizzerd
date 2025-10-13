@@ -29,6 +29,18 @@ interface QuestionsTabProps {
   onUpdateOption: (questionIndex: number, optionIndex: number, value: string) => void;
   onRemoveOption: (questionIndex: number, optionIndex: number) => void;
   onRemoveQuestion: (index: number) => void;
+  onDuplicateQuestion?: (index: number) => void;
+  onCopyQuestion?: (index: number) => void;
+  onCutQuestion?: (index: number) => void;
+  onPasteQuestion?: (afterIndex: number) => Promise<void>;
+  onMoveUp?: (index: number) => void;
+  onMoveDown?: (index: number) => void;
+  onInsertAbove?: (index: number) => void;
+  onInsertBelow?: (index: number) => void;
+  onResetQuestion?: (index: number) => void;
+  onShuffleOptions?: (index: number) => void;
+  onClearOptions?: (index: number) => void;
+  onExportQuestion?: (index: number) => void;
   onAddNewQuestion: () => void;
   onAddPageBreak: () => void;
   onReorderQuestions?: (items: ExamItem[]) => void;
@@ -45,6 +57,18 @@ export default function QuestionsTab({
   onUpdateOption,
   onRemoveOption,
   onRemoveQuestion,
+  onDuplicateQuestion,
+  onCopyQuestion,
+  onCutQuestion,
+  onPasteQuestion,
+  onMoveUp,
+  onMoveDown,
+  onInsertAbove,
+  onInsertBelow,
+  onResetQuestion,
+  onShuffleOptions,
+  onClearOptions,
+  onExportQuestion,
   onAddNewQuestion,
   onAddPageBreak,
   onReorderQuestions,
@@ -289,27 +313,49 @@ export default function QuestionsTab({
         >
           <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
             <div className="space-y-4">
-              {items.map((item, index) => (
-                <div
-                  key={item.question_id}
-                  data-question-id={item.question_id}
-                  ref={(el) => {
-                    questionRefs.current[item.question_id] = el;
-                  }}
-                >
-                  <QuestionCard
-                    id={item.question_id}
-                    item={item}
-                    index={index}
-                    onUpdateQuestion={onUpdateQuestion}
-                    onAddOption={onAddOption}
-                    onUpdateOption={onUpdateOption}
-                    onRemoveOption={onRemoveOption}
-                    onRemoveQuestion={onRemoveQuestion}
-                    onOpenCodeEditor={onOpenCodeEditor}
-                  />
-                </div>
-              ))}
+              {items.map((item, index) => {
+                // Calculate the actual question number (excluding page breaks and section headers)
+                const questionNumber = items
+                  .slice(0, index + 1)
+                  .filter(i => i.question_type !== 'section_header' && i.question_type !== 'page_break')
+                  .length;
+                
+                return (
+                  <div
+                    key={item.question_id}
+                    data-question-id={item.question_id}
+                    ref={(el) => {
+                      questionRefs.current[item.question_id] = el;
+                    }}
+                  >
+                    <QuestionCard
+                      id={item.question_id}
+                      item={item}
+                      index={index}
+                      questionNumber={questionNumber}
+                      totalQuestions={items.length}
+                      onUpdateQuestion={onUpdateQuestion}
+                      onAddOption={onAddOption}
+                      onUpdateOption={onUpdateOption}
+                      onRemoveOption={onRemoveOption}
+                      onRemoveQuestion={onRemoveQuestion}
+                      onDuplicateQuestion={onDuplicateQuestion}
+                      onCopyQuestion={onCopyQuestion}
+                      onCutQuestion={onCutQuestion}
+                      onPasteQuestion={onPasteQuestion}
+                      onMoveUp={onMoveUp}
+                      onMoveDown={onMoveDown}
+                      onInsertAbove={onInsertAbove}
+                      onInsertBelow={onInsertBelow}
+                      onResetQuestion={onResetQuestion}
+                      onShuffleOptions={onShuffleOptions}
+                      onClearOptions={onClearOptions}
+                      onExportQuestion={onExportQuestion}
+                      onOpenCodeEditor={onOpenCodeEditor}
+                    />
+                  </div>
+                );
+              })}
             </div>
           </SortableContext>
         </DndContext>

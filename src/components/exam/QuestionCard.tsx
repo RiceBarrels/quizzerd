@@ -2,6 +2,7 @@
 
 import { useEffect, useState, memo } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { toast } from 'sonner';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -14,12 +15,23 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import TextEditor from '@/components/editors/text-editor';
 import VariableContent from '@/components/ui/variable-content';
 import StableCodeEditor from './StableCodeEditor';
-import { Trash2, Plus, ListTodoIcon, ListChecksIcon, TextAlignStartIcon, NotepadTextIcon, CircleSlashIcon, Eye, EyeOff, ChevronDown, SlidersHorizontal, Calendar, Clock, Upload, Star, Heading, Minus, ChevronsUpDown, Check, Heart, ThumbsUp, Code, GripVertical } from 'lucide-react';
+import { Trash2, Plus, ListTodoIcon, ListChecksIcon, TextAlignStartIcon, NotepadTextIcon, CircleSlashIcon, Eye, EyeOff, ChevronDown, SlidersHorizontal, Calendar, Clock, Upload, Star, Heading, Minus, ChevronsUpDown, Check, Heart, ThumbsUp, Code, GripVertical, Copy, Trash2 as Trash2Icon, ClipboardCopy, ClipboardPaste, Clipboard, Scissors, ArrowUp, ArrowDown, ListChecks, Hash, MousePointerClick, RefreshCw, Shuffle, Sparkles, FileDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ExamItem, QuestionType, QuestionTypeOption } from '@/types/exam';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { UniqueIdentifier } from '@dnd-kit/core';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+  ContextMenuSub,
+  ContextMenuSubTrigger,
+  ContextMenuSubContent,
+  ContextMenuCheckboxItem,
+} from '@/components/ui/context-menu';
 
 const questionTypes: QuestionTypeOption[] = [
   { value: 'multiple_choice', label: 'Multiple Choice', icon: ListTodoIcon },
@@ -41,39 +53,138 @@ const questionTypes: QuestionTypeOption[] = [
 interface QuestionCardProps {
   item: ExamItem;
   index: number;
+  questionNumber?: number; // Actual question number excluding page breaks and section headers
+  totalQuestions?: number; // Total number of questions for move up/down
   onUpdateQuestion: (index: number, field: keyof ExamItem, value: any) => void;
   onAddOption: (questionIndex: number) => void;
   onUpdateOption: (questionIndex: number, optionIndex: number, value: string) => void;
   onRemoveOption: (questionIndex: number, optionIndex: number) => void;
   onRemoveQuestion: (index: number) => void;
   onOpenCodeEditor?: (questionIndex: number) => void;
+  onDuplicateQuestion?: (index: number) => void;
+  onCopyQuestion?: (index: number) => void;
+  onCutQuestion?: (index: number) => void;
+  onPasteQuestion?: (afterIndex: number) => Promise<void>;
+  onMoveUp?: (index: number) => void;
+  onMoveDown?: (index: number) => void;
+  onInsertAbove?: (index: number) => void;
+  onInsertBelow?: (index: number) => void;
+  onResetQuestion?: (index: number) => void;
+  onShuffleOptions?: (index: number) => void;
+  onClearOptions?: (index: number) => void;
+  onExportQuestion?: (index: number) => void;
 }
 
 const QuestionCard = memo(function QuestionCard({
   item,
   index,
+  questionNumber,
+  totalQuestions,
   onUpdateQuestion,
   onAddOption,
   onUpdateOption,
   onRemoveOption,
   onRemoveQuestion,
-  onOpenCodeEditor
+  onOpenCodeEditor,
+  onDuplicateQuestion,
+  onCopyQuestion,
+  onCutQuestion,
+  onPasteQuestion,
+  onMoveUp,
+  onMoveDown,
+  onInsertAbove,
+  onInsertBelow,
+  onResetQuestion,
+  onShuffleOptions,
+  onClearOptions,
+  onExportQuestion
 }: QuestionCardProps) {
   const [open, setOpen] = useState(false);
+  const [hasTextSelection, setHasTextSelection] = useState(false);
+  const [selectedText, setSelectedText] = useState('');
+  const [isInTextField, setIsInTextField] = useState(false);
 
   const selectedType = questionTypes.find(type => type.value === item.question_type);
   const SelectedIcon = selectedType?.icon;
 
-  return (
+  // Check for text selection and input field when context menu opens
+  const handleContextMenu = (e: React.MouseEvent) => {
+    const selection = window.getSelection();
+    const text = selection?.toString() || '';
+    setSelectedText(text);
+    setHasTextSelection(text.length > 0);
+    
+    // Check if right-clicked on an input field or contentEditable element
+    const target = e.target as HTMLElement;
+    const isTextField = 
+      target.tagName === 'INPUT' || 
+      target.tagName === 'TEXTAREA' ||
+      target.isContentEditable ||
+      target.closest('[contenteditable="true"]') !== null;
+    setIsInTextField(isTextField);
+  };
 
-    <Card className="relative">
+  // Copy selected text
+  const handleCopyText = async () => {
+    if (selectedText) {
+      try {
+        await navigator.clipboard.writeText(selectedText);
+        toast.success('Text copied to clipboard');
+      } catch (error) {
+        toast.error('Failed to copy text');
+      }
+    }
+  };
+
+  // Paste text at cursor position
+  const handlePasteText = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      // Insert text at current cursor position
+      document.execCommand('insertText', false, text);
+      toast.success('Text pasted');
+    } catch (error) {
+      toast.error('Failed to paste text');
+    }
+  };
+
+  // Select all text
+  const handleSelectAll = () => {
+    document.execCommand('selectAll', false);
+    toast.success('All text selected');
+  };
+
+  // Cut selected text
+  const handleCutText = async () => {
+    if (selectedText) {
+      try {
+        await navigator.clipboard.writeText(selectedText);
+        document.execCommand('delete', false);
+        toast.success('Text cut to clipboard');
+      } catch (error) {
+        toast.error('Failed to cut text');
+      }
+    }
+  };
+
+  // Clear all text
+  const handleClearText = () => {
+    document.execCommand('selectAll', false);
+    document.execCommand('delete', false);
+    toast.success('Text cleared');
+  };
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <Card className="relative" onContextMenu={handleContextMenu}>
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-2 flex-1">
             <Badge variant="outline">
               {item.question_type === 'section_header' ? 'Section Header' :
                item.question_type === 'page_break' ? 'Page Break' :
-               `Question ${index + 1}`}
+               `Question ${questionNumber ?? index + 1}`}
             </Badge>
           </div>
           <Button
@@ -540,6 +651,213 @@ const QuestionCard = memo(function QuestionCard({
         )}
       </CardContent>
     </Card>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-64">
+        {isInTextField ? (
+          // Text field menu - Always available in text fields
+          <>
+            {hasTextSelection && (
+              <>
+                <ContextMenuItem onClick={handleCopyText}>
+                  <Clipboard className="mr-2 h-4 w-4" />
+                  <span>Copy</span>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={handleCutText}>
+                  <Scissors className="mr-2 h-4 w-4" />
+                  <span>Cut</span>
+                </ContextMenuItem>
+              </>
+            )}
+            <ContextMenuItem onClick={handlePasteText}>
+              <ClipboardPaste className="mr-2 h-4 w-4" />
+              <span>Paste</span>
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={handleSelectAll}>
+              <MousePointerClick className="mr-2 h-4 w-4" />
+              <span>Select All</span>
+            </ContextMenuItem>
+            {hasTextSelection && (
+              <ContextMenuItem onClick={handleClearText}>
+                <Trash2Icon className="mr-2 h-4 w-4" />
+                <span>Clear Selection</span>
+              </ContextMenuItem>
+            )}
+          </>
+        ) : (
+          // Question menu
+          <>
+            {/* Insert Actions */}
+            {onInsertAbove && (
+              <ContextMenuItem onClick={() => onInsertAbove(index)}>
+                <Plus className="mr-2 h-4 w-4" />
+                <span>Insert Question Above</span>
+              </ContextMenuItem>
+            )}
+            {onInsertBelow && (
+              <ContextMenuItem onClick={() => onInsertBelow(index)}>
+                <Plus className="mr-2 h-4 w-4" />
+                <span>Insert Question Below</span>
+              </ContextMenuItem>
+            )}
+            
+            {(onInsertAbove || onInsertBelow) && <ContextMenuSeparator />}
+
+            {/* Copy/Paste Actions */}
+            {onDuplicateQuestion && (
+              <ContextMenuItem onClick={() => onDuplicateQuestion(index)}>
+                <Copy className="mr-2 h-4 w-4" />
+                <span>Duplicate Question</span>
+              </ContextMenuItem>
+            )}
+            {onCopyQuestion && (
+              <ContextMenuItem onClick={() => onCopyQuestion(index)}>
+                <ClipboardCopy className="mr-2 h-4 w-4" />
+                <span>Copy Question</span>
+              </ContextMenuItem>
+            )}
+            {onCutQuestion && (
+              <ContextMenuItem onClick={() => onCutQuestion(index)}>
+                <Scissors className="mr-2 h-4 w-4" />
+                <span>Cut Question</span>
+              </ContextMenuItem>
+            )}
+            {onPasteQuestion && (
+              <ContextMenuItem onClick={() => onPasteQuestion(index)}>
+                <ClipboardPaste className="mr-2 h-4 w-4" />
+                <span>Paste Question</span>
+              </ContextMenuItem>
+            )}
+            
+            {(onDuplicateQuestion || onCopyQuestion || onCutQuestion || onPasteQuestion) && <ContextMenuSeparator />}
+
+            {/* Move Actions */}
+            {onMoveUp && index > 0 && (
+              <ContextMenuItem onClick={() => onMoveUp(index)}>
+                <ArrowUp className="mr-2 h-4 w-4" />
+                <span>Move Up</span>
+              </ContextMenuItem>
+            )}
+            {onMoveDown && totalQuestions && index < totalQuestions - 1 && (
+              <ContextMenuItem onClick={() => onMoveDown(index)}>
+                <ArrowDown className="mr-2 h-4 w-4" />
+                <span>Move Down</span>
+              </ContextMenuItem>
+            )}
+            
+            {((onMoveUp && index > 0) || (onMoveDown && totalQuestions && index < totalQuestions - 1)) && <ContextMenuSeparator />}
+
+            {/* Quick Settings */}
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <Hash className="mr-2 h-4 w-4" />
+                <span>Set Points</span>
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent>
+                {[1, 2, 3, 5, 10, 15, 20, 25, 50, 100].map((points) => (
+                  <ContextMenuItem
+                    key={points}
+                    onClick={() => onUpdateQuestion(index, 'points', points)}
+                  >
+                    <span className={item.points === points ? 'font-semibold' : ''}>
+                      {points} {points === 1 ? 'point' : 'points'}
+                    </span>
+                  </ContextMenuItem>
+                ))}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <ListChecks className="mr-2 h-4 w-4" />
+                <span>Change Type</span>
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="w-56">
+                {questionTypes.map((type) => {
+                  const Icon = type.icon;
+                  return (
+                    <ContextMenuItem
+                      key={type.value}
+                      onClick={() => onUpdateQuestion(index, 'question_type', type.value)}
+                      disabled={item.question_type === type.value}
+                    >
+                      <Icon className="mr-2 h-4 w-4" />
+                      <span className={item.question_type === type.value ? 'font-semibold' : ''}>
+                        {type.label}
+                      </span>
+                    </ContextMenuItem>
+                  );
+                })}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+
+            <ContextMenuCheckboxItem
+              checked={item.required}
+              onCheckedChange={(checked) => onUpdateQuestion(index, 'required', checked)}
+            >
+              Required Question
+            </ContextMenuCheckboxItem>
+
+            <ContextMenuSeparator />
+
+            {/* Additional Features */}
+            {(item.question_type === 'multiple_choice' || item.question_type === 'multiple_select' || item.question_type === 'dropdown') && item.options && item.options.length > 1 && (
+              <>
+                <ContextMenuSub>
+                  <ContextMenuSubTrigger>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    <span>Options</span>
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent>
+                    {onShuffleOptions && (
+                      <ContextMenuItem onClick={() => onShuffleOptions(index)}>
+                        <Shuffle className="mr-2 h-4 w-4" />
+                        <span>Shuffle Options</span>
+                      </ContextMenuItem>
+                    )}
+                    {onClearOptions && (
+                      <ContextMenuItem onClick={() => onClearOptions(index)}>
+                        <Trash2Icon className="mr-2 h-4 w-4" />
+                        <span>Clear All Options</span>
+                      </ContextMenuItem>
+                    )}
+                    <ContextMenuItem onClick={() => onAddOption(index)}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      <span>Add Option</span>
+                    </ContextMenuItem>
+                  </ContextMenuSubContent>
+                </ContextMenuSub>
+              </>
+            )}
+
+            {onResetQuestion && (
+              <ContextMenuItem onClick={() => onResetQuestion(index)}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                <span>Reset Question</span>
+              </ContextMenuItem>
+            )}
+
+            {onExportQuestion && (
+              <ContextMenuItem onClick={() => onExportQuestion(index)}>
+                <FileDown className="mr-2 h-4 w-4" />
+                <span>Export as JSON</span>
+              </ContextMenuItem>
+            )}
+
+            <ContextMenuSeparator />
+
+            {/* Delete Action */}
+            <ContextMenuItem 
+              variant="destructive"
+              onClick={() => onRemoveQuestion(index)}
+            >
+              <Trash2Icon className="mr-2 h-4 w-4" />
+              <span>Delete Question</span>
+            </ContextMenuItem>
+          </>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 });
 

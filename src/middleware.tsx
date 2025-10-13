@@ -5,18 +5,30 @@ const isProtectedRoute = createRouteMatcher([
   '/profile(.*)',
   '/home(.*)',
   '/class(.*)',
-  '/exam(.*)',
   '/todos(.*)',
   '/calender(.*)',
+  '/exam/(.*)/edit(.*)',
+  '/exam/(.*)/response(.*)',
   '/api/user(.*)',
   '/api/classes(.*)',
-  '/api/exams(.*)',
+  '/api/exams/create(.*)',
+  '/api/exams/update(.*)',
+  '/api/exams/delete(.*)',
+  '/api/exams/publish(.*)',
+  '/api/exams/import-google-form(.*)',
+  '/api/exams/google-forms-list(.*)',
+  '/api/exams/log-violation(.*)',
 ]);
 
 const isPublicRoute = createRouteMatcher([
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/',
+  '/api/exams/public(.*)',
+  '/api/exams/get(.*)',
+  '/exam/(.*)/public(.*)',
+  '/exam/(.*)/preview(.*)',
+  '/exam(.*)',
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

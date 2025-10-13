@@ -5,13 +5,6 @@ import { auth } from '@clerk/nextjs/server';
 export async function GET(request: Request) {
   try {
     const { userId } = await auth();
-    
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
 
     const { searchParams } = new URL(request.url);
     const examId = searchParams.get('examId');
@@ -20,6 +13,14 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '12');
     const offset = (page - 1) * limit;
+
+    // Require authentication for private content
+    if (!userId && type !== 'public') {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
 
     const supabase = await createSupabaseClient();
 
@@ -46,29 +47,33 @@ export async function GET(request: Request) {
       }
 
       // Check if user has access to this exam
-      let hasAccess = 
-        exam.creator_id === userId ||
-        exam.is_public ||
-        exam.collaborator_ids?.includes(userId);
+      let hasAccess = exam.is_public; // Public exams are accessible to everyone
+      
+      // For authenticated users, check additional permissions
+      if (userId) {
+        hasAccess = hasAccess || 
+          exam.creator_id === userId ||
+          exam.collaborator_ids?.includes(userId);
 
-      // If exam is part of classes, check class membership
-      if (!hasAccess && exam.class_id && Array.isArray(exam.class_id) && exam.class_id.length > 0) {
-        for (const classId of exam.class_id) {
-          const { data: classData } = await supabase
-            .from('class')
-            .select('admin_ids, teacher_ids, student_ids')
-            .eq('class_id', classId)
-            .single();
+        // If exam is part of classes, check class membership
+        if (!hasAccess && exam.class_id && Array.isArray(exam.class_id) && exam.class_id.length > 0) {
+          for (const classId of exam.class_id) {
+            const { data: classData } = await supabase
+              .from('class')
+              .select('admin_ids, teacher_ids, student_ids')
+              .eq('class_id', classId)
+              .single();
 
-          if (classData) {
-            const isInClass = 
-              classData.admin_ids?.includes(userId) ||
-              classData.teacher_ids?.includes(userId) ||
-              classData.student_ids?.includes(userId);
-            
-            if (isInClass) {
-              hasAccess = true;
-              break;
+            if (classData) {
+              const isInClass = 
+                classData.admin_ids?.includes(userId) ||
+                classData.teacher_ids?.includes(userId) ||
+                classData.student_ids?.includes(userId);
+              
+              if (isInClass) {
+                hasAccess = true;
+                break;
+              }
             }
           }
         }
@@ -111,22 +116,41 @@ export async function GET(request: Request) {
     // Apply filters based on type
     switch (type) {
       case 'my-exams':
+        if (!userId) {
+          return NextResponse.json(
+            { error: 'Unauthorized' },
+            { status: 401 }
+          );
+        }
         query = query.eq('creator_id', userId);
         break;
       
       case 'public':
-        // Show all public exams (both draft and published) from all users
-        // You may want to filter by status='published' in production
+        // Show all public exams - accessible to everyone
+        // Filter by published status to show only ready exams
         query = query
-          .eq('is_public', true);
+          .eq('is_public', true)
+          .eq('status', 'published');
         break;
       
       case 'shared':
+        if (!userId) {
+          return NextResponse.json(
+            { error: 'Unauthorized' },
+            { status: 401 }
+          );
+        }
         query = query.contains('collaborator_ids', [userId]);
         break;
       
       default:
         // Default to user's own exams
+        if (!userId) {
+          return NextResponse.json(
+            { error: 'Unauthorized' },
+            { status: 401 }
+          );
+        }
         query = query.eq('creator_id', userId);
     }
 
