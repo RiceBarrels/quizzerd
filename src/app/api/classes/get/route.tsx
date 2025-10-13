@@ -68,10 +68,15 @@ export async function GET(request: Request) {
       ];
 
       // Fetch user details for all members
+      console.log('Fetching user details for member IDs:', allMemberIds);
+      
       const { data: users, error: userError } = await supabase
         .from('user')
         .select('user_id, email, first_name, last_name, full_name, img_url')
         .in('user_id', allMemberIds);
+
+      console.log('Fetched users:', users);
+      console.log('User fetch error:', userError);
 
       if (userError) {
         console.error('Error fetching user details:', userError);
@@ -84,6 +89,11 @@ export async function GET(request: Request) {
           userMap[user.user_id] = user;
         });
       }
+      
+      console.log('User map:', userMap);
+      console.log('Admin IDs:', data.admin_ids);
+      console.log('Teacher IDs:', data.teacher_ids);
+      console.log('Student IDs:', data.student_ids);
 
       // Add role information and user details to the response
       const responseData = {

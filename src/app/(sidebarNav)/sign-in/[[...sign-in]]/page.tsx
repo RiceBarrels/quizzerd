@@ -113,7 +113,7 @@ export default function SignInPage() {
                                 }
                             }}
                             signUpUrl="/sign-up"
-                            forceRedirectUrl="/home"
+                            forceRedirectUrl="/class"
                         />
                         <small className="text-center">Doesn&apos;t have an Account? <Link href="sign-up" className="font-bold text-primary underline">Sign Up</Link></small>
                     </CardContent>

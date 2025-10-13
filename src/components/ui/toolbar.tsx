@@ -82,7 +82,7 @@ export default function Toolbar({sideBarButton = false}: ToolbarProps){
           <div className="flex items-center p-2 pt-0 pl-6 gap-4">
               {sideBarButton && <SidebarTrigger />}
 
-              <Link href="/home">
+              <Link href="/class">
                 <Button variant="ghost" size="icon">
                   <HomeIcon/>
                 </Button>

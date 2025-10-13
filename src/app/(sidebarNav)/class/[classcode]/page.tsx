@@ -10,18 +10,28 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { 
   Users, 
-  FileText, 
   Settings,
-  Clock,
-  UserCheck,
-  GraduationCap,
-  Shield,
   CopyIcon,
-  CheckIcon
+  CheckIcon,
+  Palette,
+  Shield,
+  UserCheck,
+  GraduationCap
 } from 'lucide-react'
-import { Dialog, DialogTrigger } from '@/components/ui/dialog'
-import { DialogContent } from '@radix-ui/react-dialog'
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { toast } from 'sonner'
+import { ClassStatsCards } from '@/components/class/ClassStatsCards'
+import { MembersList } from '@/components/class/MembersList'
+import { ProfileDialog, RoleChangeDialog, RemoveMemberDialog } from '@/components/class/MemberManagementDialogs'
+import { ClassSettingsDialog } from '@/components/class/ClassSettingsDialog'
+
+const AVAILABLE_THEMES = [
+  { value: 'default', label: 'Default', description: 'System default theme' },
+  { value: 'neo-brutalism', label: 'Neo Brutalism', description: 'Bold and striking design' },
+  { value: 'solar-dusk', label: 'Solar Dusk', description: 'Warm sunset colors' },
+]
 
 export default function ClassPage() {
   const params = useParams()
@@ -30,6 +40,25 @@ export default function ClassPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isCopied, setIsCopied] = useState(false)
+  const [themeDialogOpen, setThemeDialogOpen] = useState(false)
+  const [selectedTheme, setSelectedTheme] = useState('default')
+  const [savingTheme, setSavingTheme] = useState(false)
+  const [managingMember, setManagingMember] = useState<string | null>(null)
+  const [roleChangeDialog, setRoleChangeDialog] = useState<{open: boolean, member: any, currentRole: string} | null>(null)
+  const [profileDialog, setProfileDialog] = useState<{open: boolean, member: any, role: string} | null>(null)
+  const [removeDialog, setRemoveDialog] = useState<{open: boolean, member: any, role: string} | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // Load theme from localStorage on mount
+  useEffect(() => {
+    const classCode = params.classcode as string
+    if (classCode) {
+      const savedTheme = localStorage.getItem(`class-theme-${classCode}`)
+      if (savedTheme) {
+        setSelectedTheme(savedTheme)
+      }
+    }
+  }, [params.classcode])
 
   useEffect(() => {
     const fetchClass = async () => {
@@ -37,11 +66,21 @@ export default function ClassPage() {
         const response = await fetch(`/api/classes/get?classCode=${params.classcode}`)
         const data = await response.json()
         
+        console.log('Fetched class response:', response)
+        console.log('Fetched class data:', data)
+        
         if (!response.ok) {
           throw new Error(data.error || 'Failed to fetch class')
         }
         
         setClassData(data.data)
+        // Set the theme if available from class_settings, otherwise use localStorage
+        if (data.data?.class_settings?.theme) {
+          const theme = data.data.class_settings.theme
+          setSelectedTheme(theme)
+          // Save to localStorage
+          localStorage.setItem(`class-theme-${params.classcode}`, theme)
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred')
       } finally {
@@ -53,6 +92,181 @@ export default function ClassPage() {
       fetchClass()
     }
   }, [params.classcode])
+
+  // Load and apply theme
+  useEffect(() => {
+    const applyTheme = () => {
+      // Remove any existing theme
+      const existingThemes = document.querySelectorAll('link[data-class-theme]')
+      existingThemes.forEach(theme => theme.remove())
+
+      // Apply new theme if not default
+      if (selectedTheme && selectedTheme !== 'default') {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = `/themes/${selectedTheme}.css`
+        link.setAttribute('data-class-theme', 'true')
+        document.head.appendChild(link)
+      }
+    }
+
+    applyTheme()
+
+    // Cleanup on unmount
+    return () => {
+      const existingThemes = document.querySelectorAll('link[data-class-theme]')
+      existingThemes.forEach(theme => theme.remove())
+    }
+  }, [selectedTheme])
+
+  const handleSaveTheme = async () => {
+    setSavingTheme(true)
+    try {
+      console.log('Saving theme:', { 
+        class_id: classData.class_id, 
+        theme: selectedTheme 
+      })
+
+      const response = await fetch(`/api/classes/update`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          class_id: classData.class_id,
+          theme: selectedTheme
+        })
+      })
+
+      console.log('Response status:', response.status, response.statusText)
+
+      let data
+      try {
+        data = await response.json()
+        console.log('Response data:', data)
+      } catch (parseError) {
+        console.error('Failed to parse response:', parseError)
+        throw new Error('Invalid response from server')
+      }
+
+      if (!response.ok) {
+        console.error('Theme update failed:', { 
+          status: response.status, 
+          statusText: response.statusText,
+          data 
+        })
+        const errorMessage = data.details 
+          ? `${data.error}: ${data.details}` 
+          : data.error || 'Failed to update theme'
+        throw new Error(errorMessage)
+      }
+
+      // Update class_settings with the new theme
+      const updatedClassData = {
+        ...classData,
+        class_settings: {
+          ...(classData.class_settings || {}),
+          theme: selectedTheme
+        }
+      }
+      setClassData(updatedClassData)
+      
+      // Save to localStorage
+      localStorage.setItem(`class-theme-${params.classcode}`, selectedTheme)
+      
+      setThemeDialogOpen(false)
+      toast.success('Theme updated successfully!')
+    } catch (err) {
+      console.error('Error saving theme:', err)
+      toast.error(err instanceof Error ? err.message : 'Failed to save theme')
+    } finally {
+      setSavingTheme(false)
+    }
+  }
+
+  const handleRemoveMember = async (memberId: string, memberName: string) => {
+    setManagingMember(memberId)
+    try {
+      const response = await fetch('/api/classes/members', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          class_id: classData.class_id,
+          member_id: memberId,
+          action: 'remove'
+        })
+      })
+
+      const data = await response.json()
+
+      console.log('Remove member response:', response)
+      console.log('Remove member data:', data)
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to remove member')
+      }
+
+      // Update local state
+      setClassData((prev: any) => ({
+        ...prev,
+        admin_ids: data.data.admin_ids,
+        teacher_ids: data.data.teacher_ids,
+        student_ids: data.data.student_ids,
+        admins: prev.admins?.filter((m: any) => m.user_id !== memberId) || [],
+        teachers: prev.teachers?.filter((m: any) => m.user_id !== memberId) || [],
+        students: prev.students?.filter((m: any) => m.user_id !== memberId) || []
+      }))
+
+      toast.success(`${memberName} removed from class`)
+    } catch (err) {
+      console.error('Error removing member:', err)
+      toast.error(err instanceof Error ? err.message : 'Failed to remove member')
+    } finally {
+      setManagingMember(null)
+    }
+  }
+
+  const handleChangeRole = async (memberId: string, newRole: string, memberName: string) => {
+    setManagingMember(memberId)
+    try {
+      const response = await fetch('/api/classes/members', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          class_id: classData.class_id,
+          member_id: memberId,
+          action: 'change_role',
+          new_role: newRole
+        })
+      })
+
+      const data = await response.json()
+
+      console.log('Change role response:', response)
+      console.log('Change role data:', data)
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to change role')
+      }
+
+      // Refresh the class data to get updated member lists
+      const refreshResponse = await fetch(`/api/classes/get?classCode=${params.classcode}`)
+      const refreshData = await refreshResponse.json()
+      
+      console.log('Refresh class response:', refreshResponse)
+      console.log('Refresh class data:', refreshData)
+      
+      if (refreshResponse.ok) {
+        setClassData(refreshData.data)
+      }
+
+      setRoleChangeDialog(null)
+      toast.success(`${memberName}'s role changed to ${newRole}`)
+    } catch (err) {
+      console.error('Error changing role:', err)
+      toast.error(err instanceof Error ? err.message : 'Failed to change role')
+    } finally {
+      setManagingMember(null)
+    }
+  }
 
   if (loading) {
     return (
@@ -80,8 +294,8 @@ export default function ClassPage() {
             <CardDescription>{error}</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={() => router.push('/home')}>
-              Go Back to Home
+            <Button onClick={() => router.push('/class')}>
+              Go Back to Classes
             </Button>
           </CardContent>
         </Card>
@@ -93,17 +307,7 @@ export default function ClassPage() {
     return null
   }
 
-  const formatTime = (timeString: string | null | undefined) => {
-    if (!timeString) return 'Not set'
-    const time = timeString.split(':')
-    const hours = parseInt(time[0])
-    const minutes = time[1]
-    const ampm = hours >= 12 ? 'PM' : 'AM'
-    const displayHours = hours % 12 || 12
-    return `${displayHours}:${minutes} ${ampm}`
-  }
-
-  const getRoleBadgeVariant = (role: string) => {
+  const getRoleBadgeVariant = (role: string): "default" | "destructive" | "secondary" => {
     switch(role) {
       case 'admin': return 'destructive'
       case 'teacher': return 'secondary'
@@ -140,14 +344,87 @@ export default function ClassPage() {
           )}
         </div>
         <div className="flex gap-2">
+          {(classData.role === 'admin' || classData.role === 'teacher') && (
+            <>
+              <Dialog open={themeDialogOpen} onOpenChange={setThemeDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Palette className="h-4 w-4 mr-2" />
+                    Theme
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle>Class Theme</DialogTitle>
+                    <DialogDescription>
+                      Choose a theme for this class. The theme will be applied to all members viewing this class.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Select Theme</label>
+                      <Select 
+                        value={selectedTheme} 
+                        onValueChange={(value) => {
+                          setSelectedTheme(value)
+                          // Save to localStorage for immediate preview
+                          localStorage.setItem(`class-theme-${params.classcode}`, value)
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Choose a theme" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {AVAILABLE_THEMES.map((theme) => (
+                            <SelectItem key={theme.value} value={theme.value}>
+                              <div className="flex flex-col">
+                                <span className="font-medium">{theme.label}</span>
+                                <span className="text-xs text-muted-foreground">{theme.description}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    {selectedTheme !== 'default' && (
+                      <div className="p-4 border rounded-lg bg-muted/50">
+                        <p className="text-xs text-muted-foreground">
+                          Preview: The {AVAILABLE_THEMES.find(t => t.value === selectedTheme)?.label} theme is currently applied to this page.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const originalTheme = classData.class_settings?.theme || 'default'
+                        setSelectedTheme(originalTheme)
+                        // Restore localStorage to original value
+                        localStorage.setItem(`class-theme-${params.classcode}`, originalTheme)
+                        setThemeDialogOpen(false)
+                      }}
+                      disabled={savingTheme}
+                    >
+                      Cancel
+                    </Button>
+                    <Button onClick={handleSaveTheme} disabled={savingTheme}>
+                      {savingTheme ? 'Saving...' : 'Save Theme'}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
           {classData.role === 'admin' && (
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>
               <Settings className="h-4 w-4 mr-2" />
               Settings
             </Button>
           )}
           <AlertDialog>
-            <AlertDialogTrigger>
+            <AlertDialogTrigger asChild>
                 <Button size="sm">
                     Code: {classData.class_code || params.classcode}
                 </Button>
@@ -185,55 +462,24 @@ export default function ClassPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              Class Schedule
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatTime(classData.period_start)} - {formatTime(classData.period_end)}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Total Members
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{memberCount}</div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {classData.admin_ids?.length || 0} admins, {classData.teacher_ids?.length || 0} teachers, {classData.student_ids?.length || 0} students
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Assignments
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{classData.assignments?.length || 0}</div>
-            <div className="text-xs text-muted-foreground mt-1">Total assignments</div>
-          </CardContent>
-        </Card>
-      </div>
+      <ClassStatsCards
+        periodStart={classData.period_start}
+        periodEnd={classData.period_end}
+        memberCount={memberCount}
+        adminCount={classData.admin_ids?.length || 0}
+        teacherCount={classData.teacher_ids?.length || 0}
+        studentCount={classData.student_ids?.length || 0}
+        assignmentCount={classData.assignments?.length || 0}
+      />
 
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="assignments">Assignments</TabsTrigger>
-          <TabsTrigger value="members">Members</TabsTrigger>
+          <TabsTrigger value="members" className="gap-2">
+            <Users className="h-4 w-4" />
+            Members ({memberCount})
+          </TabsTrigger>
           {(classData.role === 'admin' || classData.role === 'teacher') && (
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
           )}
@@ -316,114 +562,36 @@ export default function ClassPage() {
         </TabsContent>
 
         <TabsContent value="members" className="space-y-4">
+          <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-4 flex items-start gap-3">
+            <Users className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium text-sm text-blue-900 dark:text-blue-100">
+                Public Member List
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                All class members can view this list. Everyone in the class can see each other's names, emails, and profile pictures.
+              </p>
+            </div>
+          </div>
+          
           <Card>
             <CardHeader>
               <CardTitle>Class Members</CardTitle>
-              <CardDescription>View all members in this class</CardDescription>
+              <CardDescription>
+                All {memberCount} members in this class
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {classData.admins && classData.admins.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
-                    <Shield className="h-4 w-4" />
-                    Administrators ({classData.admins.length})
-                  </h3>
-                  <div className="space-y-3">
-                    {classData.admins.map((admin: any) => (
-                      <div key={admin.user_id} className="flex items-center gap-3 p-3 border rounded-lg">
-                        {admin.img_url ? (
-                          <img 
-                            src={admin.img_url} 
-                            alt={admin.full_name || admin.email}
-                            className="h-10 w-10 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
-                            <Shield className="h-5 w-5 text-red-600" />
-                          </div>
-                        )}
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-sm">{admin.full_name || admin.email}</p>
-                            <Badge variant="destructive">Admin</Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground">{admin.email}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {classData.teachers && classData.teachers.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
-                    <UserCheck className="h-4 w-4" />
-                    Teachers ({classData.teachers.length})
-                  </h3>
-                  <div className="space-y-3">
-                    {classData.teachers.map((teacher: any) => (
-                      <div key={teacher.user_id} className="flex items-center gap-3 p-3 border rounded-lg">
-                        {teacher.img_url ? (
-                          <img 
-                            src={teacher.img_url} 
-                            alt={teacher.full_name || teacher.email}
-                            className="h-10 w-10 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                            <UserCheck className="h-5 w-5 text-blue-600" />
-                          </div>
-                        )}
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-sm">{teacher.full_name || teacher.email}</p>
-                            <Badge variant="secondary">Teacher</Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground">{teacher.email}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {classData.students && classData.students.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
-                    <GraduationCap className="h-4 w-4" />
-                    Students ({classData.students.length})
-                  </h3>
-                  <div className="space-y-3">
-                    {classData.students.map((student: any) => (
-                      <div key={student.user_id} className="flex items-center gap-3 p-3 border rounded-lg">
-                        {student.img_url ? (
-                          <img 
-                            src={student.img_url} 
-                            alt={student.full_name || student.email}
-                            className="h-10 w-10 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
-                            <GraduationCap className="h-5 w-5 text-green-600" />
-                          </div>
-                        )}
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-sm">{student.full_name || student.email}</p>
-                            <Badge variant="default">Student</Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground">{student.email}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {memberCount === 0 && (
-                <p className="text-sm text-muted-foreground">No members in this class yet</p>
-              )}
+            <CardContent>
+              <MembersList
+                admins={classData.admins}
+                teachers={classData.teachers}
+                students={classData.students}
+                isAdmin={classData.role === 'admin'}
+                managingMember={managingMember}
+                onViewProfile={(member, role) => setProfileDialog({ open: true, member, role })}
+                onChangeRole={(member, role) => setRoleChangeDialog({ open: true, member, currentRole: role })}
+                onRemove={(member, role) => setRemoveDialog({ open: true, member, role })}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -442,6 +610,51 @@ export default function ClassPage() {
           </TabsContent>
         )}
       </Tabs>
+
+      {/* Dialogs */}
+      {profileDialog && (
+        <ProfileDialog
+          open={profileDialog.open}
+          member={profileDialog.member}
+          role={profileDialog.role}
+          onClose={() => setProfileDialog(null)}
+        />
+      )}
+
+      {roleChangeDialog && (
+        <RoleChangeDialog
+          open={roleChangeDialog.open}
+          member={roleChangeDialog.member}
+          currentRole={roleChangeDialog.currentRole}
+          isManaging={managingMember !== null}
+          onChangeRole={handleChangeRole}
+          onClose={() => setRoleChangeDialog(null)}
+        />
+      )}
+
+      {removeDialog && (
+        <RemoveMemberDialog
+          open={removeDialog.open}
+          member={removeDialog.member}
+          isManaging={managingMember === removeDialog.member.user_id}
+          onRemove={(memberId, memberName) => {
+            handleRemoveMember(memberId, memberName)
+                  setRemoveDialog(null)
+                }}
+          onClose={() => setRemoveDialog(null)}
+        />
+      )}
+
+      {/* Settings Dialog */}
+      <ClassSettingsDialog
+        open={settingsOpen}
+        classData={classData}
+        onClose={() => setSettingsOpen(false)}
+        onUpdate={(updatedData) => {
+          setClassData(updatedData)
+          setSettingsOpen(false)
+        }}
+      />
     </div>
   )
 }
