@@ -128,7 +128,7 @@ npm run dev
 ```bash
 # Verify Supabase credentials
 echo $NEXT_PUBLIC_SUPABASE_URL
-echo $NEXT_PUBLIC_SUPABASE_ANON_KEY
+echo $NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ```
 
 ### Fix 3: Test API Directly

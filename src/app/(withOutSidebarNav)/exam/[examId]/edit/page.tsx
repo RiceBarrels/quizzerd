@@ -7,7 +7,11 @@ import { Tabs, TabsList, TabsTrigger, TabsContents, TabsContent } from '@/compon
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Loader2, X, FileText, ListTodoIcon, ListChecksIcon, TextAlignStartIcon, NotepadTextIcon, CircleSlashIcon, ChevronDown, SlidersHorizontal, Calendar, Clock, Upload, Star, Code, Heading, Minus, GripVertical } from 'lucide-react';
+import { Loader2, X, FileText, ListTodoIcon, ListChecksIcon, TextAlignStartIcon, NotepadTextIcon, CircleSlashIcon, ChevronDown, SlidersHorizontal, Calendar, Clock, Upload, Star, Code, Heading, Minus, GripVertical, Globe, Lock, Key, CheckIcon, Users, Copy, Link2, ExternalLink } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox';
 import { QuestionTypeOption } from '@/types/exam';
 import CodeEditor from '@/components/editors/CodeEditor';
 import ExamHeader from '@/components/exam/ExamHeader';
@@ -46,6 +50,15 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasUnsavedChangesRef = useRef<boolean>(false);
+  
+  // Publish dialog states
+  const [publishDialogOpen, setPublishDialogOpen] = useState<boolean>(false);
+  const [publishType, setPublishType] = useState<'public' | 'classes' | 'code'>('public');
+  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
+  const [classes, setClasses] = useState<any[]>([]);
+  const [loadingClasses, setLoadingClasses] = useState<boolean>(false);
+  const [hasInitializedPublishDialog, setHasInitializedPublishDialog] = useState<boolean>(false);
+  const [classesWithExistingAssignments, setClassesWithExistingAssignments] = useState<string[]>([]);
 
   // Form states
   const [examName, setExamName] = useState<string>('');
@@ -124,7 +137,44 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
 
   useEffect(() => {
     fetchExam();
+    fetchClasses();
   }, [examId]);
+  
+  const fetchClasses = async () => {
+    setLoadingClasses(true);
+    try {
+      const response = await fetch('/api/classes/get');
+      const result = await response.json();
+      
+      if (result.success) {
+        setClasses(result.data || []);
+        
+        // Also check which classes already have this exam assigned
+        await checkExistingAssignments(result.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching classes:', error);
+    } finally {
+      setLoadingClasses(false);
+    }
+  };
+  
+  const checkExistingAssignments = async (classList: any[]) => {
+    if (!examId || classList.length === 0) return;
+    
+    try {
+      // Fetch all assignments for this exam
+      const response = await fetch(`/api/classes/assignments/check?examId=${examId}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setClassesWithExistingAssignments(result.classIds || []);
+        console.log('Classes with existing assignments:', result.classIds);
+      }
+    } catch (error) {
+      console.error('Error checking existing assignments:', error);
+    }
+  };
 
   const fetchExam = async () => {
     try {
@@ -134,7 +184,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
       if (result.success) {
         const examData = result.data;
         
-        console.log('📥 Loaded exam data with items:', (examData.items || []).map((item:any, idx:number) => ({
+        console.log('Loaded exam data with items:', (examData.items || []).map((item:any, idx:number) => ({
           index: idx,
           question_id: item.question_id,
           question_text: item.question_text ? item.question_text.substring(0, 50) + '...' : 'EMPTY',
@@ -162,6 +212,19 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
         setAllowWordByWordDefinition(examData.allow_word_by_word_definition || false);
         setVisibilityChangeDetection(examData.visibility_change_detection || false);
         setLocationDetection(examData.location_detection || false);
+        
+        // Load selected classes
+        setSelectedClassIds(examData.class_id || []);
+        
+        // Initialize publish type based on loaded exam data
+        if (examData.is_public) {
+          setPublishType('public');
+        } else if (examData.class_id && examData.class_id.length > 0) {
+          setPublishType('classes');
+        } else if (examData.is_published) {
+          setPublishType('code');
+        }
+        setHasInitializedPublishDialog(true);
       } else {
         toast.error('Failed to load exam');
         router.push('/exam');
@@ -656,6 +719,181 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     }
   };
 
+  const handlePublishClick = () => {
+    // Only set initial publish type on first open, then it remembers user selection
+    if (!hasInitializedPublishDialog) {
+      if (isPublic) {
+        setPublishType('public');
+      } else if (selectedClassIds.length > 0) {
+        setPublishType('classes');
+      } else if (isPublished) {
+        setPublishType('code');
+      } else {
+        // Default for new publish
+        setPublishType('public');
+      }
+      setHasInitializedPublishDialog(true);
+    }
+    
+    // Open publish dialog
+    setPublishDialogOpen(true);
+  };
+  
+  const handlePublishConfirm = async () => {
+    setSaving(true);
+    setPublishDialogOpen(false);
+    
+    try {
+      // Prepare publish data based on publish type
+      let publishData: any = {
+        exam_id: examId,
+        exam_name: examName,
+        exam_description: examDescription,
+        duration_minutes: durationMinutes,
+        attempts_allowed: attemptsAllowed,
+        passing_score: passingScore,
+        shuffle_items: shuffleItems,
+        show_results_immediately: showResultsImmediately,
+        start_date: startDate || null,
+        end_date: endDate || null,
+        items: items,
+        total_points: calculateTotalPoints(),
+        status: 'published',
+        is_published: true,
+        console_detection: consoleDetection,
+        translation_detection: translationDetection,
+        allow_word_by_word_translation: allowWordByWordTranslation,
+        allow_word_by_word_definition: allowWordByWordDefinition,
+        visibility_change_detection: visibilityChangeDetection,
+        location_detection: locationDetection
+      };
+      
+      if (publishType === 'public') {
+        publishData.is_public = true;
+        publishData.class_id = selectedClassIds; // Keep selected classes even in public mode
+      } else if (publishType === 'classes') {
+        publishData.is_public = false;
+        publishData.class_id = selectedClassIds;
+      } else if (publishType === 'code') {
+        publishData.is_public = false;
+        publishData.class_id = [];
+      }
+      
+      // Update the exam with publish settings
+      const updateResponse = await fetch(`/api/exams/update`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(publishData),
+      });
+      
+      const updateResult = await updateResponse.json();
+      
+      if (!updateResult.success) {
+        throw new Error(updateResult.error || 'Failed to publish exam');
+      }
+      
+      // Handle class assignments for both public and private modes
+      if (selectedClassIds.length > 0 || classesWithExistingAssignments.length > 0) {
+        // Determine which classes to add and which to remove
+        const classesToAdd = selectedClassIds.filter(
+          id => !classesWithExistingAssignments.includes(id)
+        );
+        const classesToRemove = classesWithExistingAssignments.filter(
+          id => !selectedClassIds.includes(id)
+        );
+        
+        console.log('Assignment changes:', {
+          selected: selectedClassIds,
+          existing: classesWithExistingAssignments,
+          toAdd: classesToAdd,
+          toRemove: classesToRemove
+        });
+        
+        // Remove assignments from unchecked classes
+        if (classesToRemove.length > 0) {
+          console.log('Removing assignments from classes:', classesToRemove);
+          
+          const deleteResponse = await fetch(
+            `/api/classes/assignments/delete?examId=${examId}&classIds=${classesToRemove.join(',')}`,
+            { method: 'DELETE' }
+          );
+          
+          const deleteResult = await deleteResponse.json();
+          
+          if (deleteResult.success) {
+            console.log('Successfully removed assignments:', deleteResult);
+          } else {
+            console.error('Failed to remove assignments:', deleteResult.error);
+          }
+        }
+        
+        // Create new assignments for newly selected classes
+        if (classesToAdd.length > 0) {
+          console.log('Creating assignments for classes:', classesToAdd);
+        
+        const assignmentPayload = {
+          exam_id: examId,
+            class_ids: classesToAdd,
+          name: examName,
+          description: examDescription,
+          publish_at: new Date().toISOString(),
+          due_at: endDate || null,
+        };
+        
+        const assignmentResponse = await fetch('/api/classes/assignments/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(assignmentPayload),
+        });
+        
+        const assignmentResult = await assignmentResponse.json();
+        
+          if (assignmentResult.success) {
+            console.log('Successfully created assignments:', assignmentResult.data);
+          } else {
+            console.error('Failed to create class assignments:', assignmentResult.error);
+            if (!assignmentResult.error.includes('already published')) {
+              toast.error('Exam published but failed to create some class assignments');
+            }
+          }
+        }
+        
+        // Update the list of classes with existing assignments
+        await checkExistingAssignments(classes);
+        
+        // Show appropriate success message
+        if (classesToAdd.length > 0 || classesToRemove.length > 0) {
+          const messages = [];
+          if (classesToAdd.length > 0) {
+            messages.push(`assigned to ${classesToAdd.length} class(es)`);
+          }
+          if (classesToRemove.length > 0) {
+            messages.push(`removed from ${classesToRemove.length} class(es)`);
+          }
+          toast.success(`Exam ${messages.join(' and ')}!`, { duration: 5000 });
+        }
+      }
+      
+      setIsPublished(true);
+      if (publishType === 'public') {
+        setIsPublic(true);
+      }
+      
+      if (selectedClassIds.length === 0 && classesWithExistingAssignments.length === 0) {
+      toast.success('Exam published successfully!');
+      }
+    } catch (error) {
+      console.error('Error publishing exam:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to publish exam');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const saveExam = async (publish: boolean = false, isAutoSave: boolean = false) => {
     if (!isAutoSave) {
       setSaving(true);
@@ -1028,7 +1266,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
         isPublished={isPublished}
         saving={saving}
         onSave={() => saveExam(false)}
-        onPublish={() => saveExam(true)}
+        onPublish={handlePublishClick}
         onPreview={() => router.push(`/exam/${examId}/preview`)}
         canPublish={!!(examName && items.length > 0)}
         lastSaved={lastSaved}
@@ -1296,6 +1534,469 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
           </TabsContent>
         </TabsContents>
       </Tabs>
+      
+      {/* Publish Dialog */}
+      <Dialog open={publishDialogOpen} onOpenChange={setPublishDialogOpen}>
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="space-y-3 pb-4 border-b">
+            <DialogTitle className="text-2xl font-semibold">Publish Exam</DialogTitle>
+            <DialogDescription className="text-base">
+              Choose how you want to share this exam with your students.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Tabs 
+            value={publishType === 'public' ? 'public' : 'private'} 
+            onValueChange={(value) => {
+              if (value === 'public') {
+                setPublishType('public');
+              } else {
+                // Default to classes when switching to private tab
+                setPublishType(selectedClassIds.length > 0 ? 'classes' : 'code');
+              }
+            }}
+            className="flex-1 flex flex-col overflow-hidden"
+          >
+            <TabsList className="grid w-full grid-cols-2 h-12 bg-muted/50 p-1">
+              <TabsTrigger value="public" className="flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                <Globe className="h-4 w-4" />
+                <span className="font-medium">Public</span>
+              </TabsTrigger>
+              <TabsTrigger value="private" className="flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                <Lock className="h-4 w-4" />
+                <span className="font-medium">Private</span>
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContents className="flex-1 overflow-y-auto py-6">
+              <TabsContent value="public" className="mt-0 space-y-6 h-full">
+                <div className="space-y-4">
+                  <div className="flex items-start gap-4 p-6 border-2 border-primary/20 rounded-xl bg-gradient-to-br from-primary/5 to-primary/10">
+                    <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
+                      <Globe className="h-6 w-6 text-primary" />
+                        </div>
+                    <div className="flex-1 space-y-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-lg font-semibold">Public Directory</h3>
+                          {isPublic && isPublished && (
+                            <Badge className="bg-primary text-primary-foreground">
+                              Active
+                            </Badge>
+                          )}
+                      </div>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                          Make this exam accessible to everyone. It will be discoverable in the public exams directory and accessible to all users.
+                      </p>
+                    </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="secondary" className="font-normal">
+                          Public Access
+                        </Badge>
+                        <Badge variant="secondary" className="font-normal">
+                          Searchable
+                        </Badge>
+                        <Badge variant="secondary" className="font-normal">
+                          No Restrictions
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+
+                  {isPublished && (
+                    <div className="p-4 bg-muted/50 border rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <div className="p-1.5 rounded-md bg-background">
+                          <Link2 className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1 space-y-2">
+                          <p className="text-sm font-medium">Share Exam Link</p>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              readOnly
+                              value={`${window.location.origin}/exam/${examId}/preview`}
+                              className="flex-1 px-3 py-2 text-xs bg-background border rounded-lg font-mono"
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                navigator.clipboard.writeText(`${window.location.origin}/exam/${examId}/preview`);
+                                toast.success('Link copied to clipboard');
+                              }}
+                            >
+                              <Copy className="h-4 w-4 mr-1" />
+                              Copy
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-4 bg-muted/50 border rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <div className="p-1.5 rounded-md bg-background">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <p className="text-sm font-medium">How it works</p>
+                        <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                          <li>Anyone can find and access this exam</li>
+                          <li>Appears in the public exams directory</li>
+                          <li>Shareable via direct link</li>
+                          <li>No enrollment or access code required</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Optional Class Assignment for Public Exams */}
+                  <div className="space-y-4 pt-2 border-t">
+                    <div className="flex items-start gap-3 p-4 bg-accent/50 border rounded-lg">
+                      <div className="p-1.5 rounded-md bg-background">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Optional: Assign to Classes</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Even though this exam is public, you can also assign it to specific classes for tracking and organization.
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Select Classes</h3>
+                        <p className="text-xs text-muted-foreground mt-1">Choose which classes to assign this exam to</p>
+                      </div>
+                      {selectedClassIds.length > 0 && (
+                        <Badge variant="secondary" className="text-xs">
+                          {selectedClassIds.length} Selected
+                        </Badge>
+                      )}
+                    </div>
+                    
+                    {loadingClasses ? (
+                      <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        <p className="text-sm text-muted-foreground">Loading your classes...</p>
+                      </div>
+                    ) : classes.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-12 space-y-4 text-center">
+                        <div className="p-4 rounded-full bg-muted">
+                          <Users className="h-8 w-8 text-muted-foreground" />
+                        </div>
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium">No Classes Available</p>
+                          <p className="text-xs text-muted-foreground max-w-sm">
+                            You need to create or join a class before you can assign exams to it.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-[280px] overflow-y-auto border rounded-xl p-2 bg-muted/20">
+                        {classes.map((cls) => {
+                          const isAlreadyPublished = classesWithExistingAssignments.includes(cls.class_id);
+                          const isSelected = selectedClassIds.includes(cls.class_id);
+                          
+                          return (
+                            <div 
+                              key={cls.class_id} 
+                              className={`flex items-start space-x-3 p-3 rounded-lg transition-all duration-200 border-2 ${
+                                isAlreadyPublished 
+                                  ? 'bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 shadow-sm' 
+                                  : isSelected
+                                  ? 'bg-accent/50 border-accent hover:bg-accent/70'
+                                  : 'bg-background hover:bg-accent/50 hover:shadow-sm border-transparent'
+                              }`}
+                            >
+                              <Checkbox
+                                id={`public-class-${cls.class_id}`}
+                                checked={selectedClassIds.includes(cls.class_id)}
+                                className="mt-1"
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setSelectedClassIds([...selectedClassIds, cls.class_id]);
+                                  } else {
+                                    setSelectedClassIds(selectedClassIds.filter(id => id !== cls.class_id));
+                                  }
+                                }}
+                              />
+                              <Label
+                                htmlFor={`public-class-${cls.class_id}`}
+                                className="flex-1 space-y-1 cursor-pointer"
+                              >
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`font-semibold text-sm ${
+                                    isAlreadyPublished ? 'text-primary' : ''
+                                  }`}>
+                                    {cls.class_name}
+                                  </span>
+                                  {isAlreadyPublished && (
+                                    <Badge className="text-xs bg-primary text-primary-foreground">
+                                      <CheckIcon className="h-3 w-3 mr-1" />
+                                      Assigned
+                                    </Badge>
+                                  )}
+                                </div>
+                                {cls.description && (
+                                  <p className="text-xs text-muted-foreground leading-relaxed">{cls.description}</p>
+                                )}
+                              </Label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="private" className="mt-0 space-y-6 h-full">
+                <div className="space-y-3">
+                  <RadioGroup 
+                    value={publishType === 'public' ? 'classes' : publishType} 
+                    onValueChange={(value: any) => setPublishType(value)}
+                  >
+                    <div className="space-y-3">
+                  {/* Specific Classes Option */}
+                  <label 
+                    htmlFor="classes" 
+                    className={`flex items-start space-x-4 p-5 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                      publishType === 'classes' 
+                            ? 'border-primary bg-gradient-to-br from-primary/5 to-primary/10 shadow-sm' 
+                            : 'border-border hover:border-primary/30 hover:bg-accent/30'
+                    }`}
+                  >
+                    <RadioGroupItem value="classes" id="classes" className="mt-1" />
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg transition-colors ${
+                              publishType === 'classes'
+                                ? 'bg-primary/20 border border-primary/30'
+                                : 'bg-muted'
+                            }`}>
+                              <Users className={`h-5 w-5 ${
+                                publishType === 'classes' ? 'text-primary' : 'text-muted-foreground'
+                              }`} />
+                        </div>
+                        <div className="flex items-center gap-2 flex-1">
+                          <span className="font-semibold text-base">Specific Classes</span>
+                              {selectedClassIds.length > 0 && (
+                                <Badge variant={publishType === 'classes' ? 'default' : 'secondary'} className="text-xs">
+                              {selectedClassIds.length} {selectedClassIds.length === 1 ? 'Class' : 'Classes'}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                            Assign this exam to selected classes. Only students enrolled in those classes will see it in their assignments.
+                      </p>
+                    </div>
+                  </label>
+                
+                      {/* Private with Link Option */}
+                  <label 
+                    htmlFor="code" 
+                    className={`flex items-start space-x-4 p-5 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                      publishType === 'code' 
+                            ? 'border-primary bg-gradient-to-br from-primary/5 to-primary/10 shadow-sm' 
+                            : 'border-border hover:border-primary/30 hover:bg-accent/30'
+                    }`}
+                  >
+                    <RadioGroupItem value="code" id="code" className="mt-1" />
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg transition-colors ${
+                              publishType === 'code'
+                                ? 'bg-primary/20 border border-primary/30'
+                                : 'bg-muted'
+                            }`}>
+                              <Key className={`h-5 w-5 ${
+                                publishType === 'code' ? 'text-primary' : 'text-muted-foreground'
+                              }`} />
+                        </div>
+                        <div className="flex items-center gap-2 flex-1">
+                          <span className="font-semibold text-base">Private with Link</span>
+                          {!isPublic && selectedClassIds.length === 0 && isPublished && (
+                                <Badge className="text-xs bg-primary text-primary-foreground">
+                              Active
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                            Keep this exam private and unlisted. Only those with the direct link can access it. Perfect for sharing with specific individuals.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </RadioGroup>
+            </div>
+                
+                {/* Link Sharing Section */}
+                {publishType === 'code' && isPublished && (
+                  <div className="p-4 bg-muted/50 border rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <div className="p-1.5 rounded-md bg-background">
+                        <Link2 className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <p className="text-sm font-medium">Share Exam Link</p>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Share this private link with anyone you want to give access to this exam.
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            readOnly
+                            value={`${window.location.origin}/exam/${examId}/preview`}
+                            className="flex-1 px-3 py-2 text-xs bg-background border rounded-lg font-mono"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              navigator.clipboard.writeText(`${window.location.origin}/exam/${examId}/preview`);
+                              toast.success('Link copied to clipboard');
+                            }}
+                          >
+                            <Copy className="h-4 w-4 mr-1" />
+                            Copy
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+            
+            {/* Class Selection */}
+            {publishType === 'classes' && (
+              <div className="space-y-4 pt-2 border-t">
+                <div className="flex items-center justify-between pt-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Select Classes</h3>
+                    <p className="text-xs text-muted-foreground mt-1">Choose which classes will have access to this exam</p>
+                  </div>
+                  {selectedClassIds.length > 0 && (
+                    <Badge variant="secondary" className="text-xs">
+                      {selectedClassIds.length} Selected
+                    </Badge>
+                  )}
+                </div>
+                {loadingClasses ? (
+                  <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground">Loading your classes...</p>
+                  </div>
+                ) : classes.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 space-y-4 text-center">
+                    <div className="p-4 rounded-full bg-muted">
+                      <Users className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">No Classes Available</p>
+                      <p className="text-xs text-muted-foreground max-w-sm">
+                        You need to create or join a class before you can assign exams to it.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-[280px] overflow-y-auto border rounded-xl p-2 bg-muted/20">
+                    {classes.map((cls) => {
+                      const isAlreadyPublished = classesWithExistingAssignments.includes(cls.class_id);
+                          const isSelected = selectedClassIds.includes(cls.class_id);
+                      
+                      return (
+                        <div 
+                          key={cls.class_id} 
+                              className={`flex items-start space-x-3 p-3 rounded-lg transition-all duration-200 border-2 ${
+                            isAlreadyPublished 
+                                  ? 'bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 shadow-sm' 
+                                  : isSelected
+                                  ? 'bg-accent/50 border-accent hover:bg-accent/70'
+                                  : 'bg-background hover:bg-accent/50 hover:shadow-sm border-transparent'
+                          }`}
+                        >
+                          <Checkbox
+                            id={`class-${cls.class_id}`}
+                            checked={selectedClassIds.includes(cls.class_id)}
+                            className="mt-1"
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedClassIds([...selectedClassIds, cls.class_id]);
+                              } else {
+                                setSelectedClassIds(selectedClassIds.filter(id => id !== cls.class_id));
+                              }
+                            }}
+                          />
+                          <Label
+                            htmlFor={`class-${cls.class_id}`}
+                                className="flex-1 space-y-1 cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`font-semibold text-sm ${
+                                    isAlreadyPublished ? 'text-primary' : ''
+                              }`}>
+                                {cls.class_name}
+                              </span>
+                              {isAlreadyPublished && (
+                                    <Badge className="text-xs bg-primary text-primary-foreground">
+                                  <CheckIcon className="h-3 w-3 mr-1" />
+                                      Assigned
+                                </Badge>
+                              )}
+                            </div>
+                            {cls.description && (
+                              <p className="text-xs text-muted-foreground leading-relaxed">{cls.description}</p>
+                            )}
+                          </Label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+              </TabsContent>
+            </TabsContents>
+          </Tabs>
+          
+          <DialogFooter className="flex items-center gap-3 pt-6 border-t mt-auto">
+            <Button 
+              variant="outline" 
+              size="lg"
+              onClick={() => {
+                setPublishDialogOpen(false);
+              }}
+              className="flex-1"
+            >
+              <X className="h-4 w-4 mr-2" />
+              Cancel
+            </Button>
+            <Button 
+              size="lg"
+              onClick={handlePublishConfirm}
+              disabled={publishType === 'classes' && !publishType.includes('public') && selectedClassIds.length === 0}
+              className="flex-1"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {isPublished ? 'Updating...' : 'Publishing...'}
+                </>
+              ) : (
+                <>
+                  <CheckIcon className="h-4 w-4 mr-2" />
+                  {isPublished ? 'Update Assignments' : 'Publish Exam'}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
     </>
   );

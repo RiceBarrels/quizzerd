@@ -868,6 +868,12 @@ export default function ExamPage() {
                               <div className="flex gap-2 flex-wrap">
                                 {getStatusBadge(exam.status)}
                                 {getVisibilityBadge(exam.is_public)}
+                                {exam.class_id && Array.isArray(exam.class_id) && exam.class_id.length > 0 && (
+                                  <Badge variant="secondary" className="gap-1">
+                                    <FileTextIcon className="h-3 w-3" />
+                                    Classes: {exam.class_id.length}
+                                  </Badge>
+                                )}
                               </div>
                               
                               {exam.class_names && exam.class_names.length > 0 && (

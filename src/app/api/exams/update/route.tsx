@@ -62,7 +62,7 @@ export async function PUT(request: Request) {
     // First, check if the exam exists and user has permission to edit
     const { data: existingExam, error: fetchError } = await supabase
       .from('exams')
-      .select('creator_id, collaborator_ids')
+      .select('creator_id, collaborator_ids, class_id')
       .eq('exam_id', exam_id)
       .single();
 
@@ -74,9 +74,31 @@ export async function PUT(request: Request) {
     }
 
     // Check if user has permission to edit (must be creator or collaborator)
-    const canEdit = 
+    let canEdit = 
       existingExam.creator_id === userId ||
       (existingExam.collaborator_ids && existingExam.collaborator_ids.includes(userId));
+
+    // If exam belongs to classes, check if user is admin/teacher of any of them
+    if (!canEdit && existingExam.class_id && Array.isArray(existingExam.class_id) && existingExam.class_id.length > 0) {
+      for (const classId of existingExam.class_id) {
+        const { data: classData } = await supabase
+          .from('class')
+          .select('admin_ids, teacher_ids')
+          .eq('class_id', classId)
+          .single();
+
+        if (classData) {
+          const isAuthorized = 
+            classData.admin_ids?.includes(userId) ||
+            classData.teacher_ids?.includes(userId);
+          
+          if (isAuthorized) {
+            canEdit = true;
+            break;
+          }
+        }
+      }
+    }
 
     if (!canEdit) {
       return NextResponse.json(
@@ -200,10 +222,10 @@ export async function DELETE(request: Request) {
 
     const supabase = await createSupabaseClient();
 
-    // Check if exam exists and user is the creator
+    // Check if exam exists and user has permission
     const { data: existingExam, error: fetchError } = await supabase
       .from('exams')
-      .select('creator_id')
+      .select('creator_id, collaborator_ids, class_id')
       .eq('exam_id', examId)
       .single();
 
@@ -214,8 +236,34 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // Only the creator can delete the exam
-    if (existingExam.creator_id !== userId) {
+    // Check if user has permission to delete (creator, collaborator, or admin/teacher of class)
+    let canDelete = 
+      existingExam.creator_id === userId ||
+      (existingExam.collaborator_ids && existingExam.collaborator_ids.includes(userId));
+
+    // If exam belongs to classes, check if user is admin/teacher of any of them
+    if (!canDelete && existingExam.class_id && Array.isArray(existingExam.class_id) && existingExam.class_id.length > 0) {
+      for (const classId of existingExam.class_id) {
+        const { data: classData } = await supabase
+          .from('class')
+          .select('admin_ids, teacher_ids')
+          .eq('class_id', classId)
+          .single();
+
+        if (classData) {
+          const isAuthorized = 
+            classData.admin_ids?.includes(userId) ||
+            classData.teacher_ids?.includes(userId);
+          
+          if (isAuthorized) {
+            canDelete = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!canDelete) {
       return NextResponse.json(
         { error: 'You do not have permission to delete this exam' },
         { status: 403 }

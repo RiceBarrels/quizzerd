@@ -9,8 +9,8 @@ export default function navLayout({children}: {children: React.ReactNode}){
         <div className="w-screen h-screen notranslate overflow-hidden bg-sidebar">
             <SidebarProvider>
                 <AppSidebar />
-                <div className="w-full h-screen flex flex-col p-2 overflow-hidden">
-                    <Toolbar />
+                <div className="w-full h-screen flex flex-col p-2 overflow-hidden ml-2">
+                    <Toolbar sideBarButton={true} />
                     <div id="main-content" className="flex-1 bg-background rounded-4xl border overflow-y-auto">
                         <div style={{ viewTransitionName: 'main-content' }}>
                             {children}

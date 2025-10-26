@@ -16,7 +16,8 @@ import {
   Palette,
   Shield,
   UserCheck,
-  GraduationCap
+  GraduationCap,
+  Clock
 } from 'lucide-react'
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
@@ -48,6 +49,8 @@ export default function ClassPage() {
   const [profileDialog, setProfileDialog] = useState<{open: boolean, member: any, role: string} | null>(null)
   const [removeDialog, setRemoveDialog] = useState<{open: boolean, member: any, role: string} | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [assignments, setAssignments] = useState<any[]>([])
+  const [loadingAssignments, setLoadingAssignments] = useState(false)
 
   // Load theme from localStorage on mount
   useEffect(() => {
@@ -92,6 +95,40 @@ export default function ClassPage() {
       fetchClass()
     }
   }, [params.classcode])
+  
+  const fetchAssignments = async () => {
+    if (!classData?.class_id) {
+      console.log('⚠️  Cannot fetch assignments: classData.class_id is not available')
+      return
+    }
+    
+    console.log('📥 Fetching assignments for class:', classData.class_id)
+    setLoadingAssignments(true)
+    try {
+      const response = await fetch(`/api/classes/assignments/get?classId=${classData.class_id}`)
+      const data = await response.json()
+      
+      console.log('📦 Assignments response:', data)
+      
+      if (data.success) {
+        setAssignments(data.data || [])
+        console.log('✅ Loaded assignments:', data.data?.length || 0)
+      } else {
+        console.error('❌ Failed to fetch assignments:', data.error)
+      }
+    } catch (err) {
+      console.error('❌ Error fetching assignments:', err)
+    } finally {
+      setLoadingAssignments(false)
+    }
+  }
+  
+  // Fetch assignments when class data is loaded
+  useEffect(() => {
+    if (classData?.class_id) {
+      fetchAssignments()
+    }
+  }, [classData?.class_id])
 
   // Load and apply theme
   useEffect(() => {
@@ -542,20 +579,85 @@ export default function ClassPage() {
               <CardDescription>View and manage class assignments</CardDescription>
             </CardHeader>
             <CardContent>
-              {classData.assignments && classData.assignments.length > 0 ? (
+              {loadingAssignments ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : assignments && assignments.length > 0 ? (
                 <div className="space-y-4">
-                  {classData.assignments.map((assignment: any, index: number) => (
-                    <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
-                        <p className="font-medium">{assignment.title || `Assignment ${index + 1}`}</p>
-                        <p className="text-sm text-muted-foreground">{assignment.description}</p>
+                  {assignments.map((assignment: any) => (
+                    <div 
+                      key={assignment.assignment} 
+                      className="flex items-start justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+                      onClick={() => router.push(`/exam/${assignment.exam_id}/public`)}
+                    >
+                      <div className="flex-1 space-y-2">
+                        <div>
+                          <p className="font-medium text-lg">{assignment.name}</p>
+                          {assignment.exam && (
+                            <p className="text-sm text-muted-foreground">{assignment.exam.exam_name}</p>
+                          )}
+                        </div>
+                        {assignment.description && (
+                          <p className="text-sm text-muted-foreground">{assignment.description}</p>
+                        )}
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                          {assignment.exam && (
+                            <>
+                              {assignment.exam.duration_minutes && (
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {assignment.exam.duration_minutes} min
+                                </span>
+                              )}
+                              {assignment.exam.total_points && (
+                                <span>
+                                  {assignment.exam.total_points} points
+                                </span>
+                              )}
+                            </>
+                          )}
+                          {assignment.due_at && (
+                            <span>
+                              Due: {new Date(assignment.due_at).toLocaleDateString()}
+                            </span>
+                          )}
+                          {assignment.publish_at && (
+                            <span>
+                              Published: {new Date(assignment.publish_at).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <Button variant="outline" size="sm">View</Button>
+                      <div className="flex flex-col gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            router.push(`/exam/${assignment.exam_id}/public`)
+                          }}
+                        >
+                          Take Exam
+                        </Button>
+                        {(classData.role === 'admin' || classData.role === 'teacher') && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              router.push(`/exam/${assignment.exam_id}/edit`)
+                            }}
+                          >
+                            Edit
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No assignments yet</p>
+                <p className="text-sm text-muted-foreground text-center py-8">No assignments yet</p>
               )}
             </CardContent>
           </Card>

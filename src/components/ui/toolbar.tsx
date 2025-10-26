@@ -1,6 +1,6 @@
 "use client"
 import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs"
-import { SidebarTrigger } from "./sidebar"
+import { SidebarTrigger, useSidebar } from "./sidebar"
 import { Button } from "./button"
 import JoinButton from "./join-button"
 import BackNav from "@/app/(sidebarNav)/back-nav"
@@ -18,13 +18,18 @@ export default function Toolbar({sideBarButton = false}: ToolbarProps){
     const [isToolbarHidden, setIsToolbarHidden] = useState(false)
     const [showToolbar, setShowToolbar] = useState(true)
     const toolbarRef = useRef<HTMLDivElement>(null)
+    const { setOpen: setSidebarOpen } = useSidebar()
 
     // Sync with localStorage after mount to avoid hydration mismatch
     useEffect(() => {
         const storedValue = localStorage.getItem('toolbarHidden') === 'true'
         setIsToolbarHidden(storedValue)
         setShowToolbar(!storedValue)
-    }, [])
+        // Also sync sidebar state
+        if (storedValue) {
+            setSidebarOpen(false)
+        }
+    }, [setSidebarOpen])
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
@@ -49,6 +54,7 @@ export default function Toolbar({sideBarButton = false}: ToolbarProps){
     const handleHideToolbar = () => {
         setIsToolbarHidden(true)
         setShowToolbar(false)
+        setSidebarOpen(false)
         if (typeof window !== 'undefined') {
             localStorage.setItem('toolbarHidden', 'true')
         }
@@ -57,6 +63,7 @@ export default function Toolbar({sideBarButton = false}: ToolbarProps){
     const handleShowToolbar = () => {
         setIsToolbarHidden(false)
         setShowToolbar(true)
+        setSidebarOpen(true)
         if (typeof window !== 'undefined') {
             localStorage.setItem('toolbarHidden', 'false')
         }

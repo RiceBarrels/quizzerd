@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { auth } from '@clerk/nextjs/server'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error('Missing Supabase environment variables')
@@ -23,8 +23,8 @@ export async function createSupabaseClient() {
   }
 
   // If still no token, use service role key for server-side operations
-  if (!token && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return createClient(supabaseUrl!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+  if (!token && process.env.SUPABASE_SERVICE_ROLE) {
+    return createClient(supabaseUrl!, process.env.SUPABASE_SERVICE_ROLE!)
   }
 
   // Use anon key without auth if no tokens available
@@ -43,6 +43,22 @@ export async function createSupabaseClientWithToken(token: string) {
       headers: {
         Authorization: `Bearer ${token}`
       }
+    }
+  })
+}
+
+// Create Supabase admin client with service role key (bypasses RLS)
+export function createSupabaseAdminClient() {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE
+  
+  if (!serviceRoleKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE is not defined')
+  }
+  
+  return createClient(supabaseUrl!, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
     }
   })
 }
