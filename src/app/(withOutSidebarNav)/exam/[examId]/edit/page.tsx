@@ -58,7 +58,12 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
   const [classes, setClasses] = useState<any[]>([]);
   const [loadingClasses, setLoadingClasses] = useState<boolean>(false);
   const [hasInitializedPublishDialog, setHasInitializedPublishDialog] = useState<boolean>(false);
-  const [classesWithExistingAssignments, setClassesWithExistingAssignments] = useState<string[]>([]);
+  const [classesWithExistingAssignments, setClassesWithExistingAssignments] = useState<string[]>([]);// Sync selectedClassIds with classesWithExistingAssignments when publish dialog opens
+  useEffect(() => {
+    if (publishDialogOpen && classesWithExistingAssignments.length > 0) {
+      setSelectedClassIds(classesWithExistingAssignments);
+    }
+  }, [publishDialogOpen, classesWithExistingAssignments]);
 
   // Form states
   const [examName, setExamName] = useState<string>('');
@@ -80,6 +85,10 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
   const [allowWordByWordDefinition, setAllowWordByWordDefinition] = useState<boolean>(false);
   const [visibilityChangeDetection, setVisibilityChangeDetection] = useState<boolean>(false);
   const [locationDetection, setLocationDetection] = useState<boolean>(false);
+  const [location, setLocation] = useState<{ coordinates: string; rangeInMeters: string }>({ 
+    coordinates: '', 
+    rangeInMeters: '100' 
+  });
   const [lastScrollPosition, setLastScrollPosition] = useState<ScrollPosition>({
     details: 0,
     questions: 0,
@@ -212,6 +221,14 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
         setAllowWordByWordDefinition(examData.allow_word_by_word_definition || false);
         setVisibilityChangeDetection(examData.visibility_change_detection || false);
         setLocationDetection(examData.location_detection || false);
+        
+        // Load location data
+        if (examData.location) {
+          setLocation({
+            coordinates: examData.location.coordinates || '',
+            rangeInMeters: examData.location.rangeInMeters || '100'
+          });
+        }
         
         // Load selected classes
         setSelectedClassIds(examData.class_id || []);
@@ -560,7 +577,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     const exportData = {
       ...question,
       exported_at: new Date().toISOString(),
-      app: 'QuizZered'
+      app: 'QuizZred'
     };
     
     const dataStr = JSON.stringify(exportData, null, 2);
@@ -765,7 +782,8 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
         allow_word_by_word_translation: allowWordByWordTranslation,
         allow_word_by_word_definition: allowWordByWordDefinition,
         visibility_change_detection: visibilityChangeDetection,
-        location_detection: locationDetection
+        location_detection: locationDetection,
+        location: location
       };
       
       if (publishType === 'public') {
@@ -934,7 +952,8 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
           allow_word_by_word_translation: allowWordByWordTranslation,
           allow_word_by_word_definition: allowWordByWordDefinition,
           visibility_change_detection: visibilityChangeDetection,
-          location_detection: locationDetection
+          location_detection: locationDetection,
+          location: location
         }),
       });
 
@@ -992,7 +1011,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
   }, [examName, examDescription, durationMinutes, attemptsAllowed, passingScore, 
       shuffleItems, showResultsImmediately, isPublic, startDate, endDate, items,
       consoleDetection, translationDetection, allowWordByWordTranslation, 
-      allowWordByWordDefinition, visibilityChangeDetection, locationDetection]);
+      allowWordByWordDefinition, visibilityChangeDetection, locationDetection, location]);
 
   // Watch for changes and trigger auto-save
   useEffect(() => {
@@ -1008,7 +1027,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
   }, [examName, examDescription, durationMinutes, attemptsAllowed, passingScore,
       shuffleItems, showResultsImmediately, isPublic, startDate, endDate, items,
       consoleDetection, translationDetection, allowWordByWordTranslation,
-      allowWordByWordDefinition, visibilityChangeDetection, locationDetection,
+      allowWordByWordDefinition, visibilityChangeDetection, locationDetection, location,
       triggerAutoSave, loading]);
 
   // Save scroll position while scrolling
@@ -1253,7 +1272,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
                 key={`modal-code-editor-${codeEditorModal.questionIndex}`}
                 files={codeEditorModal.files}
                 onChange={handleCodeEditorChange}
-                height="calc(100vh - 160px)"
+                height="calc(100vh - 200px)"
               />
             </div>
           </div>
@@ -1529,6 +1548,8 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
               onAllowWordByWordDefinitionChange={setAllowWordByWordDefinition}
               onVisibilityChangeDetectionChange={setVisibilityChangeDetection}
               onLocationDetectionChange={setLocationDetection}
+              location={location}
+              onLocationChange={setLocation}
               onDeleteExam={deleteExam}
             />
           </TabsContent>
@@ -1557,6 +1578,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
             }}
             className="flex-1 flex flex-col overflow-hidden"
           >
+            <h2 className="text-lg font-semibold">Choose Publish Type:</h2>
             <TabsList className="grid w-full grid-cols-2 h-12 bg-muted/50 p-1">
               <TabsTrigger value="public" className="flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
                 <Globe className="h-4 w-4" />
@@ -1700,7 +1722,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
                         {classes.map((cls) => {
                           const isAlreadyPublished = classesWithExistingAssignments.includes(cls.class_id);
                           const isSelected = selectedClassIds.includes(cls.class_id);
-                          
+                    
                           return (
                             <div 
                               key={cls.class_id} 
@@ -1714,7 +1736,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
                             >
                               <Checkbox
                                 id={`public-class-${cls.class_id}`}
-                                checked={selectedClassIds.includes(cls.class_id)}
+                                checked={isSelected}
                                 className="mt-1"
                                 onCheckedChange={(checked) => {
                                   if (checked) {
@@ -1990,7 +2012,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
               ) : (
                 <>
                   <CheckIcon className="h-4 w-4 mr-2" />
-                  {isPublished ? 'Update Assignments' : 'Publish Exam'}
+                  {publishType === 'classes' ? `Publish to ${selectedClassIds.length} ${selectedClassIds.length === 1 ? 'Class' : 'Classes'}` : publishType === 'code' ? 'Publish with Link' : 'Publish Exam'}
                 </>
               )}
             </Button>

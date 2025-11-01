@@ -18,6 +18,12 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Clock, Trash2, AlertTriangle } from 'lucide-react';
+import LocationPicker from '@/components/ui/location-picker';
+
+interface LocationData {
+  coordinates: string;
+  rangeInMeters: string;
+}
 
 interface ExamSettingsTabProps {
   durationMinutes: number;
@@ -33,6 +39,7 @@ interface ExamSettingsTabProps {
   allowWordByWordDefinition?: boolean;
   visibilityChangeDetection?: boolean;
   locationDetection?: boolean;
+  location?: LocationData;
   onDurationChange: (value: number) => void;
   onAttemptsChange: (value: number) => void;
   onPassingScoreChange: (value: number) => void;
@@ -46,6 +53,7 @@ interface ExamSettingsTabProps {
   onAllowWordByWordDefinitionChange?: (value: boolean) => void;
   onVisibilityChangeDetectionChange?: (value: boolean) => void;
   onLocationDetectionChange?: (value: boolean) => void;
+  onLocationChange?: (value: LocationData) => void;
   onDeleteExam?: () => void;
 }
 
@@ -62,6 +70,7 @@ export default function ExamSettingsTab({
   allowWordByWordDefinition = false,
   visibilityChangeDetection = false,
   locationDetection = false,
+  location = { coordinates: '', rangeInMeters: '100' },
   onDurationChange,
   onAttemptsChange,
   onPassingScoreChange,
@@ -74,6 +83,7 @@ export default function ExamSettingsTab({
   onAllowWordByWordDefinitionChange,
   onVisibilityChangeDetectionChange,
   onLocationDetectionChange,
+  onLocationChange,
   onDeleteExam
 }: ExamSettingsTabProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -258,6 +268,17 @@ export default function ExamSettingsTab({
             />
           </div>
         </div>
+
+        {/* Location Picker - Show when location detection is enabled */}
+        {locationDetection && onLocationChange && (
+          <>
+            <Separator />
+            <LocationPicker
+              value={location}
+              onChange={onLocationChange}
+            />
+          </>
+        )}
 
         {onDeleteExam && (
           <>

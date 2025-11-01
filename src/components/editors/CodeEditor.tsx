@@ -831,7 +831,7 @@ const CodeEditor = memo(function CodeEditor({
       'tsx': '// React TypeScript component here',
       'css': '/* CSS styles here */',
       'scss': '/* SCSS styles here */',
-      'html': '<!-- HTML markup here -->',
+      'html': '<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>Document</title>\n</head>\n<body>\n    \n</body>\n</html>\n',
       'json': '{\n  \n}',
       'md': '# Markdown content',
       'py': '# Python code here',

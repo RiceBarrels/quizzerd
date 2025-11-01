@@ -1,11 +1,12 @@
 "use client"
 
-import { Calendar1Icon, CheckLineIcon, HomeIcon, ListCheckIcon, ListTodoIcon, GraduationCap, Loader2, BookOpen} from "lucide-react"
+import { Calendar1Icon, CheckLineIcon, HomeIcon, ListCheckIcon, ListTodoIcon, GraduationCap, Loader2, BookOpen, Archive} from "lucide-react"
 import { SidebarGroup, SidebarMenuButton } from "./sidebar"
 import { Link } from 'next-view-transitions'
 import { usePathname } from "next/navigation"
 import { useState, useEffect } from "react"
 import { Badge } from "./badge"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./accordion"
 
 export function GeneralGroup(){
     const pathname = usePathname()
@@ -59,6 +60,7 @@ export function GeneralGroup(){
 export function ClassesGroup(){
     const pathname = usePathname()
     const [classes, setClasses] = useState<any[]>([])
+    const [archivedClasses, setArchivedClasses] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
@@ -67,11 +69,22 @@ export function ClassesGroup(){
 
     const fetchClasses = async () => {
         try {
-            const response = await fetch('/api/classes/get?limit=10')
-            const data = await response.json()
+            // Fetch active classes
+            const activeResponse = await fetch('/api/classes/get?limit=10')
+            const activeData = await activeResponse.json()
             
-            if (data.success) {
-                setClasses(data.data)
+            if (activeData.success) {
+                setClasses(activeData.data)
+            }
+
+            // Fetch archived classes
+            const archivedResponse = await fetch('/api/classes/get?limit=10&includeArchived=true')
+            const archivedData = await archivedResponse.json()
+            
+            if (archivedData.success) {
+                // Filter only archived classes
+                const archived = archivedData.data.filter((c: any) => c.is_archived)
+                setArchivedClasses(archived)
             }
         } catch (error) {
             console.error('Failed to fetch classes:', error)
@@ -91,7 +104,7 @@ export function ClassesGroup(){
                 )}
             </div>
             
-            {!loading && classes.length === 0 ? (
+            {!loading && classes.length === 0 && archivedClasses.length === 0 ? (
                 <div className="px-4 py-8 text-center rounded-2xl bg-muted border border-dashed border-border mx-1">
                     <BookOpen className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                     <p className="text-xs text-muted-foreground font-medium mb-2">No classes yet</p>
@@ -105,6 +118,7 @@ export function ClassesGroup(){
                 </div>
             ) : (
                 <div className="space-y-1.5">
+                    {/* Active Classes */}
                     {classes.slice(0, 8).map((classItem) => {
                         const isActive = pathname === `/class/${classItem.class_code}`
                         return (
@@ -140,6 +154,7 @@ export function ClassesGroup(){
                             </SidebarMenuButton>
                         )
                     })}
+                    
                     {classes.length > 8 && (
                         <SidebarMenuButton 
                             asChild 
@@ -150,6 +165,59 @@ export function ClassesGroup(){
                                 <span className="text-lg leading-none">→</span>
                             </Link>
                         </SidebarMenuButton>
+                    )}
+                    
+                    {/* Archived Classes Accordion */}
+                    {archivedClasses.length > 0 && (
+                        <Accordion type="single" collapsible className="mt-3">
+                            <AccordionItem value="archived" className="border-none">
+                                <AccordionTrigger className="px-4 py-2 hover:no-underline rounded-2xl hover:bg-sidebar-accent">
+                                    <div className="flex items-center gap-2">
+                                        <Archive className="h-3 w-3 text-muted-foreground" />
+                                        <span className="text-xs font-medium text-muted-foreground">
+                                            Archived ({archivedClasses.length})
+                                        </span>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="space-y-1.5 pt-1">
+                                    {archivedClasses.map((classItem) => {
+                                        const isActive = pathname === `/class/${classItem.class_code}`
+                                        return (
+                                            <SidebarMenuButton 
+                                                key={classItem.class_id} 
+                                                isActive={isActive} 
+                                                asChild
+                                                className="sidebar-menu-button group relative h-11 rounded-2xl px-4 opacity-70 hover:opacity-100"
+                                            >
+                                                <Link 
+                                                    href={`/class/${classItem.class_code}`} 
+                                                    className="flex items-center gap-3 w-full"
+                                                >
+                                                    {isActive && (
+                                                        <div className="absolute left-0 h-6 w-1 bg-primary rounded-r-full" />
+                                                    )}
+                                                    <div 
+                                                        className="w-3 h-3 rounded-full flex-shrink-0 shadow-sm transition-transform group-hover:scale-110" 
+                                                        style={{ backgroundColor: classItem.class_settings?.themeColor || '#bc6a4a' }}
+                                                    />
+                                                    <span className="truncate flex-1 text-sm font-medium">
+                                                        {classItem.class_name}
+                                                    </span>
+                                                    {(classItem.role === 'admin' || classItem.role === 'teacher') && (
+                                                        <Badge 
+                                                            variant="secondary" 
+                                                            className="text-[9px] px-2 py-0.5 h-5 font-bold rounded-full"
+                                                        >
+                                                            {classItem.role === 'admin' ? 'A' : 'T'}
+                                                        </Badge>
+                                                    )}
+                                                </Link>
+                                            </SidebarMenuButton>
+                                        )
+                                    })}
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
                     )}
                 </div>
             )}

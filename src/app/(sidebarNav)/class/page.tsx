@@ -6,15 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import CreateClassButton from "@/components/ui/create-class-button";
 import JoinButton from "@/components/ui/join-button";
-import { GraduationCapIcon, HardDriveUploadIcon, PaperclipIcon, PlusIcon, ScrollTextIcon, SearchIcon, SquarePlusIcon, Users, Clock, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { GraduationCapIcon, HardDriveUploadIcon, PaperclipIcon, PlusIcon, ScrollTextIcon, SearchIcon, SquarePlusIcon, Users, Clock, ChevronLeft, ChevronRight, Loader2, Archive } from "lucide-react";
 import Image from "next/image";
 import { FcGoogle } from "react-icons/fc";
 import { Input } from "@/components/ui/input";
 import { Link, useTransitionRouter } from "next-view-transitions";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 export default function Home() {
     const [classes, setClasses] = useState<any[]>([]);
+    const [archivedClasses, setArchivedClasses] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [archivedLoading, setArchivedLoading] = useState(false);
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(1);
     const [pagination, setPagination] = useState<any>(null);
@@ -24,6 +27,10 @@ export default function Home() {
     useEffect(() => {
         fetchClasses();
     }, [page, search]);
+
+    useEffect(() => {
+        fetchArchivedClasses();
+    }, []);
 
     const fetchClasses = async () => {
         setLoading(true);
@@ -45,6 +52,30 @@ export default function Home() {
             console.error("Failed to fetch classes:", error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchArchivedClasses = async () => {
+        setArchivedLoading(true);
+        try {
+            const params = new URLSearchParams({
+                page: '1',
+                limit: '100',
+                includeArchived: 'true'
+            });
+
+            const response = await fetch(`/api/classes/get?${params}`);
+            const data = await response.json();
+
+            if (data.success) {
+                // Filter only archived classes
+                const archived = data.data.filter((c: any) => c.is_archived);
+                setArchivedClasses(archived);
+            }
+        } catch (error) {
+            console.error("Failed to fetch archived classes:", error);
+        } finally {
+            setArchivedLoading(false);
         }
     };
 
@@ -216,6 +247,74 @@ export default function Home() {
                                         Next
                                         <ChevronRight className="h-4 w-4" />
                                     </Button>
+                                </div>
+                            )}
+
+                            {/* Archived Classes Accordion */}
+                            {archivedClasses.length > 0 && (
+                                <div className="mt-8">
+                                    <Accordion type="single" collapsible className="w-full">
+                                        <AccordionItem value="archived" className="border rounded-2xl px-4">
+                                            <AccordionTrigger className="hover:no-underline py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <Archive className="h-5 w-5 text-muted-foreground" />
+                                                    <h3 className="text-lg font-bold">Archived Classes</h3>
+                                                    <Badge variant="secondary" className="ml-2">
+                                                        {archivedClasses.length}
+                                                    </Badge>
+                                                </div>
+                                            </AccordionTrigger>
+                                            <AccordionContent>
+                                                {archivedLoading ? (
+                                                    <div className="flex items-center justify-center h-32">
+                                                        <Loader2 className="h-8 w-8 animate-spin" />
+                                                    </div>
+                                                ) : (
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-4">
+                                                        {archivedClasses.map((classItem) => (
+                                                            <Link key={classItem.class_id} href={`class/${classItem.class_code}`}>
+                                                                <Card 
+                                                                    className={`h-52 flex flex-col gap-2 p-0 overflow-clip bg-sidebar cursor-pointer duration-150 opacity-70 hover:opacity-100`}
+                                                                >
+                                                                    <CardHeader 
+                                                                        className="rounded-b-2xl shadow m-0 p-1 gap-1"
+                                                                        style={{ backgroundColor: classItem.class_settings?.themeColor || '#bc6a4a' }}
+                                                                    >
+                                                                        <CardTitle className="text-sidebar-foreground text-shadow-2xs w-full gap-2 bg-sidebar p-3 rounded-t-2xl rounded-b-lg m-0 font-black flex items-center justify-between">
+                                                                            <span className="truncate">{classItem.class_name}</span>
+                                                                            <Archive className="h-4 w-4 flex-shrink-0" />
+                                                                        </CardTitle>
+                                                                        <CardDescription className="text-sidebar-foreground text-shadow-2xs m-0 bg-sidebar p-2 rounded-t-lg rounded-b-2xl text-xs space-y-1">
+                                                                            <div className="flex items-center gap-2">
+                                                                                {(classItem.role === "admin" || classItem.role === "teacher") &&
+                                                                                    <Badge variant="outline" className="text-xs">
+                                                                                        Class Code: {classItem.class_code}
+                                                                                    </Badge>
+                                                                                }
+                                                                                <Badge variant="secondary" className="text-xs">
+                                                                                    {classItem.role}
+                                                                                </Badge>
+                                                                            </div>
+                                                                            {classItem.period_start && (
+                                                                                <div className="flex items-center gap-1 text-muted-foreground">
+                                                                                    <Clock className="h-3 w-3" />
+                                                                                    <span>{formatTime(classItem.period_start)} - {formatTime(classItem.period_end)}</span>
+                                                                                </div>
+                                                                            )}
+                                                                            <div className="flex items-center gap-1 text-muted-foreground">
+                                                                                <Users className="h-3 w-3" />
+                                                                                <span>{classItem.member_count} members</span>
+                                                                            </div>
+                                                                        </CardDescription>
+                                                                    </CardHeader>
+                                                                </Card>
+                                                            </Link>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </AccordionContent>
+                                        </AccordionItem>
+                                    </Accordion>
                                 </div>
                             )}
                         </>
