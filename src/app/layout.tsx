@@ -44,7 +44,7 @@ export interface PageParams {
   examId: string;
 }
 
-export default function RootLayout({ children }:ComponentProps) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <ClerkProvider
         appearance={{
