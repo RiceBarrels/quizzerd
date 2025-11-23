@@ -1,5 +1,7 @@
+
+
 [build]
-  command = "bun run build"
+  command = "bun i && bun run build"
   publish = ".next"
 
 [[plugins]]
