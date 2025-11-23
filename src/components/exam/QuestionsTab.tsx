@@ -30,8 +30,8 @@ interface QuestionsTabProps {
   onRemoveOption: (questionIndex: number, optionIndex: number) => void;
   onRemoveQuestion: (index: number) => void;
   onDuplicateQuestion?: (index: number) => void;
-  onCopyQuestion?: (index: number) => void;
-  onCutQuestion?: (index: number) => void;
+  onCopyQuestion?: (index: number | number[]) => void;
+  onCutQuestion?: (index: number | number[]) => void;
   onPasteQuestion?: (afterIndex: number) => Promise<void>;
   onMoveUp?: (index: number) => void;
   onMoveDown?: (index: number) => void;

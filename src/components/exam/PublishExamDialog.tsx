@@ -706,7 +706,7 @@ export default function PublishExamDialog({
           <DialogHeader>
             <DialogTitle>Set Assignment Dates</DialogTitle>
             <DialogDescription>
-              Set when students can access this assignment and when it's due.
+              Set when students can access this assignment and when it&apos;s due.
             </DialogDescription>
           </DialogHeader>
           

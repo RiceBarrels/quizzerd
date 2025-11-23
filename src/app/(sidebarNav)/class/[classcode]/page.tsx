@@ -671,7 +671,7 @@ export default function ClassPage() {
                 Public Member List
               </p>
               <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                All class members can view this list. Everyone in the class can see each other's names, emails, and profile pictures.
+                All class members can view this list. Everyone in the class can see each other&apos;s names, emails, and profile pictures.
               </p>
             </div>
           </div>
