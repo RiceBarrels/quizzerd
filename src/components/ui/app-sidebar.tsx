@@ -30,7 +30,7 @@ export default function AppSidebar({...prop}){
                         <Sparkles className="h-5 w-5" />
                     </div>
                     <div className="flex flex-col">
-                        <h1 className="font-bold text-xl">QuizZred</h1>
+                        <h1 className="font-bold text-xl">QuizZerd</h1>
                         <p className="text-[10px] text-muted-foreground">Education Platform</p>
                     </div>
                 </Link>

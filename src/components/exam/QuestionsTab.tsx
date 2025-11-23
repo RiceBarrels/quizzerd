@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, FilePlus } from 'lucide-react';
 import QuestionCard from './QuestionCard';
 import { ExamItem } from '@/types/exam';
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -48,6 +48,10 @@ interface QuestionsTabProps {
   onScrollToQuestionRef?: (scrollFn: (questionId: string, isManualClick?: boolean) => void) => void;
   activeQuestionId?: string | null;
   onActiveQuestionIdChange?: (id: string | null) => void;
+  highlightedCard?: string | null;
+  onHighlightedCardChange?: (id: string | null) => void;
+  selectedQuestions?: Set<string>;
+  onQuestionSelect?: (questionId: string, event: React.MouseEvent) => void;
 }
 
 export default function QuestionsTab({
@@ -75,7 +79,11 @@ export default function QuestionsTab({
   onOpenCodeEditor,
   onScrollToQuestionRef,
   activeQuestionId,
-  onActiveQuestionIdChange
+  onActiveQuestionIdChange,
+  highlightedCard,
+  onHighlightedCardChange,
+  selectedQuestions = new Set(),
+  onQuestionSelect
 }: QuestionsTabProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -94,7 +102,7 @@ export default function QuestionsTab({
   const observerDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const scrollEndTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  function handleDragEnd(event: DragEndEvent): void {
+  const handleDragEnd = useCallback((event: DragEndEvent): void => {
     const { active, over } = event;
 
     if (active.id !== over?.id && onReorderQuestions) {
@@ -104,7 +112,7 @@ export default function QuestionsTab({
       const reorderedItems = arrayMove(items, oldIndex, newIndex);
       onReorderQuestions(reorderedItems);
     }
-  }
+  }, [items, onReorderQuestions]);
 
   // Function to find and highlight the most visible question
   const highlightMostVisibleQuestion = useCallback(() => {
@@ -186,7 +194,7 @@ export default function QuestionsTab({
     if (onScrollToQuestionRef) {
       onScrollToQuestionRef(scrollToQuestion);
     }
-  }, [onScrollToQuestionRef]);
+  }, [onScrollToQuestionRef, scrollToQuestion]);
 
   // Detect scroll end and highlight the most visible question
   useEffect(() => {
@@ -320,6 +328,19 @@ export default function QuestionsTab({
                   .filter(i => i.question_type !== 'section_header' && i.question_type !== 'page_break')
                   .length;
                 
+                // Scroll-based highlighting (background only)
+                const isScrollHighlighted = activeQuestionId === item.question_id;
+                // Click-based highlighting (border)
+                const isClickHighlighted = highlightedCard === item.question_id;
+                // Selection highlighting
+                const isSelected = selectedQuestions.has(item.question_id);
+                
+                // Calculate all selected indices for context menu
+                const selectedIndices = Array.from(selectedQuestions).map(id => {
+                  const idx = items.findIndex(i => i.question_id === id);
+                  return idx !== -1 ? idx : null;
+                }).filter((idx): idx is number => idx !== null);
+                
                 return (
                   <div
                     key={item.question_id}
@@ -327,6 +348,25 @@ export default function QuestionsTab({
                     ref={(el) => {
                       questionRefs.current[item.question_id] = el;
                     }}
+                    onClick={(e) => {
+                      if (onQuestionSelect) {
+                        onQuestionSelect(item.question_id, e);
+                      } else {
+                        // Fallback: Set clicked card highlight (border)
+                        if (onHighlightedCardChange) {
+                          onHighlightedCardChange(item.question_id);
+                        }
+                        // Scroll to question (this also updates activeQuestionId for scroll highlight)
+                        scrollToQuestion(item.question_id, true);
+                      }
+                    }}
+                    onContextMenu={(e) => {
+                      // Set clicked card highlight (border) on right-click too
+                      if (onHighlightedCardChange) {
+                        onHighlightedCardChange(item.question_id);
+                      }
+                    }}
+                    className={`transition-all`}
                   >
                     <QuestionCard
                       id={item.question_id}
@@ -352,6 +392,10 @@ export default function QuestionsTab({
                       onClearOptions={onClearOptions}
                       onExportQuestion={onExportQuestion}
                       onOpenCodeEditor={onOpenCodeEditor}
+                      isScrollHighlighted={isScrollHighlighted}
+                      isClickHighlighted={isClickHighlighted}
+                      isSelected={isSelected}
+                      selectedIndices={selectedIndices}
                     />
                   </div>
                 );

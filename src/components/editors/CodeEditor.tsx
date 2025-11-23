@@ -748,9 +748,11 @@ const CodeEditor = memo(function CodeEditor({
                 f.name === fileName ? { ...f, content: updatedContent } : f
               );
 
-              // Call onChange with updated files
+              // Call onChange with updated files - defer to avoid calling during render
               if (onChange) {
-                onChange(updated);
+                setTimeout(() => {
+                  onChange(updated);
+                }, 0);
               }
 
               return updated;

@@ -166,10 +166,18 @@ export default function FloatingFormatDock() {
   const [showBgColorDialog, setShowBgColorDialog] = useState<boolean>(false);
   const dockRef = useRef<HTMLDivElement | null>(null);
   const [mounted, setMounted] = useState(false);
+  const updateFormatsTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     setMounted(true);
-    return () => setMounted(false);
+    return () => {
+      setMounted(false);
+      // Cleanup timer on unmount
+      if (updateFormatsTimerRef.current) {
+        clearTimeout(updateFormatsTimerRef.current);
+        updateFormatsTimerRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -180,27 +188,35 @@ export default function FloatingFormatDock() {
   }, [activeEditor, updateTrigger]);
 
   const updateActiveFormats = useCallback((skipSizeUpdate = false) => {
-    if (activeEditor?.ref?.current) {
-      const selection = activeEditor.ref.current.getSelection();
-      if (selection) {
-        const formats = activeEditor.ref.current.getFormat(selection);
-        setActiveFormats(formats);
-        
-        // Update font size state based on current selection (unless we're actively changing it)
-        if (!skipSizeUpdate) {
-          if (formats.size) {
-            // Extract number from size string (e.g., "18px" -> 18)
-            const sizeNum = parseInt(String(formats.size));
-            if (!isNaN(sizeNum)) {
-              setFontSize(sizeNum);
+    // Clear existing timer
+    if (updateFormatsTimerRef.current) {
+      clearTimeout(updateFormatsTimerRef.current);
+    }
+    
+    // Debounce format updates
+    updateFormatsTimerRef.current = setTimeout(() => {
+      if (activeEditor?.ref?.current) {
+        const selection = activeEditor.ref.current.getSelection();
+        if (selection) {
+          const formats = activeEditor.ref.current.getFormat(selection);
+          setActiveFormats(formats);
+          
+          // Update font size state based on current selection (unless we're actively changing it)
+          if (!skipSizeUpdate) {
+            if (formats.size) {
+              // Extract number from size string (e.g., "18px" -> 18)
+              const sizeNum = parseInt(String(formats.size));
+              if (!isNaN(sizeNum)) {
+                setFontSize(sizeNum);
+              }
+            } else {
+              // Reset to default if no size is set
+              setFontSize(16);
             }
-          } else {
-            // Reset to default if no size is set
-            setFontSize(16);
           }
         }
       }
-    }
+    }, 100); // Debounce by 100ms
   }, [activeEditor]);
 
   const applyFormat = useCallback((format: string, value: any = true) => {
@@ -314,10 +330,8 @@ export default function FloatingFormatDock() {
       }
       
       // Small delay to ensure Quill has applied the format
-      setTimeout(() => {
-        // Skip size update when we just changed the size
-        updateActiveFormats(format === 'size');
-      }, 10);
+      // Skip size update when we just changed the size
+      updateActiveFormats(format === 'size');
     }
   }, [activeEditor, activeFormats, updateActiveFormats]);
 

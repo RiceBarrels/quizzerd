@@ -1,22 +1,50 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { MapContainer, TileLayer, Circle, Marker, useMapEvents, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import {
+  Popover,
+  PopoverContent,
+  PopoverAnchor,
+} from '@/components/ui/popover';
 import { MapPin, Search, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
-// Fix for default marker icons in React Leaflet
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-});
+// Dynamically import Leaflet components with SSR disabled
+const MapContainer = dynamic(
+  () => import('./leaflet-components').then((mod) => mod.MapContainer),
+  { ssr: false }
+);
+
+const TileLayer = dynamic(
+  () => import('./leaflet-components').then((mod) => mod.TileLayer),
+  { ssr: false }
+);
+
+const Circle = dynamic(
+  () => import('./leaflet-components').then((mod) => mod.Circle),
+  { ssr: false }
+);
+
+const Marker = dynamic(
+  () => import('./leaflet-components').then((mod) => mod.Marker),
+  { ssr: false }
+);
+
+const MapClickHandler = dynamic(
+  () => import('./leaflet-components').then((mod) => ({ default: mod.MapClickHandler })),
+  { ssr: false }
+);
+
+const MapCenterHandler = dynamic(
+  () => import('./leaflet-components').then((mod) => ({ default: mod.MapCenterHandler })),
+  { ssr: false }
+);
 
 interface LocationData {
   coordinates: string; // "latitude,longitude"
@@ -28,31 +56,23 @@ interface LocationPickerProps {
   onChange: (value: LocationData) => void;
 }
 
-// Component to handle map clicks
-function MapClickHandler({ onClick }: { onClick: (lat: number, lng: number) => void }) {
-  useMapEvents({
-    click: (e) => {
-      onClick(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-}
-
-// Component to handle map centering
-function MapCenterHandler({ center }: { center: [number, number] }) {
-  const map = useMap();
-  
-  useEffect(() => {
-    map.setView(center, map.getZoom());
-  }, [center, map]);
-  
-  return null;
+interface LocationSuggestion {
+  display_name: string;
+  lat: string;
+  lon: string;
+  type: string;
+  place_id: number;
 }
 
 export default function LocationPicker({ value, onChange }: LocationPickerProps) {
   const [mounted, setMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
+  const [suggestions, setSuggestions] = useState<LocationSuggestion[]>([]);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<LocationSuggestion | null>(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   
   // Parse coordinates from the value
   const coordinates = value.coordinates ? value.coordinates.split(',').map(Number) : null;
@@ -72,22 +92,25 @@ export default function LocationPicker({ value, onChange }: LocationPickerProps)
     }
   }, []);
 
-  const handleMapClick = (lat: number, lng: number) => {
+  const handleMapClick = useCallback((lat: number, lng: number) => {
     onChange({
       ...value,
       coordinates: `${lat},${lng}`,
     });
-  };
+    // Clear search query when clicking on map
+    setSearchQuery('');
+    setSelectedSuggestion(null);
+  }, [value, onChange]);
 
-  const handleRangeChange = (range: string) => {
+  const handleRangeChange = useCallback((range: string) => {
     const numRange = parseInt(range) || 100;
     onChange({
       ...value,
       rangeInMeters: numRange.toString(),
     });
-  };
+  }, [value, onChange]);
 
-  const handleGetCurrentLocation = () => {
+  const handleGetCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) {
       toast.error('Geolocation is not supported by your browser');
       return;
@@ -107,21 +130,122 @@ export default function LocationPicker({ value, onChange }: LocationPickerProps)
         setSearching(false);
         toast.success('Location set to current position');
       },
-      (error) => {
-        console.error('Geolocation error:', error);
-        toast.error('Failed to get current location. Please enable location permissions.');
+      (error: GeolocationPositionError) => {
+        let errorMessage = 'Failed to get current location.';
+        
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'Location access denied. Please enable location permissions in your browser settings.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Location information is unavailable. Please try again.';
+            break;
+          case error.TIMEOUT:
+            errorMessage = 'Location request timed out. Please try again.';
+            break;
+          default:
+            errorMessage = 'Failed to get current location. Please try again.';
+            break;
+        }
+        
+        console.error('Geolocation error:', {
+          code: error.code,
+          message: error.message,
+          PERMISSION_DENIED: error.PERMISSION_DENIED,
+          POSITION_UNAVAILABLE: error.POSITION_UNAVAILABLE,
+          TIMEOUT: error.TIMEOUT,
+        });
+        
+        toast.error(errorMessage);
         setSearching(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
       }
     );
-  };
+  }, [value, onChange]);
 
-  const handleSearch = async () => {
+  // Fetch location suggestions from OpenStreetMap Nominatim API
+  const fetchSuggestions = useCallback(async (query: string) => {
+    if (!query.trim() || query.length < 2) {
+      setSuggestions([]);
+      setSuggestionsOpen(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`,
+        {
+          headers: {
+            'User-Agent': 'ExamLocationPicker/1.0',
+          },
+        }
+      );
+      
+      const data = await response.json();
+      
+      if (data && Array.isArray(data)) {
+        setSuggestions(data);
+        setSuggestionsOpen(true);
+      } else {
+        setSuggestions([]);
+      }
+    } catch (error) {
+      console.error('Error fetching suggestions:', error);
+      setSuggestions([]);
+    }
+  }, []);
+
+  // Debounced search for suggestions
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (searchQuery.trim().length >= 2) {
+      searchTimeoutRef.current = setTimeout(() => {
+        fetchSuggestions(searchQuery);
+      }, 300); // 300ms debounce
+    } else {
+      setSuggestions([]);
+      setSuggestionsOpen(false);
+    }
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchQuery, fetchSuggestions]);
+
+  // Handle selecting a suggestion
+  const handleSelectSuggestion = useCallback((suggestion: LocationSuggestion) => {
+    const lat = parseFloat(suggestion.lat);
+    const lng = parseFloat(suggestion.lon);
+    
+    onChange({
+      ...value,
+      coordinates: `${lat},${lng}`,
+    });
+    setMapCenter([lat, lng]);
+    setSearchQuery(suggestion.display_name);
+    setSelectedSuggestion(suggestion);
+    setSuggestionsOpen(false);
+    setSuggestions([]);
+    toast.success(`Location set to: ${suggestion.display_name}`);
+  }, [value, onChange]);
+
+  const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) {
       toast.error('Please enter a location to search');
       return;
     }
 
     setSearching(true);
+    setSuggestionsOpen(false);
     try {
       // Using Nominatim API (OpenStreetMap's geocoding service)
       const response = await fetch(
@@ -144,6 +268,7 @@ export default function LocationPicker({ value, onChange }: LocationPickerProps)
           coordinates: `${lat},${lng}`,
         });
         setMapCenter([lat, lng]);
+        setSelectedSuggestion(data[0]);
         toast.success(`Location set to: ${data[0].display_name}`);
       } else {
         toast.error('Location not found. Please try a different search term.');
@@ -154,7 +279,7 @@ export default function LocationPicker({ value, onChange }: LocationPickerProps)
     } finally {
       setSearching(false);
     }
-  };
+  }, [searchQuery, value, onChange]);
 
   // Don't render map on server
   if (!mounted) {
@@ -190,21 +315,94 @@ export default function LocationPicker({ value, onChange }: LocationPickerProps)
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Search Bar */}
+        {/* Search Bar with Autocomplete */}
         <div className="space-y-2">
           <Label>Search Location</Label>
           <div className="flex gap-2">
-            <div className="flex-1 flex gap-2">
-              <Input
-                placeholder="Enter address, city, or landmark..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleSearch();
-                  }
-                }}
-              />
+            <div className="flex-1 flex gap-2 relative">
+              <div className="flex-1 relative">
+                <Popover open={suggestionsOpen && suggestions.length > 0} onOpenChange={setSuggestionsOpen}>
+                  <PopoverAnchor asChild>
+                    <div className="w-full">
+                      <Input
+                        ref={inputRef}
+                        placeholder="Enter address, city, or landmark..."
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setSelectedSuggestion(null);
+                        }}
+                        onFocus={() => {
+                          if (suggestions.length > 0) {
+                            setSuggestionsOpen(true);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSearch();
+                            setSuggestionsOpen(false);
+                          } else if (e.key === 'Escape') {
+                            setSuggestionsOpen(false);
+                          }
+                        }}
+                        className="flex-1"
+                      />
+                    </div>
+                  </PopoverAnchor>
+                  <PopoverContent 
+                    className="w-[var(--radix-popover-anchor-width)] p-1 max-h-[300px] overflow-y-auto" 
+                    align="start"
+                    side="bottom"
+                    sideOffset={4}
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    onCloseAutoFocus={(e) => {
+                      e.preventDefault();
+                      inputRef.current?.focus();
+                    }}
+                  >
+                    {suggestions.length === 0 && searchQuery.length >= 2 && (
+                      <div className="px-2 py-3 text-sm text-muted-foreground text-center">
+                        {searching ? 'Searching...' : 'No locations found'}
+                      </div>
+                    )}
+                    {suggestions.length > 0 && (
+                      <div className="space-y-1">
+                        {suggestions.map((suggestion) => (
+                          <button
+                            key={suggestion.place_id}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleSelectSuggestion(suggestion);
+                              setSuggestionsOpen(false);
+                            }}
+                            onMouseDown={(e) => {
+                              e.preventDefault(); // Prevent input blur
+                            }}
+                            className={cn(
+                              "w-full text-left px-3 py-2 rounded-md text-sm transition-colors",
+                              "hover:bg-accent hover:text-accent-foreground",
+                              "focus:bg-accent focus:text-accent-foreground",
+                              "cursor-pointer flex items-start gap-2",
+                              selectedSuggestion?.place_id === suggestion.place_id && "bg-accent"
+                            )}
+                          >
+                            <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0 text-muted-foreground" />
+                            <div className="flex flex-col flex-1 min-w-0">
+                              <span className="font-medium truncate">{suggestion.display_name}</span>
+                              {suggestion.type && (
+                                <span className="text-xs text-muted-foreground capitalize">
+                                  {suggestion.type.replace('_', ' ')}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              </div>
               <Button
                 variant="outline"
                 onClick={handleSearch}
@@ -227,6 +425,11 @@ export default function LocationPicker({ value, onChange }: LocationPickerProps)
               Use Current Location
             </Button>
           </div>
+          {suggestions.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Showing {suggestions.length} suggestion{suggestions.length !== 1 ? 's' : ''} from OpenStreetMap
+            </p>
+          )}
         </div>
 
         {/* Map */}
@@ -238,10 +441,14 @@ export default function LocationPicker({ value, onChange }: LocationPickerProps)
               zoom={13}
               style={{ height: '100%', width: '100%' }}
               scrollWheelZoom={true}
+              zoomControl={true}
+              className="rounded-lg"
             >
               <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+                subdomains="abcd"
+                maxZoom={19}
               />
               <MapClickHandler onClick={handleMapClick} />
               <MapCenterHandler center={mapCenter} />
@@ -253,9 +460,11 @@ export default function LocationPicker({ value, onChange }: LocationPickerProps)
                     center={[latitude, longitude]}
                     radius={rangeInMeters}
                     pathOptions={{
-                      color: 'blue',
-                      fillColor: 'blue',
-                      fillOpacity: 0.1,
+                      color: '#3b82f6',
+                      fillColor: '#3b82f6',
+                      fillOpacity: 0.2,
+                      weight: 2,
+                      opacity: 0.8,
                     }}
                   />
                 </>

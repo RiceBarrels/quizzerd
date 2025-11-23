@@ -8,26 +8,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { 
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import ExamContextMenu from "@/components/exam/ExamContextMenu";
 import { toast } from "sonner";
 import { 
   FileTextIcon, 
@@ -51,7 +35,11 @@ import {
   Trash2,
   Eye,
   Share2,
-  Archive
+  Archive,
+  Calendar,
+  Target,
+  Hash,
+  TrendingUp
 } from "lucide-react";
 import { useTransitionRouter } from "next-view-transitions";
 
@@ -73,8 +61,6 @@ export default function ExamPage() {
   const [loadingForms, setLoadingForms] = useState(false);
   const [importMode, setImportMode] = useState('url'); // 'url' or 'browse'
   const [classes, setClasses] = useState<any[]>([]);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [examToDelete, setExamToDelete] = useState<{id: string, name: string} | null>(null);
   const router = useTransitionRouter();
   const limit = 12;
 
@@ -295,97 +281,6 @@ export default function ExamPage() {
     setPage(1);
   };
 
-  const handleDeleteExam = (examId: string, examName: string) => {
-    setExamToDelete({ id: examId, name: examName });
-    setDeleteDialogOpen(true);
-  };
-
-  const confirmDeleteExam = async () => {
-    if (!examToDelete) return;
-
-    try {
-      const response = await fetch(`/api/exams/delete?examId=${examToDelete.id}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        toast.success("Exam deleted successfully");
-        fetchExams();
-      } else {
-        toast.error(data.error || "Failed to delete exam");
-      }
-    } catch (error) {
-      console.error("Error deleting exam:", error);
-      toast.error("Failed to delete exam");
-    } finally {
-      setDeleteDialogOpen(false);
-      setExamToDelete(null);
-    }
-  };
-
-  const handleDuplicateExam = async (exam: any) => {
-    try {
-      const duplicatedExam = {
-        ...exam,
-        exam_name: `${exam.exam_name} (Copy)`,
-        status: 'draft',
-        created_at: undefined,
-        updated_at: undefined,
-        exam_id: undefined
-      };
-
-      const response = await fetch('/api/exams/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(duplicatedExam)
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        toast.success("Exam duplicated successfully");
-        fetchExams();
-      } else {
-        toast.error(data.error || "Failed to duplicate exam");
-      }
-    } catch (error) {
-      console.error("Error duplicating exam:", error);
-      toast.error("Failed to duplicate exam");
-    }
-  };
-
-  const handleTogglePublish = async (examId: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'published' ? 'draft' : 'published';
-    
-    try {
-      const response = await fetch('/api/exams/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ exam_id: examId, status: newStatus })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        toast.success(`Exam ${newStatus === 'published' ? 'published' : 'unpublished'} successfully`);
-        fetchExams();
-      } else {
-        toast.error(data.error || "Failed to update exam status");
-      }
-    } catch (error) {
-      console.error("Error updating exam status:", error);
-      toast.error("Failed to update exam status");
-    }
-  };
-
-  const handleCopyPublicLink = (examId: string) => {
-    const publicUrl = `${window.location.origin}/exam/${examId}/public`;
-    navigator.clipboard.writeText(publicUrl);
-    toast.success("Public link copied to clipboard");
-  };
 
   const getStatusBadge = (status: string) => {
     const variants: any = {
@@ -833,158 +728,127 @@ export default function ExamPage() {
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {exams.map((exam) => (
-                    <ContextMenu key={exam.exam_id}>
-                      <ContextMenuTrigger>
-                        <Card 
-                          className="hover:shadow-lg transition-shadow cursor-pointer"
-                          onClick={() => router.push(`/exam/${exam.exam_id}/${activeTab === "my-exams" ? "edit" : "view"}`)}
-                        >
-                          <CardHeader>
-                            <div className="flex justify-between items-start mb-2">
-                              <CardTitle className="text-lg line-clamp-2">
-                                {exam.exam_name}
-                              </CardTitle>
-                              {activeTab === "my-exams" && (
-                                <div className="flex gap-1">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      router.push(`/exam/${exam.exam_id}/edit`);
-                                    }}
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
+                    <ExamContextMenu
+                      key={exam.exam_id}
+                      exam={exam}
+                      activeTab={activeTab}
+                      onRefresh={fetchExams}
+                    >
+                      <Card 
+                        className="hover:shadow-lg transition-all duration-200 cursor-pointer h-full flex flex-col border-2 hover:border-primary/20"
+                        onClick={() => router.push(`/exam/${exam.exam_id}/${activeTab === "my-exams" ? "edit" : "view"}`)}
+                      >
+                        <CardHeader className="pb-3 flex-shrink-0">
+                          <div className="flex justify-between items-start gap-2 mb-2">
+                            <CardTitle className="text-lg font-semibold line-clamp-2 flex-1">
+                              {exam.exam_name}
+                            </CardTitle>
+                            {activeTab === "my-exams" && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 flex-shrink-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  router.push(`/exam/${exam.exam_id}/edit`);
+                                }}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                          <CardDescription className="line-clamp-2 text-sm min-h-[2.5rem]">
+                            {exam.exam_description || "No description provided"}
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex-1 flex flex-col space-y-3 pt-0">
+                          {/* Badges */}
+                          <div className="flex gap-2 flex-wrap">
+                            {getStatusBadge(exam.status)}
+                            {getVisibilityBadge(exam.is_public)}
+                            {exam.class_id && Array.isArray(exam.class_id) && exam.class_id.length > 0 && (
+                              <Badge variant="secondary" className="gap-1 text-xs">
+                                <Users className="h-3 w-3" />
+                                {exam.class_id.length}
+                              </Badge>
+                            )}
+                          </div>
+                          
+                          {/* Stats Grid */}
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            {exam.duration_minutes && (
+                              <div className="flex items-center gap-1.5 text-muted-foreground p-2 rounded-md bg-muted/50">
+                                <Clock className="h-3.5 w-3.5 text-primary" />
+                                <span className="font-medium">{exam.duration_minutes} min</span>
+                              </div>
+                            )}
+                            
+                            {exam.questions && exam.questions.length > 0 && (
+                              <div className="flex items-center gap-1.5 text-muted-foreground p-2 rounded-md bg-muted/50">
+                                <FileTextIcon className="h-3.5 w-3.5 text-primary" />
+                                <span className="font-medium">{exam.questions.length} Q</span>
+                              </div>
+                            )}
+                            
+                            {exam.total_points > 0 && (
+                              <div className="flex items-center gap-1.5 text-muted-foreground p-2 rounded-md bg-muted/50">
+                                <Target className="h-3.5 w-3.5 text-primary" />
+                                <span className="font-medium">{exam.total_points} pts</span>
+                              </div>
+                            )}
+                            
+                            {exam.attempts_allowed !== undefined && (
+                              <div className="flex items-center gap-1.5 text-muted-foreground p-2 rounded-md bg-muted/50">
+                                <TrendingUp className="h-3.5 w-3.5 text-primary" />
+                                <span className="font-medium">{exam.attempts_allowed} attempt{exam.attempts_allowed !== 1 ? 's' : ''}</span>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Additional Info */}
+                          {(exam.start_date || exam.end_date || exam.class_names?.length > 0) && (
+                            <div className="space-y-1.5 pt-1 border-t">
+                              {exam.class_names && exam.class_names.length > 0 && (
+                                <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                                  <Users className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                  <span className="line-clamp-1">{exam.class_names.join(", ")}</span>
                                 </div>
                               )}
-                            </div>
-                            <CardDescription className="line-clamp-2">
-                              {exam.exam_description || "No description"}
-                            </CardDescription>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="space-y-2">
-                              <div className="flex gap-2 flex-wrap">
-                                {getStatusBadge(exam.status)}
-                                {getVisibilityBadge(exam.is_public)}
-                                {exam.class_id && Array.isArray(exam.class_id) && exam.class_id.length > 0 && (
-                                  <Badge variant="secondary" className="gap-1">
-                                    <FileTextIcon className="h-3 w-3" />
-                                    Classes: {exam.class_id.length}
-                                  </Badge>
+                              
+                              <div className="flex flex-col gap-1">
+                                {exam.start_date && (
+                                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <Calendar className="h-3 w-3 flex-shrink-0" />
+                                    <span className="truncate">
+                                      Starts: {new Date(exam.start_date).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                )}
+                                
+                                {exam.end_date && (
+                                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <Calendar className="h-3 w-3 flex-shrink-0" />
+                                    <span className="truncate">
+                                      Ends: {new Date(exam.end_date).toLocaleDateString()}
+                                    </span>
+                                  </div>
                                 )}
                               </div>
-                              
-                              {exam.class_names && exam.class_names.length > 0 && (
-                                <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                                  <Users className="h-3 w-3" />
-                                  {exam.class_names.join(", ")}
-                                </div>
-                              )}
-                              
-                              <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                                <Clock className="h-3 w-3" />
-                                {exam.duration_minutes} minutes
-                              </div>
-                              
-                              {exam.total_points > 0 && (
-                                <div className="text-sm text-muted-foreground">
-                                  Total: {exam.total_points} points
-                                </div>
-                              )}
-                              
-                              {exam.questions && (
-                                <div className="text-sm text-muted-foreground">
-                                  {exam.questions.length} questions
-                                </div>
-                              )}
                             </div>
-                          </CardContent>
-                        </Card>
-                      </ContextMenuTrigger>
-                      <ContextMenuContent className="w-56">
-                        <ContextMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/exam/${exam.exam_id}/edit`);
-                          }}
-                        >
-                          <Edit className="h-4 w-4" />
-                          Edit Exam
-                        </ContextMenuItem>
-                        
-                        <ContextMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/exam/${exam.exam_id}/preview`);
-                          }}
-                        >
-                          <Eye className="h-4 w-4" />
-                          Preview
-                        </ContextMenuItem>
-                        
-                        {activeTab === "my-exams" && (
-                          <>
-                            <ContextMenuSeparator />
-                            
-                            <ContextMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDuplicateExam(exam);
-                              }}
-                            >
-                              <Copy className="h-4 w-4" />
-                              Duplicate
-                            </ContextMenuItem>
-                            
-                            <ContextMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleTogglePublish(exam.exam_id, exam.status);
-                              }}
-                            >
-                              {exam.status === 'published' ? (
-                                <>
-                                  <Archive className="h-4 w-4" />
-                                  Unpublish
-                                </>
-                              ) : (
-                                <>
-                                  <CheckCircle className="h-4 w-4" />
-                                  Publish
-                                </>
-                              )}
-                            </ContextMenuItem>
-                            
-                            <ContextMenuSeparator />
-                            
-                            <ContextMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCopyPublicLink(exam.exam_id);
-                              }}
-                            >
-                              <Share2 className="h-4 w-4" />
-                              Copy Public Link
-                            </ContextMenuItem>
-                            
-                            <ContextMenuSeparator />
-                            
-                            <ContextMenuItem
-                              variant="destructive"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteExam(exam.exam_id, exam.exam_name);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              Delete
-                            </ContextMenuItem>
-                          </>
-                        )}
-                      </ContextMenuContent>
-                    </ContextMenu>
+                          )}
+                          
+                          {/* Created Date */}
+                          {exam.created_at && (
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1 border-t">
+                              <Hash className="h-3 w-3 flex-shrink-0" />
+                              <span className="truncate">
+                                Created {new Date(exam.created_at).toLocaleDateString()}
+                              </span>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </ExamContextMenu>
                   ))}
                 </div>
 
@@ -1021,28 +885,6 @@ export default function ExamPage() {
         </Tabs>
       </div>
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete &quot;{examToDelete?.name}&quot;? This action cannot be undone.
-              All questions and associated data will be permanently removed.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setExamToDelete(null)}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDeleteExam}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

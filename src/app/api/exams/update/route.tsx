@@ -39,7 +39,8 @@ export async function PUT(request: Request) {
       allow_word_by_word_translation,
       allow_word_by_word_definition,
       visibility_change_detection,
-      location_detection
+      location_detection,
+      location
     } = body;
 
     // Validate required fields
@@ -164,6 +165,7 @@ export async function PUT(request: Request) {
       allow_word_by_word_definition: allow_word_by_word_definition || false,
       visibility_change_detection: visibility_change_detection || false,
       location_detection: location_detection || false,
+      location: location || { coordinates: '', rangeInMeters: '' },
       updated_at: new Date().toISOString()
     };
 

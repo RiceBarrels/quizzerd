@@ -1,8 +1,8 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Loader2, Eye, Save, CheckCircle2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Loader2, Eye, Save, CheckCircle2, PenBoxIcon, GlobeIcon } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
 
 interface ExamHeaderProps {
   examId: string;
@@ -27,43 +27,51 @@ export default function ExamHeader({
 }: ExamHeaderProps) {
   const [savedText, setSavedText] = useState<string>('');
 
+  const updateSavedText = useCallback(() => {
+    if (!lastSaved) {
+      setSavedText('');
+      return;
+    }
+
+    const now = new Date();
+    const diff = Math.floor((now.getTime() - lastSaved.getTime()) / 1000);
+    
+    if (diff < 60) {
+      setSavedText('Just saved');
+    } else if (diff < 3600) {
+      const minutes = Math.floor(diff / 60);
+      setSavedText(`Saved ${minutes} minute${minutes > 1 ? 's' : ''} ago`);
+    } else {
+      const hours = Math.floor(diff / 3600);
+      setSavedText(`Saved ${hours} hour${hours > 1 ? 's' : ''} ago`);
+    }
+  }, [lastSaved]);
+
   useEffect(() => {
     if (!lastSaved) {
       setSavedText('');
       return;
     }
 
-    const updateSavedText = () => {
-      const now = new Date();
-      const diff = Math.floor((now.getTime() - lastSaved.getTime()) / 1000);
-      
-      if (diff < 60) {
-        setSavedText('Just saved');
-      } else if (diff < 3600) {
-        const minutes = Math.floor(diff / 60);
-        setSavedText(`Saved ${minutes} minute${minutes > 1 ? 's' : ''} ago`);
-      } else {
-        const hours = Math.floor(diff / 3600);
-        setSavedText(`Saved ${hours} hour${hours > 1 ? 's' : ''} ago`);
-      }
-    };
-
     updateSavedText();
     const interval = setInterval(updateSavedText, 30000); // Update every 30 seconds
 
     return () => clearInterval(interval);
-  }, [lastSaved]);
+  }, [lastSaved, updateSavedText]);
   return (
     <>
       <div className="flex justify-between items-center mb-6 mx-8">
         <div>
-          <h1 className="text-3xl font-bold">Edit Exam</h1>
+          <div className="flex items-center gap-4">
+            <PenBoxIcon className="w-6 h-6" />
+            <h1 className="text-3xl font-bold">Edit Exam</h1>
+          </div>
           <p className="text-muted-foreground flex items-center gap-2">
             Modify exam details and questions
             {savedText && (
               <>
                 <span className="text-muted-foreground">•</span>
-                <span className="flex items-center gap-1 text-green-600 dark:text-green-400 text-sm">
+                <span className="flex items-center gap-1 text-primary text-sm">
                   <CheckCircle2 className="w-3 h-3" />
                   {savedText}
                 </span>
@@ -84,9 +92,9 @@ export default function ExamHeader({
             disabled={saving}
           >
             {saving ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <Save className="w-4 h-4 mr-2" />
+              <Save className="w-4 h-4" />
             )}
             Save Draft
           </Button>
@@ -96,8 +104,9 @@ export default function ExamHeader({
             variant={isPublished ? "secondary" : "default"}
           >
             {saving ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : null}
+            <GlobeIcon className="w-4 h-4" />
             {isPublished ? 'Update Published' : 'Publish'}
           </Button>
         </div>

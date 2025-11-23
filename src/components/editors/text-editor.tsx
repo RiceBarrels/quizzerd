@@ -39,8 +39,11 @@ export default function TextEditor({
   const prevValueRef = useRef<string>(value);
   const observerRef = useRef<MutationObserver | null>(null);
   const onChangeRef = useRef(onChange);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const formatUpdateTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handleChange = useCallback(() => {
+  // Internal function to actually trigger onChange
+  const triggerChange = useCallback(() => {
     const quill = quillRef.current;
     const onChangeFn = onChangeRef.current;
 
@@ -51,20 +54,45 @@ export default function TextEditor({
     const isEmpty = ['<p><br></p>', '<p></p>', ''].includes(html) || !text.trim();
     const newValue = isEmpty ? '' : html;
     
-    console.log('TextEditor handleChange:', {
-      html: html?.substring(0, 100),
-      text: text?.substring(0, 100),
-      isEmpty,
-      newValue: newValue?.substring(0, 100)
-    });
-    
-    prevValueRef.current = newValue;
-    onChangeFn(newValue);
+    // Only call onChange if value actually changed
+    if (newValue !== prevValueRef.current) {
+      // Log only in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('TextEditor handleChange:', {
+          html: html?.substring(0, 100),
+          text: text?.substring(0, 100),
+          isEmpty,
+          newValue: newValue?.substring(0, 100)
+        });
+      }
+      
+      prevValueRef.current = newValue;
+      onChangeFn(newValue);
+    }
   }, []);
+
+  // Debounced change handler to prevent excessive updates
+  const handleChange = useCallback(() => {
+    // Clear existing timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Debounce the onChange call
+    debounceTimerRef.current = setTimeout(() => {
+      triggerChange();
+    }, 300); // Debounce by 300ms to batch rapid changes while still being responsive
+  }, [triggerChange]);
 
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  // Expose triggerChange for use in event handlers
+  const triggerChangeRef = useRef(triggerChange);
+  useEffect(() => {
+    triggerChangeRef.current = triggerChange;
+  }, [triggerChange]);
 
   useEffect(() => {
     let eventHandlers: EventHandler[] = [];
@@ -183,31 +211,70 @@ export default function TextEditor({
         });
         
         const el = quillRef.current.root;
-        const delayedChange = () => setTimeout(handleChange, 10);
         
         if (!quillRef.current) return;
         
         const { handleFocus, handleBlur, updateFormats } = registerEditor(quillRef as RefObject<Quill>, editorId.current);
         
-        // Add MutationObserver for better change detection
-        observerRef.current = new MutationObserver(handleChange);
-        observerRef.current.observe(el, {
-          childList: true,
-          subtree: true,
-          characterData: true
+        // Debounce updateFormats to prevent excessive calls (use separate timer)
+        const debouncedUpdateFormats = () => {
+          if (formatUpdateTimerRef.current) {
+            clearTimeout(formatUpdateTimerRef.current);
+          }
+          formatUpdateTimerRef.current = setTimeout(updateFormats, 50);
+        };
+        
+        // Use Quill's text-change event instead of multiple DOM events
+        // This is more efficient and prevents duplicate change handlers
+        quillRef.current.on('text-change', () => {
+          handleChange();
+          debouncedUpdateFormats();
         });
         
+        // Only listen to selection changes and focus/blur for format updates
+        quillRef.current.on('selection-change', (range) => {
+          if (range) {
+            handleFocus();
+            debouncedUpdateFormats();
+          } else {
+            handleBlur({ relatedTarget: document.activeElement });
+          }
+        });
+        
+        // Handle paste and cut separately as they need immediate processing
+        const handlePaste = () => {
+          handleChange();
+          setTimeout(updateFormats, 20);
+        };
+        
+        const handleCut = () => {
+          handleChange();
+          setTimeout(updateFormats, 20);
+        };
+        
+        // Ensure changes are saved on blur
+        const handleBlurEvent = (e: Event) => {
+          // Fire any pending changes immediately on blur
+          if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+            debounceTimerRef.current = null;
+            triggerChangeRef.current();
+          }
+          
+          setTimeout(() => {
+            if (!el.contains(document.activeElement)) {
+              handleBlur({ relatedTarget: (e as FocusEvent).relatedTarget });
+            }
+          }, 100);
+        };
+
+        // Minimal event handlers - Quill's text-change covers most typing
         const handlers = {
-          keyup: () => { handleChange(); updateFormats(); },
-          keydown: updateFormats,
-          mouseup: updateFormats,
-          mousedown: updateFormats,
-          input: handleChange,
-          paste: () => { delayedChange(); setTimeout(updateFormats, 20); },
-          cut: () => { delayedChange(); setTimeout(updateFormats, 20); },
+          paste: handlePaste,
+          cut: handleCut,
           focus: () => { handleFocus(); updateFormats(); },
-          click: () => { handleFocus(); updateFormats(); },
-          blur: (e: Event) => setTimeout(() => !el.contains(document.activeElement) && handleBlur({ relatedTarget: (e as FocusEvent).relatedTarget }), 100)
+          click: () => { handleFocus(); debouncedUpdateFormats(); },
+          blur: handleBlurEvent
         };
         
         Object.entries(handlers).forEach(([event, handler]) => {
@@ -215,17 +282,12 @@ export default function TextEditor({
           eventHandlers.push({ event, handler, element: el });
         });
         
-        quillRef.current.on('selection-change', (range) => {
-          range ? (handleFocus(), updateFormats()) : handleBlur({ relatedTarget: document.activeElement });
-        });
-        
-        quillRef.current.on('text-change', () => {
-          updateFormats();
-        });
-        
         // Set initial value if provided
         if (value) {
-          console.log('Setting initial value:', value?.substring(0, 100));
+          // Log only in development
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Setting initial value:', value?.substring(0, 100));
+          }
           const delta = quillRef.current.clipboard.convert({ html: value });
           quillRef.current.setContents(delta, 'silent');
           prevValueRef.current = value;
@@ -236,6 +298,15 @@ export default function TextEditor({
     initQuill();
 
     return () => {
+      // Clear debounce timers
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      if (formatUpdateTimerRef.current) {
+        clearTimeout(formatUpdateTimerRef.current);
+        formatUpdateTimerRef.current = null;
+      }
       if (quillRef.current) {
         quillRef.current.off('text-change');
         quillRef.current.off('selection-change');
@@ -256,12 +327,15 @@ export default function TextEditor({
       const isEmpty = !value;
       const currentIsEmpty = ['<p><br></p>', '<p></p>', ''].includes(currentHtml) || !quillRef.current.getText().trim();
       
-      console.log('TextEditor value update:', {
-        value: value?.substring(0, 100),
-        currentHtml: currentHtml?.substring(0, 100),
-        isEmpty,
-        currentIsEmpty
-      });
+      // Log only in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('TextEditor value update:', {
+          value: value?.substring(0, 100),
+          currentHtml: currentHtml?.substring(0, 100),
+          isEmpty,
+          currentIsEmpty
+        });
+      }
       
       if (isEmpty && !currentIsEmpty) {
         quillRef.current.setText('');

@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { exam_id, class_ids, name, description, publish_at, due_at } = body;
+    const { exam_id, class_ids, name, description, publish_at, due_at, access_at } = body;
 
     if (!exam_id || !class_ids || !Array.isArray(class_ids) || class_ids.length === 0) {
       return NextResponse.json(
@@ -133,6 +133,7 @@ export async function POST(request: Request) {
       student_attempt_data: {},
       student_public_chat: {},
       publish_at: publish_at || new Date().toISOString(),
+      access_at: access_at || null,
       due_at: due_at || null,
     }));
 

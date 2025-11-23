@@ -13,7 +13,7 @@ export default async function IndexPage() {
       <div className="flex flex-col items-center text-center space-y-6 py-12 md:py-20">
         <div className="space-y-4 max-w-3xl">
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight">
-            Welcome to <span className="text-primary">QuizZred</span>
+            Welcome to <span className="text-primary">QuizZerd</span>
           </h1>
           <p className="text-xl md:text-2xl text-muted-foreground">
             Your all-in-one platform for creating, managing, and taking exams with advanced monitoring
@@ -64,7 +64,7 @@ export default async function IndexPage() {
             <BookOpen className="h-10 w-10 mb-2 text-primary" />
             <CardTitle>Import from Google Forms</CardTitle>
             <CardDescription>
-              Seamlessly import your existing Google Forms quizzes and convert them to QuizZred format
+              Seamlessly import your existing Google Forms quizzes and convert them to QuizZerd format
             </CardDescription>
           </CardHeader>
         </Card>
