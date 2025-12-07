@@ -23,6 +23,7 @@ import { FileText, Minus, GripVertical } from 'lucide-react';
 import { ExamItem } from '@/types/exam';
 import { QuestionTypeOption } from '@/types/exam';
 import QuestionContextMenu from './QuestionContextMenu';
+import { useSidebar } from '../ui/sidebar';
 
 interface QuestionSidebarProps {
   items: ExamItem[];
@@ -82,6 +83,7 @@ export default function QuestionSidebar({
   const [sidebarPosition, setSidebarPosition] = useState({ top: 64, maxHeight: 'calc(100vh - 312px)' });
   const sidebarScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const sidebarQuestionRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const { open } = useSidebar();
 
   // Sensors for drag and drop
   const sidebarSensors = useSensors(
@@ -424,7 +426,7 @@ export default function QuestionSidebar({
         className="w-72 z-50 fixed left-8" 
         style={{ top: `${sidebarPosition.top}px` }}
         initial={{ opacity: 0, x: "-32rem", filter: "blur(8px)" }} 
-        animate={{ opacity: 1, x: 0, filter: "blur(0px)" }} 
+        animate={{ opacity: 1, x: open ? "16rem" : "3rem", filter: "blur(0px)" }} 
         transition={{ duration: 0.3, type: "spring", visualDuration: 0.25, bounce: 0.3 }} 
         exit={{ opacity: 0, x: "-32rem", filter: "blur(8px)" }}
       >

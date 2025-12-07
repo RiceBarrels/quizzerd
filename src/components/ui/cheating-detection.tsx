@@ -25,6 +25,11 @@ export interface Violation {
     acknowledged: boolean;
 }
 
+interface LocationData {
+    coordinates?: string; // "latitude,longitude"
+    rangeInMeters?: string;
+}
+
 export default function CheatingDetection(
     {
         isTesting = false,
@@ -34,6 +39,7 @@ export default function CheatingDetection(
         allowWordByWordDefinition = false,
         visibilityChangeDetection = false,
         locationDetection = false,
+        location,
         examLanguage = "en-US",
         onViolation,
     }:{
@@ -44,6 +50,7 @@ export default function CheatingDetection(
         allowWordByWordDefinition?: boolean,
         visibilityChangeDetection?: boolean, 
         locationDetection?: boolean,
+        location?: LocationData,
         examLanguage?: string,
         onViolation?: (violation: Violation) => void;
     } = {}
@@ -188,10 +195,10 @@ export default function CheatingDetection(
         document.head.appendChild(style);
 
         return () => {
-            // Safely remove the style element if it still exists
-            if (style && style.parentNode === document.head) {
-                document.head.removeChild(style);
-            }
+            // // Safely remove the style element if it still exists
+            // if (style && style.parentNode === document.head) {
+            //     document.head.removeChild(style);
+            // }
         };
     }, [allowWordByWordTranslation, allowWordByWordDefinition]);
 
@@ -199,10 +206,38 @@ export default function CheatingDetection(
     useEffect(() => {
         if (!locationDetection || !navigator.geolocation) return;
 
+        // Parse location settings
+        const rangeInMeters = location?.rangeInMeters ? parseFloat(location.rangeInMeters) : 100;
+        const rangeInKm = rangeInMeters / 1000; // Convert to kilometers for distance calculation
+        
+        // Parse required location if provided
+        let requiredLocation: { lat: number; lon: number } | null = null;
+        if (location?.coordinates) {
+            const coords = location.coordinates.split(',').map(Number);
+            if (coords.length === 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {
+                requiredLocation = { lat: coords[0], lon: coords[1] };
+            }
+        }
+
         // Get initial location
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 initialLocation.current = position;
+                
+                // If a required location is set, check if initial location is within range
+                if (requiredLocation) {
+                    const distance = calculateDistance(
+                        requiredLocation.lat,
+                        requiredLocation.lon,
+                        position.coords.latitude,
+                        position.coords.longitude
+                    );
+                    
+                    // If outside allowed range, flag as violation
+                    if (distance > rangeInKm) {
+                        addViolation('location');
+                    }
+                }
             },
             (error) => {
                 console.error('Geolocation error:', error);
@@ -213,7 +248,21 @@ export default function CheatingDetection(
         // Watch for location changes
         locationWatchId.current = navigator.geolocation.watchPosition(
             (position) => {
-                if (initialLocation.current) {
+                if (requiredLocation) {
+                    // Check against required location
+                    const distance = calculateDistance(
+                        requiredLocation.lat,
+                        requiredLocation.lon,
+                        position.coords.latitude,
+                        position.coords.longitude
+                    );
+                    
+                    // If outside allowed range, flag as violation
+                    if (distance > rangeInKm) {
+                        addViolation('location');
+                    }
+                } else if (initialLocation.current) {
+                    // Fallback: Check movement from initial position
                     const distance = calculateDistance(
                         initialLocation.current.coords.latitude,
                         initialLocation.current.coords.longitude,
@@ -221,8 +270,8 @@ export default function CheatingDetection(
                         position.coords.longitude
                     );
 
-                    // If moved more than 100 meters, flag as suspicious
-                    if (distance > 0.1) { // 0.1 km = 100 meters
+                    // If moved more than allowed range, flag as suspicious
+                    if (distance > rangeInKm) {
                         addViolation('location');
                     }
                 }
@@ -238,7 +287,7 @@ export default function CheatingDetection(
                 navigator.geolocation.clearWatch(locationWatchId.current);
             }
         };
-    }, [locationDetection, addViolation]);
+    }, [locationDetection, location, addViolation]);
 
     // Helper: Calculate distance between two coordinates (Haversine formula)
     const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
