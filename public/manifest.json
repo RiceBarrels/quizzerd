@@ -1,0 +1,20 @@
+{
+  "name": "QuizZerd - Education Platform",
+  "short_name": "QuizZerd",
+  "description": "Create, manage, and take exams with advanced monitoring",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ],
+  "categories": ["education", "productivity"],
+  "lang": "en-US"
+}
+

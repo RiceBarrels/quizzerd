@@ -23,9 +23,89 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata = {
-  title: "QuizZerd",
-  description: "The next education platform.",
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: {
+    default: "QuizZerd - The Next Generation Education Platform",
+    template: "%s | QuizZerd"
+  },
+  description: "Create, manage, and take exams with advanced monitoring. Import from Google Forms, track student progress, and ensure academic integrity with real-time cheating detection.",
+  keywords: [
+    "online exams",
+    "quiz platform",
+    "education technology",
+    "exam management",
+    "online assessment",
+    "quiz creator",
+    "academic integrity",
+    "cheating detection",
+    "Google Forms import",
+    "class management",
+    "student assessment",
+    "exam monitoring"
+  ],
+  authors: [{ name: "QuizZerd" }],
+  creator: "QuizZerd",
+  publisher: "QuizZerd",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL || 
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://quizzerd.com')
+  ),
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "/",
+    siteName: "QuizZerd",
+    title: "QuizZerd - The Next Generation Education Platform",
+    description: "Create, manage, and take exams with advanced monitoring. Import from Google Forms, track student progress, and ensure academic integrity.",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "QuizZerd - Education Platform",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "QuizZerd - The Next Generation Education Platform",
+    description: "Create, manage, and take exams with advanced monitoring. Import from Google Forms, track student progress, and ensure academic integrity.",
+    images: ["/og-image.png"],
+    creator: "@quizzerd",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  verification: {
+    // Add your verification codes here when available
+    // google: 'your-google-verification-code',
+    // yandex: 'your-yandex-verification-code',
+    // bing: 'your-bing-verification-code',
+  },
+  manifest: '/manifest.json',
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon.ico',
+    apple: '/favicon.ico',
+  },
 };
 
 export interface ComponentProps {

@@ -3,12 +3,28 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { BookOpen, GraduationCap, Users, FileText, ArrowRight } from "lucide-react"
 import Link from "next/link"
 import { currentUser } from "@clerk/nextjs/server"
+import type { Metadata } from 'next'
+import { OrganizationSchema, WebSiteSchema, SoftwareApplicationSchema } from "@/components/seo/StructuredData"
+
+export const metadata: Metadata = {
+  title: "Home",
+  description: "Welcome to QuizZerd - Your all-in-one platform for creating, managing, and taking exams with advanced monitoring. Import from Google Forms, track student progress, and ensure academic integrity.",
+  openGraph: {
+    title: "QuizZerd - The Next Generation Education Platform",
+    description: "Create, manage, and take exams with advanced monitoring. Import from Google Forms, track student progress, and ensure academic integrity.",
+    type: "website",
+  },
+}
 
 export default async function IndexPage() {
   const user = await currentUser();
 
   return (
-    <div className="flex flex-col min-h-[calc(100vh-4rem)] p-6 md:p-8 lg:p-12">
+    <>
+      <OrganizationSchema />
+      <WebSiteSchema />
+      <SoftwareApplicationSchema />
+      <div className="flex flex-col min-h-[calc(100vh-4rem)] p-6 md:p-8 lg:p-12">
       {/* Hero Section */}
       <div className="flex flex-col items-center text-center space-y-6 py-12 md:py-20">
         <div className="space-y-4 max-w-3xl">
@@ -121,6 +137,7 @@ export default async function IndexPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
