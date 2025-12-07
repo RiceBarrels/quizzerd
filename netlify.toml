@@ -1,9 +1,0 @@
-
-
-[build]
-  command = "bun i && bun run build"
-  publish = ".next"
-
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
-
