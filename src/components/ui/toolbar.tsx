@@ -1,6 +1,6 @@
 "use client"
 import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs"
-import { SidebarTrigger, useSidebar } from "./sidebar"
+import { useSidebar } from "./sidebar"
 import { Button } from "./button"
 import JoinButton from "./join-button"
 import BackNav from "@/app/(sidebarNav)/back-nav"
@@ -10,15 +10,12 @@ import { Separator } from "./separator"
 import { motion } from "motion/react"
 import { useState, useEffect, useRef } from "react"
 
-interface ToolbarProps {
-    sideBarButton?: boolean
-}
-
-export default function Toolbar({sideBarButton = false}: ToolbarProps){
+export default function Toolbar(){
     const [isToolbarHidden, setIsToolbarHidden] = useState(false)
     const [showToolbar, setShowToolbar] = useState(true)
     const toolbarRef = useRef<HTMLDivElement>(null)
     const { setOpen: setSidebarOpen } = useSidebar()
+    const [isHoveringTrigger, setIsHoveringTrigger] = useState(false)
 
     // Sync with localStorage after mount to avoid hydration mismatch
     useEffect(() => {
@@ -26,13 +23,15 @@ export default function Toolbar({sideBarButton = false}: ToolbarProps){
         setIsToolbarHidden(storedValue)
         setShowToolbar(!storedValue)
         // Also sync sidebar state
-        if (storedValue) {
+        if (storedValue && !isHoveringTrigger) {
             setSidebarOpen(false)
         }
     }, [setSidebarOpen])
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
+            setIsHoveringTrigger(true)
+            console.log("hovering trigger")
             if (isToolbarHidden) {
                 // Show toolbar when mouse is near the top (within 10px)
                 if (e.clientY <= 10) {
@@ -52,11 +51,14 @@ export default function Toolbar({sideBarButton = false}: ToolbarProps){
     }, [isToolbarHidden, showToolbar])
 
     const handleHideToolbar = () => {
+        console.log("hide toolbar")
         setIsToolbarHidden(true)
         setShowToolbar(false)
         setSidebarOpen(false)
         if (typeof window !== 'undefined') {
             localStorage.setItem('toolbarHidden', 'true')
+            // Dispatch custom event for same-tab synchronization
+            window.dispatchEvent(new CustomEvent('toolbarHiddenChange', { detail: 'true' }))
         }
     }
 
@@ -66,10 +68,13 @@ export default function Toolbar({sideBarButton = false}: ToolbarProps){
         setSidebarOpen(true)
         if (typeof window !== 'undefined') {
             localStorage.setItem('toolbarHidden', 'false')
+            // Dispatch custom event for same-tab synchronization
+            window.dispatchEvent(new CustomEvent('toolbarHiddenChange', { detail: 'false' }))
         }
     }
 
     return (
+      <>
         <motion.div
           ref={toolbarRef}
           className="w-full bg-sidebar overflow-hidden"
@@ -87,7 +92,6 @@ export default function Toolbar({sideBarButton = false}: ToolbarProps){
           }}
         >
           <div className="flex items-center p-2 pt-0 pl-6 gap-4">
-              {sideBarButton && <SidebarTrigger />}
 
               <Link href="/class">
                 <Button variant="ghost" size="icon">
@@ -126,5 +130,6 @@ export default function Toolbar({sideBarButton = false}: ToolbarProps){
               </SignedIn>
           </div>
         </motion.div>
+      </>
     )
 }

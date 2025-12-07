@@ -121,16 +121,14 @@ export default function CheatingDetection(
     useEffect(() => {
         if (!translationDetection) return;
 
-        // Detect Google Translate and other translation tools
+        // Detect translation by checking HTML element classList
         const checkTranslation = () => {
-            // Check if page has been translated by Google Translate
-            const googleTranslateElements = document.querySelectorAll('.goog-te-banner-frame, .skiptranslate, font[style*="vertical-align: inherit"]');
+            // Check if HTML element has translation classes (translated-ltr or translated-rtl)
+            const htmlElement = document.documentElement;
+            const hasTranslationClass = htmlElement.classList.contains('translated-ltr') || 
+                                       htmlElement.classList.contains('translated-rtl');
             
-            // Check if document lang differs from exam language
-            const currentLang = document.documentElement.lang;
-            const isLangChanged = currentLang && currentLang !== examLanguage;
-            
-            if ((googleTranslateElements.length > 0 || isLangChanged) && !isTranslated.current) {
+            if (hasTranslationClass && !isTranslated.current) {
                 isTranslated.current = true;
                 addViolation('translation');
             }
@@ -140,20 +138,18 @@ export default function CheatingDetection(
         checkTranslation();
         const intervalId = setInterval(checkTranslation, 3000);
 
-        // Also observe DOM mutations for translation injections
+        // Observe the HTML element for class changes
         const observer = new MutationObserver(checkTranslation);
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true,
+        observer.observe(document.documentElement, {
             attributes: true,
-            attributeFilter: ['class', 'lang']
+            attributeFilter: ['class']
         });
 
         return () => {
             clearInterval(intervalId);
             observer.disconnect();
         };
-    }, [translationDetection, examLanguage, addViolation]);
+    }, [translationDetection, addViolation]);
 
     // 4. Context Menu Detection (Right-click for translation/definition)
     useEffect(() => {
@@ -192,7 +188,10 @@ export default function CheatingDetection(
         document.head.appendChild(style);
 
         return () => {
-            document.head.removeChild(style);
+            // Safely remove the style element if it still exists
+            if (style && style.parentNode === document.head) {
+                document.head.removeChild(style);
+            }
         };
     }, [allowWordByWordTranslation, allowWordByWordDefinition]);
 

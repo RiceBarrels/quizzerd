@@ -86,13 +86,13 @@ const getLanguageFromFileName = (fileName: string): string => {
 };
 
 const CodeEditor = memo(function CodeEditor({
-  files = [{ name: 'index.js', content: '// Write your code here' }],
+  files = [{ name: 'index.html', content: '<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>Document</title>\n</head>\n<body>\n    \n</body>\n</html>\n' }],
   onChange,
   height = '400px',
   width = '100%'
 }: CodeEditorProps) {
   const [editorFiles, setEditorFiles] = useState<CodeFile[]>(files);
-  const [activeFile, setActiveFile] = useState<string>(files[0]?.name || 'index.js');
+  const [activeFile, setActiveFile] = useState<string>(files[0]?.name || 'index.html');
   const [newFileName, setNewFileName] = useState<string>('');
   const [showAddFile, setShowAddFile] = useState<boolean>(false);
 

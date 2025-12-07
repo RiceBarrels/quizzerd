@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   DndContext,
@@ -137,6 +137,17 @@ export default function QuestionSidebar({
       }
     }
   }, [items, onReorder]);
+
+  // Calculate all selected indices from selectedQuestions Set (memoized for performance)
+  const allSelectedIndices = useMemo(() => {
+    const selectedIndices: number[] = [];
+    items.forEach((item, index) => {
+      if (selectedQuestions.has(item.question_id)) {
+        selectedIndices.push(index);
+      }
+    });
+    return selectedIndices;
+  }, [items, selectedQuestions]);
 
   // Calculate sidebar position based on tabs-list position
   const updateSidebarPosition = useCallback(() => {
@@ -284,7 +295,7 @@ export default function QuestionSidebar({
               onShuffleOptions={onShuffleOptions}
               onClearOptions={onClearOptions}
               onExportQuestion={onExportQuestion}
-              selectedIndices={[sidebarItemIndex]}
+              selectedIndices={allSelectedIndices.length > 0 ? allSelectedIndices : [sidebarItemIndex]}
             >
               <div onClick={(e) => {
                 if (onQuestionSelect) {
@@ -390,7 +401,7 @@ export default function QuestionSidebar({
             onShuffleOptions={onShuffleOptions}
             onClearOptions={onClearOptions}
             onExportQuestion={onExportQuestion}
-            selectedIndices={[sidebarItemIndex]}
+            selectedIndices={allSelectedIndices.length > 0 ? allSelectedIndices : [sidebarItemIndex]}
           >
             {buttonContent}
           </QuestionContextMenu>

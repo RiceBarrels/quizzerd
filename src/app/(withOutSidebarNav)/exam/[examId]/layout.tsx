@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ComponentProps } from "@/app/layout";
 
 export interface ScrollPosition {
   details: number;
@@ -6,6 +6,6 @@ export interface ScrollPosition {
   settings: number;
 }
 
-export default function ExamIdLayout({ children }: { children: ReactNode }){
+export default function ExamIdLayout({ children }:ComponentProps){
     return children;
 }
