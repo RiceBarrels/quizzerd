@@ -3,6 +3,10 @@
 import { useState, useEffect } from 'react'
 import { useUser } from '@clerk/nextjs'
 
+/**
+ * Custom hook for managing user profile data with fetch, update, and create operations
+ * @returns {Object} Object containing profile data, loading state, error state, and profile management functions
+ */
 export function useUserProfile() {
   const { user, isLoaded } = useUser()
   const [profile, setProfile] = useState<any>(null)
@@ -21,6 +25,9 @@ export function useUserProfile() {
     fetchProfile()
   }, [user, isLoaded])
 
+  /**
+   * Fetches the user profile from the API
+   */
   const fetchProfile = async () => {
     try {
       setLoading(true)
@@ -46,6 +53,11 @@ export function useUserProfile() {
     }
   }
 
+  /**
+   * Updates the user profile with the provided updates
+   * @param {Record<string, any>} updates - Object containing the fields to update
+   * @returns {Promise<any>} The updated profile data
+   */
   const updateProfile = async (updates: Record<string, any>) => {
     try {
       setError(null)
@@ -72,6 +84,11 @@ export function useUserProfile() {
     }
   }
 
+  /**
+   * Creates a new user profile with the provided data
+   * @param {Record<string, any>} profileData - Object containing the profile data to create
+   * @returns {Promise<any>} The created profile data
+   */
   const createProfile = async (profileData: Record<string, any>) => {
     try {
       setError(null)

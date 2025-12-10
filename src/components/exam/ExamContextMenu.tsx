@@ -26,6 +26,16 @@ interface ExamContextMenuProps {
   children: React.ReactNode;
 }
 
+/**
+ * Context menu component for exam actions (edit, preview, duplicate, delete, etc.)
+ * Provides right-click menu functionality for exam items
+ * @param {ExamContextMenuProps} props - Component props
+ * @param {any} props.exam - Exam data object
+ * @param {string} props.activeTab - Currently active tab identifier
+ * @param {() => void} [props.onRefresh] - Optional callback to refresh exam data
+ * @param {React.ReactNode} props.children - Child elements that trigger the context menu
+ * @returns {JSX.Element} Context menu wrapper component
+ */
 export default function ExamContextMenu({
   exam,
   activeTab,
@@ -34,6 +44,10 @@ export default function ExamContextMenu({
 }: ExamContextMenuProps) {
   const router = useRouter();
 
+  /**
+   * Handles duplicating an exam by creating a copy with "(Copy)" suffix
+   * @param {any} exam - Exam object to duplicate
+   */
   const handleDuplicateExam = async (exam: any) => {
     try {
       const duplicatedExam = {

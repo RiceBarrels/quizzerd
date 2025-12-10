@@ -1,3 +1,10 @@
+/**
+ * Parses HTML content and replaces variable placeholders with their values
+ * Variables are in the format {{variableName}} and are replaced with styled spans
+ * @param {string} htmlContent - HTML content containing variable placeholders
+ * @param {Record<string, any>} [variables={}] - Object mapping variable names to their values
+ * @returns {string} HTML content with variables replaced by styled spans
+ */
 export function parseAndRenderVariables(htmlContent: string, variables: Record<string, any> = {}): string {
   if (!htmlContent || typeof htmlContent !== 'string') {
     return htmlContent;
@@ -19,6 +26,11 @@ export function parseAndRenderVariables(htmlContent: string, variables: Record<s
   return renderedContent;
 }
 
+/**
+ * Extracts all variable names from HTML content that uses {{variableName}} syntax
+ * @param {string} htmlContent - HTML content to extract variables from
+ * @returns {string[]} Array of unique variable names found in the content
+ */
 export function extractVariablesFromHTML(htmlContent: string): string[] {
   if (!htmlContent || typeof htmlContent !== 'string') {
     return [];
@@ -35,6 +47,12 @@ export function extractVariablesFromHTML(htmlContent: string): string[] {
   return Array.from(variables);
 }
 
+/**
+ * Generates sample values for given variable names
+ * Uses predefined sample values for common variable names, generates random numbers for others
+ * @param {string[]} variableNames - Array of variable names to generate sample values for
+ * @returns {Record<string, any>} Object mapping variable names to their sample values
+ */
 export function generateSampleVariables(variableNames: string[]): Record<string, any> {
   const sampleValues = {
     // Common math/physics variables

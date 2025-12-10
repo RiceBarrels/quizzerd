@@ -14,6 +14,17 @@ interface CodeEditorModalProps {
   onChange: (files: { name: string; content: string }[]) => void;
 }
 
+/**
+ * Full-screen modal component for editing code files for a question
+ * Provides a code editor interface with file management
+ * @param {CodeEditorModalProps} props - Component props
+ * @param {boolean} props.isOpen - Whether the modal is open
+ * @param {number | null} props.questionIndex - Index of the question being edited (null if not applicable)
+ * @param {{name: string; content: string}[]} props.files - Array of code files to edit
+ * @param {() => void} props.onClose - Callback function called when modal is closed
+ * @param {(files: {name: string; content: string}[]) => void} props.onChange - Callback when files are modified
+ * @returns {JSX.Element | null} Full-screen code editor modal or null if not open
+ */
 export default function CodeEditorModal({
   isOpen,
   questionIndex,

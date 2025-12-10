@@ -1,0 +1,22 @@
+{
+  "entryPoints": [
+    "src/app/api/**/*.tsx",
+    "src/types/**/*.ts",
+    "src/lib/**/*.tsx"
+  ],
+  "out": "docs",
+  "theme": "default",
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeExternals": true,
+  "readme": "README.md",
+  "name": "QuizZerd API Documentation",
+  "includeVersion": true,
+  "categorizeByGroup": true,
+  "categoryOrder": [
+    "API Routes",
+    "Types",
+    "Utilities"
+  ]
+}
+

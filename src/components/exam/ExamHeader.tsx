@@ -15,6 +15,20 @@ interface ExamHeaderProps {
   lastSaved: Date | null;
 }
 
+/**
+ * Header component for the exam editor page
+ * Displays exam title, save status, and action buttons (Preview, Save Draft, Publish)
+ * @param {ExamHeaderProps} props - Component props
+ * @param {string} props.examId - Unique identifier for the exam
+ * @param {boolean} props.isPublished - Whether the exam is currently published
+ * @param {boolean} props.saving - Whether a save operation is in progress
+ * @param {() => void} props.onSave - Callback function called when Save Draft is clicked
+ * @param {() => void} props.onPublish - Callback function called when Publish/Update Published is clicked
+ * @param {() => void} props.onPreview - Callback function called when Preview is clicked
+ * @param {boolean} props.canPublish - Whether the exam can be published (validation check)
+ * @param {Date | null} props.lastSaved - Timestamp of the last save operation
+ * @returns {JSX.Element} Exam header with title, status, and action buttons
+ */
 export default function ExamHeader({
   examId,
   isPublished,
@@ -27,6 +41,10 @@ export default function ExamHeader({
 }: ExamHeaderProps) {
   const [savedText, setSavedText] = useState<string>('');
 
+  /**
+   * Updates the saved text display based on the time since lastSaved
+   * Formats the time as "Just saved", "X minutes ago", or "X hours ago"
+   */
   const updateSavedText = useCallback(() => {
     if (!lastSaved) {
       setSavedText('');

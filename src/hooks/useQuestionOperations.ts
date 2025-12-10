@@ -2,10 +2,22 @@ import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { ExamItem } from '@/types/exam';
 
+/**
+ * Custom hook for managing question operations in an exam
+ * @param {ExamItem[]} items - Array of exam items/questions
+ * @param {React.Dispatch<React.SetStateAction<ExamItem[]>>} setItems - State setter function for updating the items array
+ * @returns {Object} Object containing various question operation functions
+ */
 export function useQuestionOperations(
   items: ExamItem[],
   setItems: React.Dispatch<React.SetStateAction<ExamItem[]>>
 ) {
+  /**
+   * Updates a specific field of a question at the given index
+   * @param {number} index - The index of the question to update
+   * @param {keyof ExamItem} field - The field name to update
+   * @param {any} value - The new value for the field
+   */
   const updateQuestion = useCallback((index: number, field: keyof ExamItem, value: any) => {
     setItems(prevItems => {
       const updatedItems = [...prevItems];
@@ -17,6 +29,10 @@ export function useQuestionOperations(
     });
   }, [setItems]);
 
+  /**
+   * Adds a new empty option to a question
+   * @param {number} questionIndex - The index of the question to add an option to
+   */
   const addOption = useCallback((questionIndex: number) => {
     setItems(prevItems => {
       const updatedItems = [...prevItems];
@@ -27,6 +43,12 @@ export function useQuestionOperations(
     });
   }, [setItems]);
 
+  /**
+   * Updates the value of a specific option in a question
+   * @param {number} questionIndex - The index of the question containing the option
+   * @param {number} optionIndex - The index of the option to update
+   * @param {string} value - The new value for the option
+   */
   const updateOption = useCallback((questionIndex: number, optionIndex: number, value: string) => {
     setItems(prevItems => {
       const updatedItems = [...prevItems];
@@ -37,6 +59,11 @@ export function useQuestionOperations(
     });
   }, [setItems]);
 
+  /**
+   * Removes an option from a question and adjusts the correct answer if needed
+   * @param {number} questionIndex - The index of the question containing the option
+   * @param {number} optionIndex - The index of the option to remove
+   */
   const removeOption = useCallback((questionIndex: number, optionIndex: number) => {
     setItems(prevItems => {
       const updatedItems = [...prevItems];
@@ -52,10 +79,18 @@ export function useQuestionOperations(
     });
   }, [setItems]);
 
+  /**
+   * Removes a question from the exam
+   * @param {number} index - The index of the question to remove
+   */
   const removeQuestion = useCallback((index: number) => {
     setItems(prevItems => prevItems.filter((_, i) => i !== index));
   }, [setItems]);
 
+  /**
+   * Creates a duplicate of a question and inserts it right after the original
+   * @param {number} index - The index of the question to duplicate
+   */
   const duplicateQuestion = useCallback((index: number) => {
     setItems(prevItems => {
       const questionToDuplicate = prevItems[index];
@@ -83,6 +118,10 @@ export function useQuestionOperations(
     });
   }, [setItems]);
 
+  /**
+   * Copies one or more questions to the clipboard
+   * @param {number | number[]} index - Single question index or array of question indices to copy
+   */
   const copyQuestion = useCallback((index: number | number[]) => {
     // Support both single index and array of indices
     const indices = Array.isArray(index) ? index : [index];
@@ -109,6 +148,10 @@ export function useQuestionOperations(
       });
   }, [items]);
 
+  /**
+   * Pastes question(s) from clipboard after the specified index
+   * @param {number} afterIndex - The index after which to insert the pasted question(s)
+   */
   const pasteQuestion = useCallback(async (afterIndex: number) => {
     try {
       const clipboardText = await navigator.clipboard.readText();
@@ -156,6 +199,10 @@ export function useQuestionOperations(
     }
   }, [setItems]);
 
+  /**
+   * Cuts one or more questions (copies to clipboard and removes from exam)
+   * @param {number | number[]} index - Single question index or array of question indices to cut
+   */
   const cutQuestion = useCallback((index: number | number[]) => {
     // Support both single index and array of indices
     const indices = Array.isArray(index) ? index : [index];
@@ -187,6 +234,10 @@ export function useQuestionOperations(
       });
   }, [items, setItems]);
 
+  /**
+   * Moves a question up one position in the list
+   * @param {number} index - The index of the question to move up
+   */
   const moveUp = useCallback((index: number) => {
     if (index <= 0) return;
     
@@ -201,6 +252,10 @@ export function useQuestionOperations(
     toast.success('Question moved up');
   }, [setItems]);
 
+  /**
+   * Moves a question down one position in the list
+   * @param {number} index - The index of the question to move down
+   */
   const moveDown = useCallback((index: number) => {
     if (index >= items.length - 1) return;
     
@@ -215,6 +270,10 @@ export function useQuestionOperations(
     toast.success('Question moved down');
   }, [items.length, setItems]);
 
+  /**
+   * Inserts a new empty question above the specified index
+   * @param {number} index - The index above which to insert the new question
+   */
   const insertAbove = useCallback((index: number) => {
     const newQuestion: ExamItem = {
       question_id: `question-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -233,6 +292,10 @@ export function useQuestionOperations(
     toast.success('New question inserted above');
   }, [setItems]);
 
+  /**
+   * Inserts a new empty question below the specified index
+   * @param {number} index - The index below which to insert the new question
+   */
   const insertBelow = useCallback((index: number) => {
     const newQuestion: ExamItem = {
       question_id: `question-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -251,6 +314,10 @@ export function useQuestionOperations(
     toast.success('New question inserted below');
   }, [setItems]);
 
+  /**
+   * Resets a question to an empty state, clearing text, options, and answers
+   * @param {number} index - The index of the question to reset
+   */
   const resetQuestion = useCallback((index: number) => {
     const question = items[index];
     if (!question) return;
@@ -272,6 +339,10 @@ export function useQuestionOperations(
     toast.success('Question reset to empty state');
   }, [items, setItems]);
 
+  /**
+   * Randomly shuffles the options of a question using Fisher-Yates algorithm
+   * @param {number} index - The index of the question whose options to shuffle
+   */
   const shuffleOptions = useCallback((index: number) => {
     const question = items[index];
     if (!question || !question.options) return;
@@ -295,6 +366,10 @@ export function useQuestionOperations(
     toast.success('Options shuffled');
   }, [items, setItems]);
 
+  /**
+   * Clears all options of a question, resetting to two empty options
+   * @param {number} index - The index of the question whose options to clear
+   */
   const clearOptions = useCallback((index: number) => {
     const question = items[index];
     if (!question || !question.options) return;
@@ -312,6 +387,10 @@ export function useQuestionOperations(
     toast.success('All options cleared');
   }, [items, setItems]);
 
+  /**
+   * Exports a question as a JSON file for download
+   * @param {number} index - The index of the question to export
+   */
   const exportQuestion = useCallback((index: number) => {
     const question = items[index];
     if (!question) return;
@@ -336,6 +415,10 @@ export function useQuestionOperations(
     toast.success('Question exported as JSON');
   }, [items]);
 
+  /**
+   * Reorders all questions by replacing the entire items array
+   * @param {ExamItem[]} newItems - The new array of questions in the desired order
+   */
   const reorderQuestions = useCallback((newItems: ExamItem[]) => {
     setItems(newItems);
   }, [setItems]);

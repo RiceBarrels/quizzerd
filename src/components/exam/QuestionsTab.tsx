@@ -54,6 +54,41 @@ interface QuestionsTabProps {
   onQuestionSelect?: (questionId: string, event: React.MouseEvent) => void;
 }
 
+/**
+ * Tab component for managing and displaying exam questions with drag-and-drop reordering
+ * Provides a list of question cards with full editing capabilities
+ * @param {QuestionsTabProps} props - Component props
+ * @param {ExamItem[]} props.items - Array of exam items/questions
+ * @param {(index: number, field: keyof ExamItem, value: any) => void} props.onUpdateQuestion - Callback when a question field is updated
+ * @param {(questionIndex: number) => void} props.onAddOption - Callback to add an option to a question
+ * @param {(questionIndex: number, optionIndex: number, value: string) => void} props.onUpdateOption - Callback when an option value is updated
+ * @param {(questionIndex: number, optionIndex: number) => void} props.onRemoveOption - Callback to remove an option from a question
+ * @param {(index: number) => void} props.onRemoveQuestion - Callback to remove a question
+ * @param {(index: number) => void} [props.onDuplicateQuestion] - Optional callback to duplicate a question
+ * @param {(index: number | number[]) => void} [props.onCopyQuestion] - Optional callback to copy question(s)
+ * @param {(index: number | number[]) => void} [props.onCutQuestion] - Optional callback to cut question(s)
+ * @param {(afterIndex: number) => Promise<void>} [props.onPasteQuestion] - Optional callback to paste question(s)
+ * @param {(index: number) => void} [props.onMoveUp] - Optional callback to move question up
+ * @param {(index: number) => void} [props.onMoveDown] - Optional callback to move question down
+ * @param {(index: number) => void} [props.onInsertAbove] - Optional callback to insert question above
+ * @param {(index: number) => void} [props.onInsertBelow] - Optional callback to insert question below
+ * @param {(index: number) => void} [props.onResetQuestion] - Optional callback to reset question
+ * @param {(index: number) => void} [props.onShuffleOptions] - Optional callback to shuffle question options
+ * @param {(index: number) => void} [props.onClearOptions] - Optional callback to clear question options
+ * @param {(index: number) => void} [props.onExportQuestion] - Optional callback to export question
+ * @param {() => void} props.onAddNewQuestion - Callback to add a new question
+ * @param {() => void} props.onAddPageBreak - Callback to add a page break
+ * @param {(items: ExamItem[]) => void} [props.onReorderQuestions] - Optional callback when questions are reordered
+ * @param {(questionIndex: number) => void} [props.onOpenCodeEditor] - Optional callback to open code editor
+ * @param {(scrollFn: (questionId: string, isManualClick?: boolean) => void) => void} [props.onScrollToQuestionRef] - Optional callback ref for scrolling to questions
+ * @param {string | null} [props.activeQuestionId] - Currently active question ID
+ * @param {(id: string | null) => void} [props.onActiveQuestionIdChange] - Callback when active question changes
+ * @param {string | null} [props.highlightedCard] - Currently highlighted card ID
+ * @param {(id: string | null) => void} [props.onHighlightedCardChange] - Callback when highlighted card changes
+ * @param {Set<string>} [props.selectedQuestions] - Set of selected question IDs
+ * @param {(questionId: string, event: React.MouseEvent) => void} [props.onQuestionSelect] - Optional callback when question is selected
+ * @returns {JSX.Element} Questions tab with draggable question list
+ */
 export default function QuestionsTab({
   items,
   onUpdateQuestion,

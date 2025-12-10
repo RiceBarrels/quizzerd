@@ -16,6 +16,11 @@ interface MemberListItemProps {
   onRemove?: () => void
 }
 
+/**
+ * Returns the appropriate icon component for a given role
+ * @param {string} role - The role name ('admin', 'teacher', or 'student')
+ * @returns {JSX.Element} Icon component for the role
+ */
 const getRoleIcon = (role: string) => {
   switch(role) {
     case 'admin': return <Shield className="h-5 w-5 text-red-600" />
@@ -24,6 +29,11 @@ const getRoleIcon = (role: string) => {
   }
 }
 
+/**
+ * Returns the appropriate badge variant for a given role
+ * @param {string} role - The role name ('admin', 'teacher', or 'student')
+ * @returns {"default" | "destructive" | "secondary"} Badge variant for the role
+ */
 const getRoleBadgeVariant = (role: string): "default" | "destructive" | "secondary" => {
   switch(role) {
     case 'admin': return 'destructive'
@@ -32,6 +42,11 @@ const getRoleBadgeVariant = (role: string): "default" | "destructive" | "seconda
   }
 }
 
+/**
+ * Returns the appropriate border color class for a given role
+ * @param {string} role - The role name ('admin', 'teacher', or 'student')
+ * @returns {string} Tailwind CSS class for border color
+ */
 const getRoleBorderColor = (role: string) => {
   switch(role) {
     case 'admin': return 'border-red-200'
@@ -40,6 +55,11 @@ const getRoleBorderColor = (role: string) => {
   }
 }
 
+/**
+ * Returns the appropriate background color class for a given role
+ * @param {string} role - The role name ('admin', 'teacher', or 'student')
+ * @returns {string} Tailwind CSS class for background color
+ */
 const getRoleBackgroundColor = (role: string) => {
   switch(role) {
     case 'admin': return 'bg-red-100'
@@ -48,6 +68,18 @@ const getRoleBackgroundColor = (role: string) => {
   }
 }
 
+/**
+ * Component that displays a single member item in the members list with context menu
+ * @param {MemberListItemProps} props - Component props
+ * @param {any} props.member - Member data object
+ * @param {'admin' | 'teacher' | 'student'} props.role - The member's role
+ * @param {boolean} props.isAdmin - Whether the current user is an admin
+ * @param {boolean} props.isManaging - Whether a management operation is in progress
+ * @param {() => void} props.onViewProfile - Callback when viewing member profile
+ * @param {() => void} [props.onChangeRole] - Optional callback when changing member role
+ * @param {() => void} [props.onRemove] - Optional callback when removing member
+ * @returns {JSX.Element} Member list item with profile info and context menu
+ */
 export function MemberListItem({ 
   member, 
   role, 

@@ -71,6 +71,11 @@ interface DockInstance {
 // Singleton instance to manage the dock globally
 let dockInstance: DockInstance | null = null;
 
+/**
+ * Custom hook for managing the floating format dock state
+ * Provides access to the active editor and update trigger for format synchronization
+ * @returns {Object} Object containing activeEditor and updateTrigger state
+ */
 export function useFloatingDock() {
   const [activeEditor, setActiveEditor] = useState<EditorInstance | null>(null);
   const [updateTrigger, setUpdateTrigger] = useState<number>(0);
@@ -98,6 +103,13 @@ export function useFloatingDock() {
   return { activeEditor, updateTrigger };
 }
 
+/**
+ * Registers a Quill editor instance with the floating format dock
+ * Sets up focus and blur handlers to manage the active editor state
+ * @param {RefObject<Quill>} editorRef - React ref to the Quill editor instance
+ * @param {string} editorId - Unique identifier for the editor
+ * @returns {Object} Object containing event handlers (handleFocus, handleBlur, updateFormats)
+ */
 export function registerEditor(editorRef: RefObject<Quill>, editorId: string) {
   const handleFocus = () => {
     if (dockInstance?.setActiveEditor) {
@@ -151,6 +163,11 @@ export function registerEditor(editorRef: RefObject<Quill>, editorId: string) {
   return { handleFocus, handleBlur, updateFormats };
 }
 
+/**
+ * Floating format dock component that provides formatting tools for active text editors
+ * Appears when a text editor is focused and provides formatting options like bold, italic, colors, etc.
+ * @returns {JSX.Element} Floating format dock UI component
+ */
 export default function FloatingFormatDock() {
   const { activeEditor, updateTrigger } = useFloatingDock();
   const [isVisible, setIsVisible] = useState<boolean>(false);

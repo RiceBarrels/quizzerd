@@ -7,7 +7,12 @@ interface UseAutoSaveOptions {
   debounceMs?: number;
 }
 
-// Deep equality check for dependencies
+/**
+ * Performs a deep equality check between two dependency arrays
+ * @param {any[]} prev - Previous dependency array
+ * @param {any[]} current - Current dependency array
+ * @returns {boolean} True if arrays are deeply equal, false otherwise
+ */
 function areDependenciesEqual(prev: any[], current: any[]): boolean {
   if (prev.length !== current.length) return false;
   
@@ -69,6 +74,15 @@ function areDependenciesEqual(prev: any[], current: any[]): boolean {
   return true;
 }
 
+/**
+ * Custom hook for automatic saving with debouncing and deep dependency comparison
+ * @param {UseAutoSaveOptions} options - Configuration options for auto-save
+ * @param {any[]} options.dependencies - Array of dependencies to watch for changes
+ * @param {(isAutoSave: boolean) => Promise<void>} options.saveFn - Function to call when saving is triggered
+ * @param {boolean} options.enabled - Whether auto-save is enabled
+ * @param {number} [options.debounceMs=1000] - Debounce delay in milliseconds
+ * @returns {Object} Object containing auto-save state and control functions
+ */
 export function useAutoSave({ dependencies, saveFn, enabled, debounceMs = 1000 }: UseAutoSaveOptions) {
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasUnsavedChangesRef = useRef<boolean>(false);

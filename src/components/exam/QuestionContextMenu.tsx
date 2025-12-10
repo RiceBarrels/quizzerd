@@ -88,6 +88,32 @@ interface QuestionContextMenuProps {
   children: React.ReactNode;
 }
 
+/**
+ * Context menu component for question operations (duplicate, copy, cut, paste, delete, etc.)
+ * Provides right-click menu functionality for question items
+ * @param {QuestionContextMenuProps} props - Component props
+ * @param {ExamItem} props.item - The question item
+ * @param {number} props.index - Index of the question in the items array
+ * @param {number} [props.totalQuestions] - Total number of questions (for validation)
+ * @param {(index: number, field: keyof ExamItem, value: any) => void} props.onUpdateQuestion - Callback when question is updated
+ * @param {(questionIndex: number) => void} props.onAddOption - Callback to add an option
+ * @param {(index: number) => void} props.onRemoveQuestion - Callback to remove question
+ * @param {(index: number) => void} [props.onDuplicateQuestion] - Optional callback to duplicate question
+ * @param {(index: number | number[]) => void} [props.onCopyQuestion] - Optional callback to copy question(s)
+ * @param {(index: number | number[]) => void} [props.onCutQuestion] - Optional callback to cut question(s)
+ * @param {(afterIndex: number) => Promise<void>} [props.onPasteQuestion] - Optional callback to paste question(s)
+ * @param {(index: number) => void} [props.onMoveUp] - Optional callback to move question up
+ * @param {(index: number) => void} [props.onMoveDown] - Optional callback to move question down
+ * @param {(index: number) => void} [props.onInsertAbove] - Optional callback to insert above
+ * @param {(index: number) => void} [props.onInsertBelow] - Optional callback to insert below
+ * @param {(index: number) => void} [props.onResetQuestion] - Optional callback to reset question
+ * @param {(index: number) => void} [props.onShuffleOptions] - Optional callback to shuffle options
+ * @param {(index: number) => void} [props.onClearOptions] - Optional callback to clear options
+ * @param {(index: number) => void} [props.onExportQuestion] - Optional callback to export question
+ * @param {number[]} [props.selectedIndices] - Array of selected question indices for multi-select operations
+ * @param {React.ReactNode} props.children - Child elements that trigger the context menu
+ * @returns {JSX.Element} Context menu wrapper component
+ */
 export default function QuestionContextMenu({
   item,
   index,

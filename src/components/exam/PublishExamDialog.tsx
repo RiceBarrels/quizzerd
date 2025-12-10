@@ -35,6 +35,22 @@ interface PublishExamDialogProps {
   saving: boolean;
 }
 
+/**
+ * Dialog component for publishing exams with options for public, class-based, or code-based access
+ * Handles exam publishing, class assignments, and access code generation
+ * @param {PublishExamDialogProps} props - Component props
+ * @param {boolean} props.open - Whether the dialog is open
+ * @param {(open: boolean) => void} props.onOpenChange - Callback when dialog open state changes
+ * @param {string} props.examId - Unique identifier for the exam
+ * @param {string} props.examName - Name of the exam
+ * @param {string} props.examDescription - Description of the exam
+ * @param {boolean} props.isPublic - Whether the exam is currently public
+ * @param {boolean} props.isPublished - Whether the exam is currently published
+ * @param {string[]} props.selectedClassIds - Array of selected class IDs for assignment
+ * @param {(publishType: 'public' | 'classes' | 'code', classIds: string[], existingAssignments: string[], classAssignments?: Record<string, ClassAssignmentDates>) => Promise<void>} props.onPublish - Callback function to handle publishing
+ * @param {boolean} props.saving - Whether a publish operation is in progress
+ * @returns {JSX.Element} Dialog component for exam publishing
+ */
 export default function PublishExamDialog({
   open,
   onOpenChange,

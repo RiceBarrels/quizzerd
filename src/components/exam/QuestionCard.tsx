@@ -68,6 +68,38 @@ interface QuestionCardProps {
   selectedIndices?: number[]; // All selected question indices (for multi-select operations)
 }
 
+/**
+ * Memoized question card component for displaying and editing individual exam questions
+ * Supports various question types, options, and editing operations
+ * @param {QuestionCardProps} props - Component props
+ * @param {ExamItem} props.item - The question item to display
+ * @param {number} props.index - Index of the question in the items array
+ * @param {number} [props.questionNumber] - Actual question number (excluding page breaks)
+ * @param {number} [props.totalQuestions] - Total number of questions (for move validation)
+ * @param {(index: number, field: keyof ExamItem, value: any) => void} props.onUpdateQuestion - Callback when question is updated
+ * @param {(questionIndex: number) => void} props.onAddOption - Callback to add an option
+ * @param {(questionIndex: number, optionIndex: number, value: string) => void} props.onUpdateOption - Callback when option is updated
+ * @param {(questionIndex: number, optionIndex: number) => void} props.onRemoveOption - Callback to remove an option
+ * @param {(index: number) => void} props.onRemoveQuestion - Callback to remove question
+ * @param {(questionIndex: number) => void} [props.onOpenCodeEditor] - Optional callback to open code editor
+ * @param {(index: number) => void} [props.onDuplicateQuestion] - Optional callback to duplicate question
+ * @param {(index: number | number[]) => void} [props.onCopyQuestion] - Optional callback to copy question(s)
+ * @param {(index: number | number[]) => void} [props.onCutQuestion] - Optional callback to cut question(s)
+ * @param {(afterIndex: number) => Promise<void>} [props.onPasteQuestion] - Optional callback to paste question(s)
+ * @param {(index: number) => void} [props.onMoveUp] - Optional callback to move question up
+ * @param {(index: number) => void} [props.onMoveDown] - Optional callback to move question down
+ * @param {(index: number) => void} [props.onInsertAbove] - Optional callback to insert above
+ * @param {(index: number) => void} [props.onInsertBelow] - Optional callback to insert below
+ * @param {(index: number) => void} [props.onResetQuestion] - Optional callback to reset question
+ * @param {(index: number) => void} [props.onShuffleOptions] - Optional callback to shuffle options
+ * @param {(index: number) => void} [props.onClearOptions] - Optional callback to clear options
+ * @param {(index: number) => void} [props.onExportQuestion] - Optional callback to export question
+ * @param {boolean} [props.isScrollHighlighted] - Whether card is highlighted by scroll position
+ * @param {boolean} [props.isClickHighlighted] - Whether card is highlighted by click
+ * @param {boolean} [props.isSelected] - Whether card is selected (for multi-select)
+ * @param {number[]} [props.selectedIndices] - All selected question indices
+ * @returns {JSX.Element} Question card component with editing capabilities
+ */
 const QuestionCard = memo(function QuestionCard({
   item,
   index,
@@ -616,6 +648,13 @@ interface SortableQuestionCardProps extends QuestionCardProps {
   id: UniqueIdentifier;
 }
 
+/**
+ * Sortable wrapper component for QuestionCard that enables drag-and-drop functionality
+ * Integrates with dnd-kit for drag and drop operations
+ * @param {SortableQuestionCardProps} props - Component props (extends QuestionCardProps)
+ * @param {UniqueIdentifier} props.id - Unique identifier for drag-and-drop operations
+ * @returns {JSX.Element} Sortable question card component
+ */
 export default function SortableQuestionCard(props: SortableQuestionCardProps) {
   const {
     attributes,

@@ -29,9 +29,41 @@ interface UseExamPublishOptions {
   onSuccess?: () => void;
 }
 
+/**
+ * Custom hook for publishing exams with support for public, class, and code-based publishing
+ * @param {UseExamPublishOptions} options - Configuration options for exam publishing
+ * @param {string} options.examId - Unique identifier for the exam
+ * @param {string} options.examName - Name of the exam
+ * @param {string} options.examDescription - Description of the exam
+ * @param {number} options.durationMinutes - Duration of the exam in minutes
+ * @param {number} options.attemptsAllowed - Maximum number of attempts allowed
+ * @param {number} options.passingScore - Minimum score required to pass
+ * @param {boolean} options.shuffleItems - Whether to shuffle question order
+ * @param {boolean} options.showResultsImmediately - Whether to show results immediately after submission
+ * @param {string} options.startDate - Start date for the exam
+ * @param {string} options.endDate - End date for the exam
+ * @param {any[]} options.items - Array of exam items/questions
+ * @param {number} options.totalPoints - Total points for the exam
+ * @param {boolean} options.consoleDetection - Enable console detection for cheating prevention
+ * @param {boolean} options.translationDetection - Enable translation detection
+ * @param {boolean} options.allowWordByWordTranslation - Allow word-by-word translation
+ * @param {boolean} options.allowWordByWordDefinition - Allow word-by-word definition lookup
+ * @param {boolean} options.visibilityChangeDetection - Enable visibility change detection
+ * @param {boolean} options.locationDetection - Enable location-based detection
+ * @param {{coordinates: string; rangeInMeters: string}} options.location - Location coordinates and range
+ * @param {() => void} [options.onSuccess] - Callback function called on successful publish
+ * @returns {Object} Object containing publish handler and saving state
+ */
 export function useExamPublish(options: UseExamPublishOptions) {
   const [saving, setSaving] = useState(false);
 
+  /**
+   * Handles publishing an exam with the specified type and class assignments
+   * @param {'public' | 'classes' | 'code'} publishType - Type of publishing: 'public' for public exams, 'classes' for class-specific, 'code' for code-based access
+   * @param {string[]} classIds - Array of class IDs to assign the exam to
+   * @param {string[]} existingAssignments - Array of class IDs that already have assignments
+   * @param {Record<string, ClassAssignmentDates>} [classAssignments] - Optional object mapping class IDs to their access and due dates
+   */
   const handlePublish = async (
     publishType: 'public' | 'classes' | 'code',
     classIds: string[],

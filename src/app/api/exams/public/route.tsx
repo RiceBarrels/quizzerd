@@ -1,6 +1,29 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseClient } from '@/lib/supabase';
 
+/**
+ * GET /api/exams/public
+ * 
+ * Fetches a paginated list of public, published exams.
+ * 
+ * @param request - The incoming HTTP request
+ * @param request.url - URL with query parameters:
+ *   - search (string, optional): Search term to filter exams by name or description
+ *   - page (number, optional): Page number for pagination (default: 1)
+ *   - limit (number, optional): Number of exams per page (default: 12)
+ *   - includeClasses (boolean, optional): If true, includes class names in response (default: false)
+ * 
+ * @returns JSON response with:
+ *   - success: boolean
+ *   - data: Array of exam objects
+ *   - pagination: Object with page, limit, total, totalPages, hasMore
+ *   - summary: Object with totalPublicExams, uniqueCreators, statuses
+ * 
+ * @example
+ * GET /api/exams/public?search=math&page=1&limit=10&includeClasses=true
+ * 
+ * @throws {500} If database query fails
+ */
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);

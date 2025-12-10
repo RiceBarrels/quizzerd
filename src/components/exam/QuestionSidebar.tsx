@@ -53,6 +53,37 @@ interface QuestionSidebarProps {
   onQuestionSelect?: (questionId: string, event: React.MouseEvent) => void;
 }
 
+/**
+ * Sidebar component displaying a list of questions with drag-and-drop reordering
+ * Shows question titles and allows navigation/selection of questions
+ * @param {QuestionSidebarProps} props - Component props
+ * @param {ExamItem[]} props.items - Array of exam items/questions
+ * @param {string} props.activeTab - Currently active tab identifier
+ * @param {string | null} props.activeQuestionId - Currently active question ID
+ * @param {string | null} props.highlightedCard - Currently highlighted card ID
+ * @param {QuestionTypeOption[]} props.questionTypes - Available question type options
+ * @param {(questionId: string, event?: React.MouseEvent) => void} props.onQuestionClick - Callback when a question is clicked
+ * @param {(newItems: ExamItem[]) => void} props.onReorder - Callback when questions are reordered
+ * @param {(item: ExamItem) => string} props.getQuestionTitle - Function to get question title from item
+ * @param {(index: number, field: keyof ExamItem, value: any) => void} [props.onUpdateQuestion] - Optional callback when question is updated
+ * @param {(questionIndex: number) => void} [props.onAddOption] - Optional callback to add option
+ * @param {(index: number) => void} [props.onRemoveQuestion] - Optional callback to remove question
+ * @param {(index: number) => void} [props.onDuplicateQuestion] - Optional callback to duplicate question
+ * @param {(index: number | number[]) => void} [props.onCopyQuestion] - Optional callback to copy question(s)
+ * @param {(index: number | number[]) => void} [props.onCutQuestion] - Optional callback to cut question(s)
+ * @param {(afterIndex: number) => Promise<void>} [props.onPasteQuestion] - Optional callback to paste question(s)
+ * @param {(index: number) => void} [props.onMoveUp] - Optional callback to move question up
+ * @param {(index: number) => void} [props.onMoveDown] - Optional callback to move question down
+ * @param {(index: number) => void} [props.onInsertAbove] - Optional callback to insert above
+ * @param {(index: number) => void} [props.onInsertBelow] - Optional callback to insert below
+ * @param {(index: number) => void} [props.onResetQuestion] - Optional callback to reset question
+ * @param {(index: number) => void} [props.onShuffleOptions] - Optional callback to shuffle options
+ * @param {(index: number) => void} [props.onClearOptions] - Optional callback to clear options
+ * @param {(index: number) => void} [props.onExportQuestion] - Optional callback to export question
+ * @param {Set<string>} [props.selectedQuestions] - Set of selected question IDs
+ * @param {(questionId: string, event: React.MouseEvent) => void} [props.onQuestionSelect] - Optional callback when question is selected
+ * @returns {JSX.Element} Sidebar with question list and context menu
+ */
 export default function QuestionSidebar({
   items,
   activeTab,

@@ -20,6 +20,15 @@ interface ClassSettingsDialogProps {
   onUpdate: (updatedData: any) => void
 }
 
+/**
+ * Dialog component for managing class settings including general info, schedule, and advanced options
+ * @param {ClassSettingsDialogProps} props - Component props
+ * @param {boolean} props.open - Whether the dialog is open
+ * @param {any} props.classData - Current class data object
+ * @param {() => void} props.onClose - Callback function called when dialog is closed
+ * @param {(updatedData: any) => void} props.onUpdate - Callback function called when class data is updated
+ * @returns {JSX.Element} Dialog component with class settings tabs
+ */
 export function ClassSettingsDialog({ open, classData, onClose, onUpdate }: ClassSettingsDialogProps) {
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('general')

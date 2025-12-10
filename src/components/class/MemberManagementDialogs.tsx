@@ -40,6 +40,11 @@ const getRoleIcon = (role: string) => {
   }
 }
 
+/**
+ * Returns the appropriate badge variant for a given role
+ * @param {string} role - The role name ('admin', 'teacher', or 'student')
+ * @returns {"default" | "destructive" | "secondary"} Badge variant for the role
+ */
 const getRoleBadgeVariant = (role: string): "default" | "destructive" | "secondary" => {
   switch(role) {
     case 'admin': return 'destructive'
@@ -48,6 +53,15 @@ const getRoleBadgeVariant = (role: string): "default" | "destructive" | "seconda
   }
 }
 
+/**
+ * Dialog component for displaying detailed member profile information
+ * @param {ProfileDialogProps} props - Component props
+ * @param {boolean} props.open - Whether the dialog is open
+ * @param {any} props.member - Member data object
+ * @param {string} props.role - The member's role
+ * @param {() => void} props.onClose - Callback function called when dialog is closed
+ * @returns {JSX.Element} Dialog showing member profile details
+ */
 export function ProfileDialog({ open, member, role, onClose }: ProfileDialogProps) {
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -135,6 +149,17 @@ export function ProfileDialog({ open, member, role, onClose }: ProfileDialogProp
   )
 }
 
+/**
+ * Dialog component for changing a member's role in the class
+ * @param {RoleChangeDialogProps} props - Component props
+ * @param {boolean} props.open - Whether the dialog is open
+ * @param {any} props.member - Member data object
+ * @param {string} props.currentRole - Current role of the member
+ * @param {boolean} props.isManaging - Whether a role change operation is in progress
+ * @param {(memberId: string, newRole: string, memberName: string) => void} props.onChangeRole - Callback function called when role is changed
+ * @param {() => void} props.onClose - Callback function called when dialog is closed
+ * @returns {JSX.Element} Dialog for changing member role
+ */
 export function RoleChangeDialog({ 
   open, 
   member, 
@@ -210,6 +235,16 @@ export function RoleChangeDialog({
   )
 }
 
+/**
+ * Dialog component for confirming removal of a member from the class
+ * @param {RemoveDialogProps} props - Component props
+ * @param {boolean} props.open - Whether the dialog is open
+ * @param {any} props.member - Member data object
+ * @param {boolean} props.isManaging - Whether a removal operation is in progress
+ * @param {(memberId: string, memberName: string) => void} props.onRemove - Callback function called when member is removed
+ * @param {() => void} props.onClose - Callback function called when dialog is closed
+ * @returns {JSX.Element} Alert dialog for confirming member removal
+ */
 export function RemoveMemberDialog({ 
   open, 
   member, 

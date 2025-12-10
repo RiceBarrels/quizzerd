@@ -137,7 +137,7 @@ export default async function Footer({ className }: { className?: string }) {
                             </li>
                             <li>
                                 <Link 
-                                    href="/sitemap" 
+                                    href="/site-map" 
                                     className="hover:text-foreground transition-colors"
                                 >
                                     Sitemap

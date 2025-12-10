@@ -14,6 +14,19 @@ interface MembersListProps {
   onRemove: (member: any, role: string) => void
 }
 
+/**
+ * Component that displays a list of class members organized by role (admins, teachers, students)
+ * @param {MembersListProps} props - Component props
+ * @param {any[]} [props.admins=[]] - Array of admin members
+ * @param {any[]} [props.teachers=[]] - Array of teacher members
+ * @param {any[]} [props.students=[]] - Array of student members
+ * @param {boolean} props.isAdmin - Whether the current user is an admin
+ * @param {string | null} props.managingMember - ID of member currently being managed
+ * @param {(member: any, role: string) => void} props.onViewProfile - Callback when viewing a member's profile
+ * @param {(member: any, role: string) => void} props.onChangeRole - Callback when changing a member's role
+ * @param {(member: any, role: string) => void} props.onRemove - Callback when removing a member from class
+ * @returns {JSX.Element} List of members organized by role sections
+ */
 export function MembersList({
   admins = [],
   teachers = [],

@@ -23,6 +23,19 @@ interface EventHandler {
   element: HTMLElement;
 }
 
+/**
+ * Rich text editor component using Quill.js with floating format dock integration
+ * @param {TextEditorProps} props - Component props
+ * @param {string} props.value - Current HTML content value of the editor
+ * @param {(value: string) => void} [props.onChange] - Callback function called when content changes
+ * @param {string} [props.placeholder="Start typing..."] - Placeholder text shown when editor is empty
+ * @param {string} [props.id] - Optional unique identifier for the editor
+ * @param {string} [props.className] - Optional additional CSS classes
+ * @param {boolean} [props.disabled=false] - Whether the editor is disabled
+ * @param {boolean} [props.error=false] - Whether to show error styling
+ * @param {number} [props.minHeight] - Optional minimum height for the editor
+ * @returns {JSX.Element} Text editor component with Quill.js integration
+ */
 export default function TextEditor({
   value,
   onChange,

@@ -11,6 +11,16 @@ interface StableCodeEditorProps {
   height?: string;
 }
 
+/**
+ * Memoized code editor component optimized to prevent re-renders during drag operations
+ * Uses custom comparison function to only re-render when file content actually changes
+ * @param {StableCodeEditorProps} props - Component props
+ * @param {string} props.questionId - Unique identifier for the question (used as key)
+ * @param {EditorFile[]} props.files - Array of editor files
+ * @param {(files: EditorFile[]) => void} props.onChange - Callback when files are modified
+ * @param {string} [props.height="400px"] - Height of the editor
+ * @returns {JSX.Element} Code editor wrapped in a stable container
+ */
 const StableCodeEditor = memo(function StableCodeEditor({
   questionId,
   files,

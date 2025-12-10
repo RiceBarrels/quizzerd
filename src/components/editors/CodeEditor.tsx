@@ -49,6 +49,11 @@ const oklchToHex = (oklchString: string): string => {
   return '#000000';
 };
 
+/**
+ * Determines the Monaco editor language mode from a file name based on its extension
+ * @param {string} fileName - The file name (e.g., "script.js", "style.css")
+ * @returns {string} Monaco editor language identifier (e.g., "javascript", "typescript", "css")
+ */
 const getLanguageFromFileName = (fileName: string): string => {
   const ext = fileName.split('.').pop()?.toLowerCase();
   const languageMap: LanguageMap = {
@@ -85,6 +90,16 @@ const getLanguageFromFileName = (fileName: string): string => {
   return languageMap[ext || ''] || 'plaintext';
 };
 
+/**
+ * Multi-file code editor component using Monaco Editor
+ * Supports multiple files with tabs, syntax highlighting, and theme customization
+ * @param {CodeEditorProps} props - Component props
+ * @param {CodeFile[]} [props.files] - Array of code files to display (defaults to a single index.html file)
+ * @param {(files: CodeFile[]) => void} [props.onChange] - Callback function called when files are modified
+ * @param {string} [props.height="400px"] - Height of the editor
+ * @param {string} [props.width="100%"] - Width of the editor
+ * @returns {JSX.Element} Code editor component with file tabs and Monaco editor
+ */
 const CodeEditor = memo(function CodeEditor({
   files = [{ name: 'index.html', content: '<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>Document</title>\n</head>\n<body>\n    \n</body>\n</html>\n' }],
   onChange,

@@ -10,6 +10,11 @@ if (!supabaseUrl || !supabaseKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
+/**
+ * Creates a Supabase client with authentication token from Clerk
+ * Attempts to get Supabase JWT template token, falls back to regular session token or service role key
+ * @returns {Promise<ReturnType<typeof createClient>>} Authenticated Supabase client instance
+ */
 export async function createSupabaseClient() {
   const { getToken, userId } = await auth()
   
@@ -37,6 +42,11 @@ export async function createSupabaseClient() {
   })
 }
 
+/**
+ * Creates a Supabase client with a specific authentication token
+ * @param {string} token - The authentication token to use for Supabase requests
+ * @returns {Promise<ReturnType<typeof createClient>>} Authenticated Supabase client instance
+ */
 export async function createSupabaseClientWithToken(token: string) {
   return createClient(supabaseUrl!, supabaseKey!, {
     global: {
@@ -47,7 +57,12 @@ export async function createSupabaseClientWithToken(token: string) {
   })
 }
 
-// Create Supabase admin client with service role key (bypasses RLS)
+/**
+ * Creates a Supabase admin client with service role key (bypasses Row Level Security)
+ * This client has full access to the database and should only be used server-side
+ * @returns {ReturnType<typeof createClient>} Admin Supabase client instance
+ * @throws {Error} If SUPABASE_SERVICE_ROLE environment variable is not defined
+ */
 export function createSupabaseAdminClient() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE
   

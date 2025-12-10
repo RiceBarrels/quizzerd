@@ -10,6 +10,11 @@ if (!supabaseUrl || !supabasePublishableKey) {
   throw new Error('Missing Supabase environment variables')
 }
 
+/**
+ * Custom hook to get an authenticated Supabase client for client-side use
+ * Uses Clerk session token for authentication
+ * @returns {ReturnType<typeof createClient>} Authenticated Supabase client instance
+ */
 export function useSupabase() {
   const { session } = useSession()
 

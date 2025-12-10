@@ -57,6 +57,38 @@ interface ExamSettingsTabProps {
   onDeleteExam?: () => void;
 }
 
+/**
+ * Tab component for configuring exam settings including duration, attempts, scoring, and cheating detection
+ * @param {ExamSettingsTabProps} props - Component props
+ * @param {number} props.durationMinutes - Exam duration in minutes
+ * @param {number} props.attemptsAllowed - Maximum number of attempts allowed
+ * @param {number} props.passingScore - Minimum score required to pass
+ * @param {boolean} props.shuffleItems - Whether to shuffle question order
+ * @param {boolean} props.showResultsImmediately - Whether to show results immediately after submission
+ * @param {boolean} props.isPublic - Whether the exam is publicly accessible
+ * @param {boolean} [props.consoleDetection=false] - Enable console detection for cheating prevention
+ * @param {boolean} [props.translationDetection=false] - Enable translation detection
+ * @param {boolean} [props.allowWordByWordTranslation=false] - Allow word-by-word translation
+ * @param {boolean} [props.allowWordByWordDefinition=false] - Allow word-by-word definition lookup
+ * @param {boolean} [props.visibilityChangeDetection=false] - Enable visibility change detection
+ * @param {boolean} [props.locationDetection=false] - Enable location-based detection
+ * @param {{coordinates: string; rangeInMeters: string}} [props.location] - Location coordinates and range
+ * @param {(value: number) => void} props.onDurationChange - Callback when duration changes
+ * @param {(value: number) => void} props.onAttemptsChange - Callback when attempts allowed changes
+ * @param {(value: number) => void} props.onPassingScoreChange - Callback when passing score changes
+ * @param {(value: boolean) => void} props.onShuffleChange - Callback when shuffle setting changes
+ * @param {(value: boolean) => void} props.onShowResultsChange - Callback when show results setting changes
+ * @param {(value: boolean) => void} props.onPublicChange - Callback when public setting changes
+ * @param {(value: boolean) => void} [props.onConsoleDetectionChange] - Callback when console detection changes
+ * @param {(value: boolean) => void} [props.onTranslationDetectionChange] - Callback when translation detection changes
+ * @param {(value: boolean) => void} [props.onAllowWordByWordTranslationChange] - Callback when word-by-word translation setting changes
+ * @param {(value: boolean) => void} [props.onAllowWordByWordDefinitionChange] - Callback when word-by-word definition setting changes
+ * @param {(value: boolean) => void} [props.onVisibilityChangeDetectionChange] - Callback when visibility change detection changes
+ * @param {(value: boolean) => void} [props.onLocationDetectionChange] - Callback when location detection changes
+ * @param {(value: LocationData) => void} [props.onLocationChange] - Callback when location data changes
+ * @param {() => void} [props.onDeleteExam] - Optional callback to delete the exam
+ * @returns {JSX.Element} Card component with exam settings form
+ */
 export default function ExamSettingsTab({
   durationMinutes,
   attemptsAllowed,

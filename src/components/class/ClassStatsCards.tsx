@@ -13,6 +13,11 @@ interface ClassStatsCardsProps {
   assignmentCount: number
 }
 
+/**
+ * Formats a time string (HH:MM) into a readable 12-hour format
+ * @param {string | null | undefined} timeString - Time string in HH:MM format or null/undefined
+ * @returns {string} Formatted time string in 12-hour format (e.g., "2:30 PM")
+ */
 const formatTime = (timeString: string | null | undefined) => {
   if (!timeString) return 'Not set'
   const time = timeString.split(':')
@@ -23,6 +28,19 @@ const formatTime = (timeString: string | null | undefined) => {
   return `${displayHours}:${minutes} ${ampm}`
 }
 
+/**
+ * Component that displays class statistics in card format
+ * Shows class schedule, member counts, and assignment count
+ * @param {ClassStatsCardsProps} props - Component props
+ * @param {string | null | undefined} props.periodStart - Class period start time
+ * @param {string | null | undefined} props.periodEnd - Class period end time
+ * @param {number} props.memberCount - Total number of class members
+ * @param {number} props.adminCount - Number of admin members
+ * @param {number} props.teacherCount - Number of teacher members
+ * @param {number} props.studentCount - Number of student members
+ * @param {number} props.assignmentCount - Total number of assignments
+ * @returns {JSX.Element} Grid of stat cards displaying class information
+ */
 export function ClassStatsCards({
   periodStart,
   periodEnd,

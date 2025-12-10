@@ -17,6 +17,19 @@ interface ExamDetailsTabProps {
   onEndDateChange: (value: string) => void;
 }
 
+/**
+ * Tab component for editing exam basic information (name, description, dates)
+ * @param {ExamDetailsTabProps} props - Component props
+ * @param {string} props.examName - Current exam name
+ * @param {string} props.examDescription - Current exam description (HTML)
+ * @param {string} props.startDate - Exam start date/time (datetime-local format)
+ * @param {string} props.endDate - Exam end date/time (datetime-local format)
+ * @param {(value: string) => void} props.onExamNameChange - Callback when exam name changes
+ * @param {(value: string) => void} props.onDescriptionChange - Callback when description changes
+ * @param {(value: string) => void} props.onStartDateChange - Callback when start date changes
+ * @param {(value: string) => void} props.onEndDateChange - Callback when end date changes
+ * @returns {JSX.Element} Card component with exam details form
+ */
 export default function ExamDetailsTab({
   examName,
   examDescription,
