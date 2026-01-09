@@ -208,7 +208,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { formUrl, formId, class_ids = [], is_public = false } = body;
+    const { formUrl, formId, is_public = false } = body;
     let { accessToken, expiresAt } = body;
 
     // Determine form ID from either direct ID or URL
@@ -370,37 +370,12 @@ export async function POST(request: Request) {
     );
     const totalPoints = scorableItems.reduce((sum, q) => sum + (q.points || 0), 0);
 
-    // Validate class permissions if classes are provided
-    const validClassIds = [];
-    if (class_ids && Array.isArray(class_ids) && class_ids.length > 0) {
-      for (const classId of class_ids) {
-        const { data: classData, error: classError } = await supabase
-          .from('class')
-          .select('admin_ids, teacher_ids')
-          .eq('class_id', classId)
-          .single();
-
-        if (classError || !classData) {
-          continue; // Skip invalid class IDs
-        }
-
-        const hasPermission = 
-          classData.admin_ids?.includes(userId) ||
-          classData.teacher_ids?.includes(userId);
-
-        if (hasPermission) {
-          validClassIds.push(classId);
-        }
-      }
-    }
-
     // Create the imported exam
     const { data, error } = await supabase
       .from('exams')
       .insert({
         exam_name: formData.title,
         exam_description: formData.description,
-        class_id: validClassIds,
         subject: [],
         creator_id: userId,
         is_public: is_public || false,
@@ -424,8 +399,14 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error('Error creating imported exam:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
       return NextResponse.json(
-        { error: 'Failed to import exam' },
+        {
+          error: 'Failed to import exam',
+          message: error.message || 'Database insert failed',
+          details: error.details || error.hint || null,
+          code: error.code || null
+        },
         { status: 500 }
       );
     }
@@ -438,8 +419,15 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error('Error importing from Google Forms:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error('Error stack:', errorStack);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      {
+        error: 'Internal server error',
+        message: errorMessage,
+        stack: process.env.NODE_ENV === 'development' ? errorStack : undefined
+      },
       { status: 500 }
     );
   }

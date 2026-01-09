@@ -12,6 +12,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider"
 import { shadcn } from '@clerk/themes';
 import { ReactNode } from 'react';
+import DevGate from '@/components/DevGate';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -143,7 +144,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               enableSystem
               disableTransitionOnChange
             >
-              {children}
+              <DevGate>
+                {children}
+              </DevGate>
             </ThemeProvider>
           </body>
         </html>

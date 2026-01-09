@@ -36,8 +36,6 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
   
   // Publish dialog state
   const [publishDialogOpen, setPublishDialogOpen] = useState<boolean>(false);
-  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
-  const [classesWithExistingAssignments, setClassesWithExistingAssignments] = useState<string[]>([]);
 
   // Form states
   const [examName, setExamName] = useState<string>('');
@@ -153,9 +151,6 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
             rangeInMeters: examData.location.rangeInMeters || '100'
           });
         }
-        
-        // Load selected classes
-        setSelectedClassIds(examData.class_id || []);
       } else {
         toast.error('Failed to load exam');
         router.push('/exam');
@@ -399,21 +394,23 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
   });
 
   const handlePublish = useCallback(async (
-    publishType: 'public' | 'classes' | 'code',
+    publishType: 'public' | 'classroom' | 'link',
     classIds: string[],
     existingAssignments: string[],
     classAssignments?: Record<string, { access_at: string | null; due_at: string | null }>
   ) => {
     setPublishDialogOpen(false);
-    setSelectedClassIds(classIds);
-    setClassesWithExistingAssignments(existingAssignments);
-    
+
     try {
-      await publishExam(publishType, classIds, existingAssignments, classAssignments);
-      
-      if (publishType === 'public') {
-        setIsPublic(true);
+      // For public/link, use the existing publish flow
+      if (publishType === 'public' || publishType === 'link') {
+        await publishExam(publishType as any, [], [], {});
+        if (publishType === 'public') {
+          setIsPublic(true);
+        }
+        setIsPublished(true);
       }
+      // Classroom publishing is handled directly in the dialog
     } catch (error) {
       // Error already handled in hook
     }
@@ -740,7 +737,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
         examDescription={examDescription}
         isPublic={isPublic}
         isPublished={isPublished}
-        selectedClassIds={selectedClassIds}
+        selectedClassIds={[]}
         onPublish={handlePublish}
         saving={saving || publishSaving}
       />

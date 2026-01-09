@@ -7,14 +7,17 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Tabs, TabsList, TabsTrigger, TabsContents, TabsContent } from '@/components/ui/shadcn-io/tabs';
-import { Loader2, X, Globe, Lock, Key, CheckIcon, Users, Copy, Link2, FileText, Calendar, Clock } from 'lucide-react';
+import { Loader2, X, Globe, Lock, CheckIcon, Copy, Link2, FileText, Calendar, Clock, GraduationCap, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
-interface ClassAssignmentDates {
-  access_at: string | null;
-  due_at: string | null;
+interface GoogleClassroomCourse {
+  id: string;
+  name: string;
+  section?: string;
+  descriptionHeading?: string;
+  room?: string;
+  courseState: string;
+  alternateLink: string;
 }
 
 interface PublishExamDialogProps {
@@ -27,202 +30,109 @@ interface PublishExamDialogProps {
   isPublished: boolean;
   selectedClassIds: string[];
   onPublish: (
-    publishType: 'public' | 'classes' | 'code',
+    publishType: 'public' | 'classroom' | 'link',
     classIds: string[],
     existingAssignments: string[],
-    classAssignments?: Record<string, ClassAssignmentDates>
+    classAssignments?: Record<string, { access_at: string | null; due_at: string | null }>
   ) => Promise<void>;
   saving: boolean;
 }
 
-/**
- * Dialog component for publishing exams with options for public, class-based, or code-based access
- * Handles exam publishing, class assignments, and access code generation
- * @param {PublishExamDialogProps} props - Component props
- * @param {boolean} props.open - Whether the dialog is open
- * @param {(open: boolean) => void} props.onOpenChange - Callback when dialog open state changes
- * @param {string} props.examId - Unique identifier for the exam
- * @param {string} props.examName - Name of the exam
- * @param {string} props.examDescription - Description of the exam
- * @param {boolean} props.isPublic - Whether the exam is currently public
- * @param {boolean} props.isPublished - Whether the exam is currently published
- * @param {string[]} props.selectedClassIds - Array of selected class IDs for assignment
- * @param {(publishType: 'public' | 'classes' | 'code', classIds: string[], existingAssignments: string[], classAssignments?: Record<string, ClassAssignmentDates>) => Promise<void>} props.onPublish - Callback function to handle publishing
- * @param {boolean} props.saving - Whether a publish operation is in progress
- * @returns {JSX.Element} Dialog component for exam publishing
- */
 export default function PublishExamDialog({
   open,
   onOpenChange,
   examId,
   examName,
-  examDescription,
   isPublic,
   isPublished,
-  selectedClassIds: initialSelectedClassIds,
   onPublish,
   saving,
 }: PublishExamDialogProps) {
-  const [publishType, setPublishType] = useState<'public' | 'classes' | 'code'>('public');
-  const [selectedClassIds, setSelectedClassIds] = useState<string[]>(initialSelectedClassIds);
-  const [classes, setClasses] = useState<any[]>([]);
-  const [loadingClasses, setLoadingClasses] = useState<boolean>(false);
-  const [classesWithExistingAssignments, setClassesWithExistingAssignments] = useState<string[]>([]);
-  const [hasInitializedPublishDialog, setHasInitializedPublishDialog] = useState<boolean>(false);
-  const [classAssignmentDates, setClassAssignmentDates] = useState<Record<string, ClassAssignmentDates>>({});
-  const [classDatesDialogOpen, setClassDatesDialogOpen] = useState<boolean>(false);
-  const [currentClassId, setCurrentClassId] = useState<string | null>(null);
-  const [tempAccessAt, setTempAccessAt] = useState<string>('');
-  const [tempDueAt, setTempDueAt] = useState<string>('');
+  const [publishType, setPublishType] = useState<'public' | 'classroom' | 'link'>('classroom');
+  const [courses, setCourses] = useState<GoogleClassroomCourse[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [loadingCourses, setLoadingCourses] = useState<boolean>(false);
+  const [publishing, setPublishing] = useState<boolean>(false);
+  const [dueDate, setDueDate] = useState<string>('');
+  const [scheduledTime, setScheduledTime] = useState<string>('');
+  const [googleConnected, setGoogleConnected] = useState<boolean>(true);
+  const [publishedClassroomLink, setPublishedClassroomLink] = useState<string | null>(null);
 
-  // Sync selectedClassIds with classesWithExistingAssignments when dialog opens
-  useEffect(() => {
-    if (open && classesWithExistingAssignments.length > 0) {
-      setSelectedClassIds(classesWithExistingAssignments);
-    }
-  }, [open, classesWithExistingAssignments]);
+  const fetchCourses = useCallback(async () => {
+    setLoadingCourses(true);
+    try {
+      const response = await fetch('/api/exams/publish');
+      const result = await response.json();
 
-  // Initialize publish type based on exam data
-  useEffect(() => {
-    if (open && !hasInitializedPublishDialog) {
-      if (isPublic) {
-        setPublishType('public');
-      } else if (selectedClassIds.length > 0) {
-        setPublishType('classes');
-      } else if (isPublished) {
-        setPublishType('code');
+      if (result.success) {
+        setCourses(result.courses || []);
+        setGoogleConnected(true);
       } else {
-        setPublishType('public');
-      }
-      setHasInitializedPublishDialog(true);
-    }
-  }, [open, isPublic, selectedClassIds, isPublished, hasInitializedPublishDialog]);
-
-  // Reset initialization when dialog closes
-  useEffect(() => {
-    if (!open) {
-      setHasInitializedPublishDialog(false);
-    }
-  }, [open]);
-
-  const checkExistingAssignments = useCallback(async (classList: any[]) => {
-    if (!examId || classList.length === 0) return;
-    
-    try {
-      const response = await fetch(`/api/classes/assignments/check?examId=${examId}`);
-      const result = await response.json();
-      
-      if (result.success) {
-        setClassesWithExistingAssignments(result.classIds || []);
+        setGoogleConnected(false);
+        if (result.message) {
+          console.log('Google Classroom:', result.message);
+        }
       }
     } catch (error) {
-      console.error('Error checking existing assignments:', error);
-    }
-  }, [examId]);
-
-  const fetchClasses = useCallback(async () => {
-    setLoadingClasses(true);
-    try {
-      const response = await fetch('/api/classes/get');
-      const result = await response.json();
-      
-      if (result.success) {
-        setClasses(result.data || []);
-        await checkExistingAssignments(result.data || []);
-      }
-    } catch (error) {
-      console.error('Error fetching classes:', error);
+      console.error('Error fetching courses:', error);
+      setGoogleConnected(false);
     } finally {
-      setLoadingClasses(false);
-    }
-  }, [checkExistingAssignments]);
-
-  useEffect(() => {
-    if (open) {
-      fetchClasses();
-    }
-  }, [open, fetchClasses]);
-
-  const formatTimeString = useCallback((timeString: string | null | undefined): string => {
-    if (!timeString) return '';
-    try {
-      // Handle time with timezone format (e.g., "14:30:00+00:00" or "14:30:00-05:00")
-      const time = timeString.includes('+') || timeString.includes('-') 
-        ? timeString.split(/[+-]/)[0] 
-        : timeString;
-      const [hours, minutes, seconds] = time.split(':');
-      const hour = parseInt(hours);
-      const ampm = hour >= 12 ? 'PM' : 'AM';
-      const displayHour = hour % 12 || 12;
-      return `${displayHour}:${minutes} ${ampm}`;
-    } catch (error) {
-      return timeString;
+      setLoadingCourses(false);
     }
   }, []);
 
-  const handleClassSelect = useCallback((classId: string, checked: boolean) => {
-    if (checked) {
-      // Check if class already has dates set
-      if (classAssignmentDates[classId]) {
-        // Already has dates, just add to selection
-        setSelectedClassIds(prev => [...prev, classId]);
-      } else {
-        // Open dialog to set dates when selecting a class
-        setCurrentClassId(classId);
-        const existingDates = classAssignmentDates[classId] as ClassAssignmentDates | undefined;
-        setTempAccessAt(existingDates?.access_at ? new Date(existingDates.access_at).toISOString().slice(0, 16) : '');
-        setTempDueAt(existingDates?.due_at ? new Date(existingDates.due_at).toISOString().slice(0, 16) : '');
-        setClassDatesDialogOpen(true);
-      }
-    } else {
-      // Remove class and its dates
-      setSelectedClassIds(prev => prev.filter(id => id !== classId));
-      setClassAssignmentDates(prev => {
-        const newDates = { ...prev };
-        delete newDates[classId];
-        return newDates;
+  useEffect(() => {
+    if (open) {
+      fetchCourses();
+    }
+  }, [open, fetchCourses]);
+
+  const handlePublishToClassroom = useCallback(async () => {
+    if (!selectedCourseId) {
+      toast.error('Please select a Google Classroom course');
+      return;
+    }
+
+    setPublishing(true);
+    try {
+      const response = await fetch('/api/exams/publish', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          exam_id: examId,
+          course_id: selectedCourseId,
+          due_date: dueDate || null,
+          scheduled_time: scheduledTime || null,
+        }),
       });
-    }
-  }, [classAssignmentDates]);
 
-  const handleCancelClassDates = useCallback(() => {
-    // Don't add the class if user cancels
-    if (currentClassId) {
-      setSelectedClassIds(prev => prev.filter(id => id !== currentClassId));
-    }
-    setClassDatesDialogOpen(false);
-    setCurrentClassId(null);
-    setTempAccessAt('');
-    setTempDueAt('');
-  }, [currentClassId]);
+      const result = await response.json();
 
-  const handleSaveClassDates = useCallback(() => {
-    if (!currentClassId) return;
-
-    setClassAssignmentDates(prev => ({
-      ...prev,
-      [currentClassId]: {
-        access_at: tempAccessAt ? new Date(tempAccessAt).toISOString() : null,
-        due_at: tempDueAt ? new Date(tempDueAt).toISOString() : null,
-      },
-    }));
-
-    // Add class to selected if not already selected
-    setSelectedClassIds(prev => {
-      if (!prev.includes(currentClassId)) {
-        return [...prev, currentClassId];
+      if (result.success) {
+        toast.success('Exam published to Google Classroom!');
+        setPublishedClassroomLink(result.classroom?.alternateLink || null);
+        onOpenChange(false);
+      } else {
+        toast.error(result.message || result.error || 'Failed to publish');
       }
-      return prev;
-    });
-
-    setClassDatesDialogOpen(false);
-    setCurrentClassId(null);
-    toast.success('Assignment dates set');
-  }, [currentClassId, tempAccessAt, tempDueAt]);
+    } catch (error) {
+      console.error('Error publishing to classroom:', error);
+      toast.error('Failed to publish to Google Classroom');
+    } finally {
+      setPublishing(false);
+    }
+  }, [examId, selectedCourseId, dueDate, scheduledTime, onOpenChange]);
 
   const handlePublishConfirm = useCallback(async () => {
-    await onPublish(publishType, selectedClassIds, classesWithExistingAssignments, classAssignmentDates);
-  }, [publishType, selectedClassIds, classesWithExistingAssignments, classAssignmentDates, onPublish]);
+    if (publishType === 'classroom') {
+      await handlePublishToClassroom();
+    } else {
+      // For public or link, use the original onPublish
+      await onPublish(publishType === 'public' ? 'public' : 'link' as any, [], [], {});
+    }
+  }, [publishType, handlePublishToClassroom, onPublish]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -230,464 +140,310 @@ export default function PublishExamDialog({
         <DialogHeader className="space-y-3 pb-4 border-b">
           <DialogTitle className="text-2xl font-semibold">Publish Exam</DialogTitle>
           <DialogDescription className="text-base">
-            Choose how you want to share this exam with your students.
+            Choose how you want to share &quot;{examName}&quot; with your students.
           </DialogDescription>
         </DialogHeader>
-        
-        <Tabs 
-          value={publishType === 'public' ? 'public' : 'private'} 
-          onValueChange={(value) => {
-            if (value === 'public') {
-              setPublishType('public');
-            } else {
-              setPublishType(selectedClassIds.length > 0 ? 'classes' : 'code');
-            }
-          }}
-          className="flex-1 flex flex-col overflow-hidden"
-        >
-          <h2 className="text-lg font-semibold">Choose Publish Type:</h2>
-          <TabsList className="grid w-full grid-cols-2 h-12 bg-muted/50 p-1">
-            <TabsTrigger value="public" className="flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-              <Globe className="h-4 w-4" />
-              <span className="font-medium">Public</span>
-            </TabsTrigger>
-            <TabsTrigger value="private" className="flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-              <Lock className="h-4 w-4" />
-              <span className="font-medium">Private</span>
-            </TabsTrigger>
-          </TabsList>
 
-          <TabsContents className="flex-1 overflow-y-auto py-6">
-            <TabsContent value="public" className="mt-0 space-y-6 h-full">
-              <div className="space-y-4">
-                <div className="flex items-start gap-4 p-6 border-2 border-primary/20 rounded-xl bg-gradient-to-br from-primary/5 to-primary/10">
-                  <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
-                    <Globe className="h-6 w-6 text-primary" />
+        <div className="flex-1 overflow-y-auto py-6 space-y-6">
+          <RadioGroup
+            value={publishType}
+            onValueChange={(value: any) => setPublishType(value)}
+            className="space-y-3"
+          >
+            {/* Google Classroom Option */}
+            <label
+              htmlFor="classroom"
+              className={`flex items-start space-x-4 p-5 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                publishType === 'classroom'
+                  ? 'border-primary bg-gradient-to-br from-primary/5 to-primary/10 shadow-sm'
+                  : 'border-border hover:border-primary/30 hover:bg-accent/30'
+              }`}
+            >
+              <RadioGroupItem value="classroom" id="classroom" className="mt-1" />
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`p-2 rounded-lg transition-colors ${
+                      publishType === 'classroom'
+                        ? 'bg-primary/20 border border-primary/30'
+                        : 'bg-muted'
+                    }`}
+                  >
+                    <GraduationCap
+                      className={`h-5 w-5 ${
+                        publishType === 'classroom' ? 'text-primary' : 'text-muted-foreground'
+                      }`}
+                    />
                   </div>
-                  <div className="flex-1 space-y-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-lg font-semibold">Public Directory</h3>
-                        {isPublic && isPublished && (
-                          <Badge className="bg-primary text-primary-foreground">
-                            Active
-                          </Badge>
+                  <span className="font-semibold text-base">Google Classroom</span>
+                  <Badge variant="secondary" className="text-xs">
+                    Recommended
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Post this exam as an assignment to your Google Classroom course. Students will see it in their Classroom feed.
+                </p>
+              </div>
+            </label>
+
+            {/* Public Option */}
+            <label
+              htmlFor="public"
+              className={`flex items-start space-x-4 p-5 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                publishType === 'public'
+                  ? 'border-primary bg-gradient-to-br from-primary/5 to-primary/10 shadow-sm'
+                  : 'border-border hover:border-primary/30 hover:bg-accent/30'
+              }`}
+            >
+              <RadioGroupItem value="public" id="public" className="mt-1" />
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`p-2 rounded-lg transition-colors ${
+                      publishType === 'public'
+                        ? 'bg-primary/20 border border-primary/30'
+                        : 'bg-muted'
+                    }`}
+                  >
+                    <Globe
+                      className={`h-5 w-5 ${
+                        publishType === 'public' ? 'text-primary' : 'text-muted-foreground'
+                      }`}
+                    />
+                  </div>
+                  <span className="font-semibold text-base">Public Directory</span>
+                  {isPublic && isPublished && (
+                    <Badge className="bg-primary text-primary-foreground text-xs">Active</Badge>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Make this exam accessible to everyone. It will be discoverable in the public exams directory.
+                </p>
+              </div>
+            </label>
+
+            {/* Private Link Option */}
+            <label
+              htmlFor="link"
+              className={`flex items-start space-x-4 p-5 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                publishType === 'link'
+                  ? 'border-primary bg-gradient-to-br from-primary/5 to-primary/10 shadow-sm'
+                  : 'border-border hover:border-primary/30 hover:bg-accent/30'
+              }`}
+            >
+              <RadioGroupItem value="link" id="link" className="mt-1" />
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`p-2 rounded-lg transition-colors ${
+                      publishType === 'link'
+                        ? 'bg-primary/20 border border-primary/30'
+                        : 'bg-muted'
+                    }`}
+                  >
+                    <Lock
+                      className={`h-5 w-5 ${
+                        publishType === 'link' ? 'text-primary' : 'text-muted-foreground'
+                      }`}
+                    />
+                  </div>
+                  <span className="font-semibold text-base">Private Link</span>
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Keep this exam private. Only those with the direct link can access it.
+                </p>
+              </div>
+            </label>
+          </RadioGroup>
+
+          {/* Google Classroom Course Selection */}
+          {publishType === 'classroom' && (
+            <div className="space-y-4 pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+                    Select Course
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Choose which Google Classroom course to post to
+                  </p>
+                </div>
+              </div>
+
+              {!googleConnected ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-4 text-center">
+                  <div className="p-4 rounded-full bg-muted">
+                    <GraduationCap className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Google Account Not Connected</p>
+                    <p className="text-xs text-muted-foreground max-w-sm">
+                      Please connect your Google account with Classroom permissions to publish exams.
+                    </p>
+                  </div>
+                </div>
+              ) : loadingCourses ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="text-sm text-muted-foreground">Loading your courses...</p>
+                </div>
+              ) : courses.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-4 text-center">
+                  <div className="p-4 rounded-full bg-muted">
+                    <GraduationCap className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">No Courses Found</p>
+                    <p className="text-xs text-muted-foreground max-w-sm">
+                      You need to be a teacher in a Google Classroom course to publish exams.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[200px] overflow-y-auto border rounded-xl p-2 bg-muted/20">
+                  {courses.map((course) => (
+                    <div
+                      key={course.id}
+                      onClick={() => setSelectedCourseId(course.id)}
+                      className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-all duration-200 border-2 ${
+                        selectedCourseId === course.id
+                          ? 'bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 shadow-sm'
+                          : 'bg-background hover:bg-accent/50 hover:shadow-sm border-transparent'
+                      }`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                          selectedCourseId === course.id
+                            ? 'border-primary bg-primary'
+                            : 'border-muted-foreground'
+                        }`}
+                      >
+                        {selectedCourseId === course.id && (
+                          <CheckIcon className="h-3 w-3 text-primary-foreground" />
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        Make this exam accessible to everyone. It will be discoverable in the public exams directory and accessible to all users.
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="secondary" className="font-normal">
-                        Public Access
-                      </Badge>
-                      <Badge variant="secondary" className="font-normal">
-                        Searchable
-                      </Badge>
-                      <Badge variant="secondary" className="font-normal">
-                        No Restrictions
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-
-                {isPublished && (
-                  <div className="p-4 bg-muted/50 border rounded-lg">
-                    <div className="flex items-start gap-3">
-                      <div className="p-1.5 rounded-md bg-background">
-                        <Link2 className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                      <div className="flex-1 space-y-2">
-                        <p className="text-sm font-medium">Share Exam Link</p>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            readOnly
-                            value={`${typeof window !== 'undefined' ? window.location.origin : ''}/exam/${examId}/preview`}
-                            className="flex-1 px-3 py-2 text-xs bg-background border rounded-lg font-mono"
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              navigator.clipboard.writeText(`${window.location.origin}/exam/${examId}/preview`);
-                              toast.success('Link copied to clipboard');
-                            }}
-                          >
-                            <Copy className="h-4 w-4 mr-1" />
-                            Copy
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="p-4 bg-muted/50 border rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <div className="p-1.5 rounded-md bg-background">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div className="flex-1 space-y-1">
-                      <p className="text-sm font-medium">How it works</p>
-                      <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-                        <li>Anyone can find and access this exam</li>
-                        <li>Appears in the public exams directory</li>
-                        <li>Shareable via direct link</li>
-                        <li>No enrollment or access code required</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Optional Class Assignment for Public Exams */}
-                <div className="space-y-4 pt-2 border-t">
-                  <div className="flex items-start gap-3 p-4 bg-accent/50 border rounded-lg">
-                    <div className="p-1.5 rounded-md bg-background">
-                      <Users className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">Optional: Assign to Classes</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Even though this exam is public, you can also assign it to specific classes for tracking and organization.
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Select Classes</h3>
-                      <p className="text-xs text-muted-foreground mt-1">Choose which classes to assign this exam to</p>
-                    </div>
-                    {selectedClassIds.length > 0 && (
-                      <Badge variant="secondary" className="text-xs">
-                        {selectedClassIds.length} Selected
-                      </Badge>
-                    )}
-                  </div>
-                  
-                  {loadingClasses ? (
-                    <div className="flex flex-col items-center justify-center py-12 space-y-3">
-                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                      <p className="text-sm text-muted-foreground">Loading your classes...</p>
-                    </div>
-                  ) : classes.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 space-y-4 text-center">
-                      <div className="p-4 rounded-full bg-muted">
-                        <Users className="h-8 w-8 text-muted-foreground" />
-                      </div>
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">No Classes Available</p>
-                        <p className="text-xs text-muted-foreground max-w-sm">
-                          You need to create or join a class before you can assign exams to it.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 max-h-[280px] overflow-y-auto border rounded-xl p-2 bg-muted/20">
-                      {classes.map((cls) => {
-                        const isAlreadyPublished = classesWithExistingAssignments.includes(cls.class_id);
-                        const isSelected = selectedClassIds.includes(cls.class_id);
-                  
-                        return (
-                          <div 
-                            key={cls.class_id} 
-                            className={`flex items-start space-x-3 p-3 rounded-lg transition-all duration-200 border-2 ${
-                              isAlreadyPublished 
-                                ? 'bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 shadow-sm' 
-                                : isSelected
-                                ? 'bg-accent/50 border-accent hover:bg-accent/70'
-                                : 'bg-background hover:bg-accent/50 hover:shadow-sm border-transparent'
-                            }`}
-                          >
-                            <Checkbox
-                              id={`public-class-${cls.class_id}`}
-                              checked={isSelected}
-                              className="mt-1"
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  handleClassSelect(cls.class_id, true);
-                                } else {
-                                  handleClassSelect(cls.class_id, false);
-                                }
-                              }}
-                            />
-                            <Label
-                              htmlFor={`public-class-${cls.class_id}`}
-                              className="flex-1 space-y-1 cursor-pointer"
-                            >
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className={`font-semibold text-sm ${
-                                  isAlreadyPublished ? 'text-primary' : ''
-                                }`}>
-                                  {cls.class_name}
-                                </span>
-                                {isAlreadyPublished && (
-                                  <Badge className="text-xs bg-primary text-primary-foreground">
-                                    <CheckIcon className="h-3 w-3 mr-1" />
-                                    Assigned
-                                  </Badge>
-                                )}
-                              </div>
-                              {cls.description && (
-                                <p className="text-xs text-muted-foreground leading-relaxed">{cls.description}</p>
-                              )}
-                              {isSelected && classAssignmentDates[cls.class_id] && (
-                                <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
-                                  {classAssignmentDates[cls.class_id].access_at && (
-                                    <div className="flex items-center gap-1">
-                                      <Clock className="h-3 w-3" />
-                                      <span>Access: {new Date(classAssignmentDates[cls.class_id].access_at!).toLocaleString()}</span>
-                                    </div>
-                                  )}
-                                  {classAssignmentDates[cls.class_id].due_at && (
-                                    <div className="flex items-center gap-1">
-                                      <Calendar className="h-3 w-3" />
-                                      <span>Due: {new Date(classAssignmentDates[cls.class_id].due_at!).toLocaleString()}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </Label>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="private" className="mt-0 space-y-6 h-full">
-              <div className="space-y-3">
-                <RadioGroup 
-                  value={publishType === 'public' ? 'classes' : publishType} 
-                  onValueChange={(value: any) => setPublishType(value)}
-                >
-                  <div className="space-y-3">
-                    {/* Specific Classes Option */}
-                    <label 
-                      htmlFor="classes" 
-                      className={`flex items-start space-x-4 p-5 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
-                        publishType === 'classes' 
-                          ? 'border-primary bg-gradient-to-br from-primary/5 to-primary/10 shadow-sm' 
-                          : 'border-border hover:border-primary/30 hover:bg-accent/30'
-                      }`}
-                    >
-                      <RadioGroupItem value="classes" id="classes" className="mt-1" />
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg transition-colors ${
-                            publishType === 'classes'
-                              ? 'bg-primary/20 border border-primary/30'
-                              : 'bg-muted'
-                          }`}>
-                            <Users className={`h-5 w-5 ${
-                              publishType === 'classes' ? 'text-primary' : 'text-muted-foreground'
-                            }`} />
-                          </div>
-                          <div className="flex items-center gap-2 flex-1">
-                            <span className="font-semibold text-base">Specific Classes</span>
-                            {selectedClassIds.length > 0 && (
-                              <Badge variant={publishType === 'classes' ? 'default' : 'secondary'} className="text-xs">
-                                {selectedClassIds.length} {selectedClassIds.length === 1 ? 'Class' : 'Classes'}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
-                          Assign this exam to selected classes. Only students enrolled in those classes will see it in their assignments.
-                        </p>
-                      </div>
-                    </label>
-                  
-                    {/* Private with Link Option */}
-                    <label 
-                      htmlFor="code" 
-                      className={`flex items-start space-x-4 p-5 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
-                        publishType === 'code' 
-                          ? 'border-primary bg-gradient-to-br from-primary/5 to-primary/10 shadow-sm' 
-                          : 'border-border hover:border-primary/30 hover:bg-accent/30'
-                      }`}
-                    >
-                      <RadioGroupItem value="code" id="code" className="mt-1" />
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg transition-colors ${
-                            publishType === 'code'
-                              ? 'bg-primary/20 border border-primary/30'
-                              : 'bg-muted'
-                          }`}>
-                            <Key className={`h-5 w-5 ${
-                              publishType === 'code' ? 'text-primary' : 'text-muted-foreground'
-                            }`} />
-                          </div>
-                          <div className="flex items-center gap-2 flex-1">
-                            <span className="font-semibold text-base">Private with Link</span>
-                            {!isPublic && selectedClassIds.length === 0 && isPublished && (
-                              <Badge className="text-xs bg-primary text-primary-foreground">
-                                Active
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
-                          Keep this exam private and unlisted. Only those with the direct link can access it. Perfect for sharing with specific individuals.
-                        </p>
-                      </div>
-                    </label>
-                  </div>
-                </RadioGroup>
-              </div>
-                
-              {/* Link Sharing Section */}
-              {publishType === 'code' && isPublished && (
-                <div className="p-4 bg-muted/50 border rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <div className="p-1.5 rounded-md bg-background">
-                      <Link2 className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div className="flex-1 space-y-2">
-                      <p className="text-sm font-medium">Share Exam Link</p>
-                      <p className="text-xs text-muted-foreground mb-2">
-                        Share this private link with anyone you want to give access to this exam.
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          readOnly
-                          value={`${typeof window !== 'undefined' ? window.location.origin : ''}/exam/${examId}/preview`}
-                          className="flex-1 px-3 py-2 text-xs bg-background border rounded-lg font-mono"
-                        />
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            navigator.clipboard.writeText(`${window.location.origin}/exam/${examId}/preview`);
-                            toast.success('Link copied to clipboard');
-                          }}
+                      <div className="flex-1">
+                        <p
+                          className={`font-semibold text-sm ${
+                            selectedCourseId === course.id ? 'text-primary' : ''
+                          }`}
                         >
-                          <Copy className="h-4 w-4 mr-1" />
-                          Copy
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            
-              {/* Class Selection */}
-              {publishType === 'classes' && (
-                <div className="space-y-4 pt-2 border-t">
-                  <div className="flex items-center justify-between pt-4">
-                    <div>
-                      <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Select Classes</h3>
-                      <p className="text-xs text-muted-foreground mt-1">Choose which classes will have access to this exam</p>
-                    </div>
-                    {selectedClassIds.length > 0 && (
-                      <Badge variant="secondary" className="text-xs">
-                        {selectedClassIds.length} Selected
-                      </Badge>
-                    )}
-                  </div>
-                  {loadingClasses ? (
-                    <div className="flex flex-col items-center justify-center py-12 space-y-3">
-                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                      <p className="text-sm text-muted-foreground">Loading your classes...</p>
-                    </div>
-                  ) : classes.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 space-y-4 text-center">
-                      <div className="p-4 rounded-full bg-muted">
-                        <Users className="h-8 w-8 text-muted-foreground" />
-                      </div>
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">No Classes Available</p>
-                        <p className="text-xs text-muted-foreground max-w-sm">
-                          You need to create or join a class before you can assign exams to it.
+                          {course.name}
                         </p>
+                        {course.section && (
+                          <p className="text-xs text-muted-foreground">{course.section}</p>
+                        )}
                       </div>
+                      <a
+                        href={course.alternateLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-muted-foreground hover:text-primary"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
                     </div>
-                  ) : (
-                    <div className="space-y-2 max-h-[280px] overflow-y-auto border rounded-xl p-2 bg-muted/20">
-                      {classes.map((cls) => {
-                        const isAlreadyPublished = classesWithExistingAssignments.includes(cls.class_id);
-                        const isSelected = selectedClassIds.includes(cls.class_id);
-                      
-                        return (
-                          <div 
-                            key={cls.class_id} 
-                            className={`flex items-start space-x-3 p-3 rounded-lg transition-all duration-200 border-2 ${
-                              isAlreadyPublished 
-                                ? 'bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 shadow-sm' 
-                                : isSelected
-                                ? 'bg-accent/50 border-accent hover:bg-accent/70'
-                                : 'bg-background hover:bg-accent/50 hover:shadow-sm border-transparent'
-                            }`}
-                          >
-                            <Checkbox
-                              id={`class-${cls.class_id}`}
-                              checked={selectedClassIds.includes(cls.class_id)}
-                              className="mt-1"
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  handleClassSelect(cls.class_id, true);
-                                } else {
-                                  handleClassSelect(cls.class_id, false);
-                                }
-                              }}
-                            />
-                            <Label
-                              htmlFor={`class-${cls.class_id}`}
-                              className="flex-1 space-y-1 cursor-pointer"
-                            >
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className={`font-semibold text-sm ${
-                                  isAlreadyPublished ? 'text-primary' : ''
-                                }`}>
-                                  {cls.class_name}
-                                </span>
-                                {isAlreadyPublished && (
-                                  <Badge className="text-xs bg-primary text-primary-foreground">
-                                    <CheckIcon className="h-3 w-3 mr-1" />
-                                    Assigned
-                                  </Badge>
-                                )}
-                              </div>
-                              {cls.description && (
-                                <p className="text-xs text-muted-foreground leading-relaxed">{cls.description}</p>
-                              )}
-                              {isSelected && classAssignmentDates[cls.class_id] && (
-                                <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
-                                  {classAssignmentDates[cls.class_id].access_at && (
-                                    <div className="flex items-center gap-1">
-                                      <Clock className="h-3 w-3" />
-                                      <span>Access: {new Date(classAssignmentDates[cls.class_id].access_at!).toLocaleString()}</span>
-                                    </div>
-                                  )}
-                                  {classAssignmentDates[cls.class_id].due_at && (
-                                    <div className="flex items-center gap-1">
-                                      <Calendar className="h-3 w-3" />
-                                      <span>Due: {new Date(classAssignmentDates[cls.class_id].due_at!).toLocaleString()}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </Label>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                  ))}
                 </div>
               )}
-            </TabsContent>
-          </TabsContents>
-        </Tabs>
-        
+
+              {/* Due Date and Scheduled Time */}
+              {selectedCourseId && (
+                <div className="space-y-4 pt-4 border-t">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="due-date" className="flex items-center gap-1">
+                        <Calendar className="h-4 w-4" />
+                        Due Date (Optional)
+                      </Label>
+                      <Input
+                        id="due-date"
+                        type="datetime-local"
+                        value={dueDate}
+                        onChange={(e) => setDueDate(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="scheduled-time" className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        Schedule Publish (Optional)
+                      </Label>
+                      <Input
+                        id="scheduled-time"
+                        type="datetime-local"
+                        value={scheduledTime}
+                        onChange={(e) => setScheduledTime(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Leave empty to publish immediately with no due date.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Link Sharing Section */}
+          {(publishType === 'link' || publishType === 'public') && isPublished && (
+            <div className="p-4 bg-muted/50 border rounded-lg">
+              <div className="flex items-start gap-3">
+                <div className="p-1.5 rounded-md bg-background">
+                  <Link2 className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <p className="text-sm font-medium">Share Exam Link</p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={`${typeof window !== 'undefined' ? window.location.origin : ''}/exam/${examId}`}
+                      className="flex-1 px-3 py-2 text-xs bg-background border rounded-lg font-mono"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          `${window.location.origin}/exam/${examId}`
+                        );
+                        toast.success('Link copied to clipboard');
+                      }}
+                    >
+                      <Copy className="h-4 w-4 mr-1" />
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* How it works */}
+          {publishType === 'classroom' && (
+            <div className="p-4 bg-muted/50 border rounded-lg">
+              <div className="flex items-start gap-3">
+                <div className="p-1.5 rounded-md bg-background">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="flex-1 space-y-1">
+                  <p className="text-sm font-medium">How it works</p>
+                  <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                    <li>Creates an assignment in your Google Classroom</li>
+                    <li>Students click the link to take the exam on QuizZerd</li>
+                    <li>Grades are tracked in QuizZerd</li>
+                    <li>You can set due dates and scheduled publish times</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         <DialogFooter className="flex items-center gap-3 pt-6 border-t mt-auto">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             size="lg"
             onClick={() => onOpenChange(false)}
             className="flex-1"
@@ -695,121 +451,34 @@ export default function PublishExamDialog({
             <X className="h-4 w-4 mr-2" />
             Cancel
           </Button>
-          <Button 
+          <Button
             size="lg"
             onClick={handlePublishConfirm}
-            disabled={publishType === 'classes' && selectedClassIds.length === 0}
+            disabled={
+              (publishType === 'classroom' && !selectedCourseId) ||
+              saving ||
+              publishing
+            }
             className="flex-1"
           >
-            {saving ? (
+            {saving || publishing ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                {isPublished ? 'Updating...' : 'Publishing...'}
+                Publishing...
               </>
             ) : (
               <>
                 <CheckIcon className="h-4 w-4 mr-2" />
-                {publishType === 'classes' ? `Publish to ${selectedClassIds.length} ${selectedClassIds.length === 1 ? 'Class' : 'Classes'}` : publishType === 'code' ? 'Publish with Link' : 'Publish Exam'}
+                {publishType === 'classroom'
+                  ? 'Publish to Classroom'
+                  : publishType === 'public'
+                  ? 'Publish Public'
+                  : 'Publish with Link'}
               </>
             )}
           </Button>
         </DialogFooter>
       </DialogContent>
-
-      {/* Class Assignment Dates Dialog */}
-      <Dialog open={classDatesDialogOpen} onOpenChange={setClassDatesDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Set Assignment Dates</DialogTitle>
-            <DialogDescription>
-              Set when students can access this assignment and when it&apos;s due.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            {(() => {
-              const currentClass = classes.find(cls => cls.class_id === currentClassId);
-              const periodStart = currentClass?.period_start;
-              const periodEnd = currentClass?.period_end;
-              
-              return (
-                <>
-                  {periodStart && (
-                    <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
-                      <div className="flex items-start gap-2">
-                        <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                        <div className="flex-1">
-                          <p className="text-xs font-medium text-blue-900 dark:text-blue-100">
-                            Class Period Information
-                          </p>
-                          <p className="text-xs text-blue-800 dark:text-blue-200 mt-1">
-                            Class starts at: <strong>{formatTimeString(periodStart)}</strong>
-                            {periodEnd && (
-                              <> • Ends at: <strong>{formatTimeString(periodEnd)}</strong></>
-                            )}
-                          </p>
-                          <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                            Use this as a reference when setting access times.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-
-            <div className="space-y-2">
-              <Label htmlFor="access-at">
-                <Clock className="h-4 w-4 inline mr-1" />
-                Access Date & Time
-              </Label>
-              <Input
-                id="access-at"
-                type="datetime-local"
-                value={tempAccessAt}
-                onChange={(e) => setTempAccessAt(e.target.value)}
-                placeholder="When students can start the assignment"
-              />
-              <p className="text-xs text-muted-foreground">
-                Optional: Leave empty to allow immediate access
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="due-at">
-                <Calendar className="h-4 w-4 inline mr-1" />
-                Due Date & Time
-              </Label>
-              <Input
-                id="due-at"
-                type="datetime-local"
-                value={tempDueAt}
-                onChange={(e) => setTempDueAt(e.target.value)}
-                placeholder="When the assignment is due"
-              />
-              <p className="text-xs text-muted-foreground">
-                Optional: Leave empty for no due date
-              </p>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={handleCancelClassDates}
-            >
-              <X className="h-4 w-4 mr-2" />
-              Cancel
-            </Button>
-            <Button onClick={handleSaveClassDates}>
-              <CheckIcon className="h-4 w-4 mr-2" />
-              Save Dates
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </Dialog>
   );
 }
-

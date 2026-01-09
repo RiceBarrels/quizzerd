@@ -1,27 +1,54 @@
 import { createClerkClient } from '@clerk/backend';
 
 /**
+ * Normalize expiresAt to milliseconds timestamp
+ * Handles various formats: Unix seconds, milliseconds, or ISO date string
+ */
+function normalizeExpiresAt(expiresAt: number | string | null | undefined): number | null {
+  if (!expiresAt) return null;
+
+  // If it's a string, try to parse it as a date
+  if (typeof expiresAt === 'string') {
+    const parsed = Date.parse(expiresAt);
+    return isNaN(parsed) ? null : parsed;
+  }
+
+  // If it's a number less than a reasonable millisecond timestamp (year 2001),
+  // assume it's in seconds and convert to milliseconds
+  if (typeof expiresAt === 'number') {
+    // Unix timestamps in seconds are ~10 digits, milliseconds are ~13 digits
+    if (expiresAt < 1000000000000) {
+      return expiresAt * 1000;
+    }
+    return expiresAt;
+  }
+
+  return null;
+}
+
+/**
  * Check if a token is expired or about to expire
- * @param {number} expiresAt - Token expiration timestamp in milliseconds
+ * @param {number | string} expiresAt - Token expiration timestamp (seconds, milliseconds, or ISO string)
  * @param {number} bufferMinutes - Buffer time in minutes before actual expiration (default 5)
  * @returns {boolean} - True if token is expired or about to expire
  */
-export function isTokenExpired(expiresAt: number | null, bufferMinutes: number = 5): boolean {
-  if (!expiresAt) return true;
-  
+export function isTokenExpired(expiresAt: number | string | null | undefined, bufferMinutes: number = 5): boolean {
+  const normalizedExpiry = normalizeExpiresAt(expiresAt);
+  if (!normalizedExpiry) return true;
+
   const now = Date.now();
   const bufferTime = bufferMinutes * 60 * 1000;
-  return now >= (expiresAt - bufferTime);
+  return now >= (normalizedExpiry - bufferTime);
 }
 
 /**
  * Get a valid Google OAuth access token, refreshing if necessary
  * @param {string} userId - The user ID from Clerk auth
  * @param {string} currentToken - The current token (optional)
- * @param {number} expiresAt - Token expiration timestamp (optional)
+ * @param {number | string} expiresAt - Token expiration timestamp (optional, handles seconds, ms, or ISO string)
  * @returns {Promise<{success: boolean, accessToken: string|null, expiresAt: number|null, error?: string}>}
  */
-export async function getValidGoogleToken(userId: string, currentToken: string | null = null, expiresAt: number | null = null) {
+export async function getValidGoogleToken(userId: string, currentToken: string | null = null, expiresAt: number | string | null = null) {
   try {
     // Check if current token is still valid
     if (currentToken && expiresAt && !isTokenExpired(expiresAt)) {
@@ -100,10 +127,10 @@ export async function getValidGoogleToken(userId: string, currentToken: string |
  * @param {object} options - Fetch options
  * @param {string} userId - The user ID from Clerk auth
  * @param {string} accessToken - The current access token
- * @param {number} expiresAt - Token expiration timestamp
+ * @param {number | string} expiresAt - Token expiration timestamp (handles seconds, ms, or ISO string)
  * @returns {Promise<Response>}
  */
-export async function googleApiFetch(url: string, options: RequestInit = {}, userId: string, accessToken: string | null, expiresAt: number | null) {
+export async function googleApiFetch(url: string, options: RequestInit = {}, userId: string, accessToken: string | null, expiresAt: number | string | null) {
   // Get a valid token (refresh if needed)
   const tokenResult = await getValidGoogleToken(userId, accessToken, expiresAt);
   

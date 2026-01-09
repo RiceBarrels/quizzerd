@@ -62,13 +62,13 @@ export default function NotFound() {
                 </div>
               </Link>
               <Link
-                href="/class"
+                href="/calender"
                 className="flex items-center gap-3 p-4 border rounded-lg hover:bg-accent/50 transition-colors group"
               >
                 <GraduationCap className="h-6 w-6 text-primary group-hover:scale-110 transition-transform" />
                 <div>
-                  <p className="font-medium">Classes</p>
-                  <p className="text-sm text-muted-foreground">Manage your classes</p>
+                  <p className="font-medium">Calendar</p>
+                  <p className="text-sm text-muted-foreground">View your schedule</p>
                 </div>
               </Link>
               <Link

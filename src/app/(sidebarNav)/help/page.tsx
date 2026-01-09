@@ -35,8 +35,8 @@ export default function HelpPage() {
           a: "Navigate to the Exams page and click 'Create Exam'. You can start from scratch or import an existing Google Form. Fill in the exam details, add questions, and configure settings before publishing."
         },
         {
-          q: "How do I join a class?",
-          a: "You can join a class by entering the class code provided by your instructor. Go to the Classes page and click 'Join Class', then enter the code."
+          q: "How do I join an exam?",
+          a: "You can join an exam by entering the exam code provided by your instructor. Use the 'Join' button and enter the exam code to access it."
         },
         {
           q: "Can I import questions from Google Forms?",
@@ -67,20 +67,20 @@ export default function HelpPage() {
       ]
     },
     {
-      title: "Class Management",
+      title: "Google Classroom",
       icon: GraduationCap,
       questions: [
         {
-          q: "How do I create a class?",
-          a: "Go to the Classes page and click 'Create Class'. Fill in the class details including name and description. You'll receive a class code that students can use to join."
+          q: "How do I publish exams to Google Classroom?",
+          a: "When editing an exam, click 'Publish' and select 'Google Classroom'. Choose the course you want to publish to and set the due date. The exam will appear as an assignment in your Google Classroom."
         },
         {
-          q: "How do I manage class members?",
-          a: "In the class page, you can view all members, remove members, and manage their roles. Use the members section to see who's enrolled in your class."
+          q: "What permissions are needed for Google Classroom?",
+          a: "You need to connect your Google account with Classroom permissions. Make sure you are a teacher in the course you want to publish to."
         },
         {
-          q: "Can I assign exams to specific classes?",
-          a: "Yes, when creating or editing an exam, you can assign it to specific classes. This allows you to control which students can access the exam."
+          q: "Can students access exams through Google Classroom?",
+          a: "Yes! Once published, students can click on the assignment in Google Classroom to access the exam directly."
         }
       ]
     },

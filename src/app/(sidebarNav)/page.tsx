@@ -44,12 +44,6 @@ export default async function IndexPage() {
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
-          <Button asChild size="lg" variant="outline" className="gap-2">
-            <Link href="/class">
-              <Users className="h-5 w-5" />
-              Browse Classes
-            </Link>
-          </Button>
         </div>
       </div>
 
@@ -68,9 +62,9 @@ export default async function IndexPage() {
         <Card className="border-2 hover:border-primary/50 transition-colors">
           <CardHeader>
             <Users className="h-10 w-10 mb-2 text-primary" />
-            <CardTitle>Manage Classes</CardTitle>
+            <CardTitle>Google Classroom</CardTitle>
             <CardDescription>
-              Organize students, track progress, and manage multiple classes with ease
+              Publish exams directly to Google Classroom and track student progress
             </CardDescription>
           </CardHeader>
         </Card>
@@ -129,9 +123,6 @@ export default async function IndexPage() {
             <div className="flex gap-4 justify-center pt-4">
               <Button asChild variant="default">
                 <Link href="/exam">My Exams</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/class">My Classes</Link>
               </Button>
             </div>
           </div>

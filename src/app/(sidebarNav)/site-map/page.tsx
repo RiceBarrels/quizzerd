@@ -17,7 +17,6 @@ export default function SitemapPage() {
   const mainPages = [
     { href: "/", title: "Home", description: "Welcome page and platform overview" },
     { href: "/exam", title: "Exams", description: "Create, manage, and view exams" },
-    { href: "/class", title: "Classes", description: "Manage classes and students" },
     { href: "/calender", title: "Calendar", description: "View exam schedules and events" },
     { href: "/todos", title: "Todos", description: "Manage your tasks and assignments" },
   ]

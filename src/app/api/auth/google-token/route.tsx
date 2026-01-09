@@ -94,6 +94,7 @@ export async function GET() {
         const maskedToken = accessToken ? `${accessToken.substring(0, 10)}...${accessToken.substring(accessToken.length - 10)}` : 'null';
         console.log('Successfully retrieved OAuth token (masked):', maskedToken);
         console.log('Token expires at:', new Date(expiresAt).toISOString());
+        console.log('Token scopes:', tokenData.scopes);
         
         return NextResponse.json({
           success: true,

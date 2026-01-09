@@ -36,9 +36,9 @@ export default function SignUpPage() {
                         <div className="flex items-start gap-3">
                             <CheckCircle className="h-5 w-5 text-primary mt-0.5" />
                             <div>
-                                <h3 className="font-medium mb-1">Manage Classes</h3>
+                                <h3 className="font-medium mb-1">Google Classroom Integration</h3>
                                 <p className="text-sm text-muted-foreground">
-                                    Organize students, track progress, and manage assignments
+                                    Publish exams directly to Google Classroom for easy access
                                 </p>
                             </div>
                         </div>
@@ -73,7 +73,7 @@ export default function SignUpPage() {
                         </div>
                         <CardTitle className="text-2xl font-bold">Welcome User!</CardTitle>
                         <CardDescription>
-                            Sign up to access your exams and classes
+                            Sign up to access your exams
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="flex justify-center flex-col">
@@ -113,7 +113,7 @@ export default function SignUpPage() {
                                 }
                             }}
                             signInUrl="/sign-in"
-                            forceRedirectUrl="/class"
+                            forceRedirectUrl="/exam"
                         />
                         <small className="text-center">Already have an Account? <Link href="sign-in" className="font-bold text-primary underline">Sign In</Link></small>
                     </CardContent>

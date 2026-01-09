@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { cn } from "@/lib/utils"
-import { HomeIcon, GraduationCap, ListTodoIcon, Calendar1Icon } from "lucide-react"
+import { HomeIcon, ListTodoIcon, Calendar1Icon } from "lucide-react"
 
 export default async function Footer({ className }: { className?: string }) {
     const currentYear = new Date().getFullYear()
@@ -36,15 +36,6 @@ export default async function Footer({ className }: { className?: string }) {
                                 >
                                     <HomeIcon className="h-4 w-4" />
                                     Home
-                                </Link>
-                            </li>
-                            <li>
-                                <Link 
-                                    href="/class" 
-                                    className="flex items-center gap-2 hover:text-foreground transition-colors"
-                                >
-                                    <GraduationCap className="h-4 w-4" />
-                                    Classes
                                 </Link>
                             </li>
                             <li>

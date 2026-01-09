@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/sidebar"
 import { LogOut, Sparkles } from "lucide-react"
 import Link from "next/link"
-import { ClassesGroup, GeneralGroup } from "./app-sidebar-groups"
+import { GeneralGroup } from "./app-sidebar-groups"
 import { useClerk, useUser } from "@clerk/nextjs"
 import { Avatar, AvatarFallback, AvatarImage } from "./avatar"
 import { cn } from "@/lib/utils"
@@ -83,23 +83,6 @@ export default function AppSidebar({...prop}){
                 "group-data-[collapsible=icon]:pt-3 group-data-[collapsible=icon]:pb-2"
             )}>
                 <GeneralGroup />
-                <AnimatePresence mode="popLayout">
-                    {!isCollapsed && (
-                        <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            transition={{
-                                opacity: { duration: 0.15 },
-                                height: { type: "spring", stiffness: 180, damping: 28 }
-                            }}
-                            layout
-                        >
-                            <Separator className="my-3" />
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-                <ClassesGroup />
             </SidebarContent>
 
             <SidebarFooter className={cn(
