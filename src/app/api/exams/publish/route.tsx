@@ -91,79 +91,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // We'll update the exam URL after creating the session
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://quizzerd.com';
 
-    // Create coursework in Google Classroom (we'll update the link after creating session)
-    const courseworkData: any = {
-      title: examData.exam_name,
-      description: `${examData.exam_description || ''}\n\nTake the exam on QuizZerd`,
-      workType: 'ASSIGNMENT',
-      state: scheduled_time ? 'DRAFT' : 'PUBLISHED',
-      maxPoints: examData.total_points || 100
-    };
-
-    // Add due date if provided
-    if (due_date) {
-      const dueDateTime = new Date(due_date);
-      courseworkData.dueDate = {
-        year: dueDateTime.getFullYear(),
-        month: dueDateTime.getMonth() + 1,
-        day: dueDateTime.getDate()
-      };
-      courseworkData.dueTime = {
-        hours: dueDateTime.getHours(),
-        minutes: dueDateTime.getMinutes()
-      };
-    }
-
-    // Add scheduled publish time if provided
-    if (scheduled_time) {
-      const scheduleDateTime = new Date(scheduled_time);
-      courseworkData.scheduledTime = scheduleDateTime.toISOString();
-    }
-
-    // Create the assignment in Google Classroom
-    const classroomResponse = await googleApiFetch(
-      `https://classroom.googleapis.com/v1/courses/${course_id}/courseWork`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(courseworkData),
-      },
-      userId,
-      accessToken,
-      expiresAt
-    );
-
-    if (!classroomResponse.ok) {
-      const errorText = await classroomResponse.text();
-      console.error('Google Classroom API error:', errorText);
-
-      if (classroomResponse.status === 403) {
-        return NextResponse.json(
-          {
-            error: 'Permission denied',
-            message: 'You do not have permission to post to this Google Classroom course. Make sure you are a teacher in the course.'
-          },
-          { status: 403 }
-        );
-      }
-
-      return NextResponse.json(
-        {
-          error: 'Failed to publish to Google Classroom',
-          message: errorText
-        },
-        { status: classroomResponse.status }
-      );
-    }
-
-    const classroomData = await classroomResponse.json();
-
-    // Fetch students from Google Classroom to whitelist their emails
+    // Step 1: Fetch students and course info FIRST (before creating anything)
     let allowedEmails: string[] = [];
     let courseName = 'Your Course';
 
@@ -205,14 +135,14 @@ export async function POST(request: Request) {
       // Continue without whitelist - exam will be accessible to anyone
     }
 
-    // Create a session for this Google Classroom publishing
+    // Step 2: Create session FIRST to get the session ID
     const { data: sessionData, error: sessionError } = await supabase
       .from('exam_sessions')
       .insert({
         exam_id: exam_id,
         google_course_id: course_id,
         google_course_name: courseName,
-        google_classroom_id: classroomData.id,
+        google_classroom_id: null, // Will update after creating coursework
         allowed_emails: allowedEmails,
         start_date: scheduled_time || new Date().toISOString(),
         end_date: due_date || null,
@@ -230,6 +160,95 @@ export async function POST(request: Request) {
       );
     }
 
+    // Build the session URL for students
+    const sessionUrl = `${baseUrl}/exam/session/${sessionData.session_id}`;
+
+    // Step 3: Create coursework in Google Classroom WITH materials included
+    const courseworkData: any = {
+      title: examData.exam_name,
+      description: `${examData.exam_description || ''}\n\nTake the exam on QuizZerd`,
+      workType: 'ASSIGNMENT',
+      state: scheduled_time ? 'DRAFT' : 'PUBLISHED',
+      maxPoints: examData.total_points || 100,
+      materials: [
+        {
+          link: {
+            url: sessionUrl,
+            title: `Take Exam: ${examData.exam_name}`
+          }
+        }
+      ]
+    };
+
+    // Add due date if provided
+    if (due_date) {
+      const dueDateTime = new Date(due_date);
+      courseworkData.dueDate = {
+        year: dueDateTime.getFullYear(),
+        month: dueDateTime.getMonth() + 1,
+        day: dueDateTime.getDate()
+      };
+      courseworkData.dueTime = {
+        hours: dueDateTime.getHours(),
+        minutes: dueDateTime.getMinutes()
+      };
+    }
+
+    // Add scheduled publish time if provided
+    if (scheduled_time) {
+      const scheduleDateTime = new Date(scheduled_time);
+      courseworkData.scheduledTime = scheduleDateTime.toISOString();
+    }
+
+    // Create the assignment in Google Classroom
+    const classroomResponse = await googleApiFetch(
+      `https://classroom.googleapis.com/v1/courses/${course_id}/courseWork`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(courseworkData),
+      },
+      userId,
+      accessToken,
+      expiresAt
+    );
+
+    if (!classroomResponse.ok) {
+      const errorText = await classroomResponse.text();
+      console.error('Google Classroom API error:', errorText);
+
+      // Clean up the session we created since coursework failed
+      await supabase.from('exam_sessions').delete().eq('session_id', sessionData.session_id);
+
+      if (classroomResponse.status === 403) {
+        return NextResponse.json(
+          {
+            error: 'Permission denied',
+            message: 'You do not have permission to post to this Google Classroom course. Make sure you are a teacher in the course.'
+          },
+          { status: 403 }
+        );
+      }
+
+      return NextResponse.json(
+        {
+          error: 'Failed to publish to Google Classroom',
+          message: errorText
+        },
+        { status: classroomResponse.status }
+      );
+    }
+
+    const classroomData = await classroomResponse.json();
+
+    // Step 4: Update session with the Google Classroom coursework ID
+    await supabase
+      .from('exam_sessions')
+      .update({ google_classroom_id: classroomData.id })
+      .eq('session_id', sessionData.session_id);
+
     // Update the exam status to published (if not already)
     const { data, error } = await supabase
       .from('exams')
@@ -246,9 +265,6 @@ export async function POST(request: Request) {
       console.error('Error updating exam status:', error);
       // Continue - session was created successfully
     }
-
-    // Build the session URL for students
-    const sessionUrl = `${baseUrl}/exam/session/${sessionData.session_id}`;
 
     // Send invitation emails to unregistered students
     let invitationResults = { sent: 0, failed: 0, skipped: 0, whitelisted: allowedEmails.length };
@@ -281,9 +297,12 @@ export async function POST(request: Request) {
             `${teacherData?.first_name || ''} ${teacherData?.last_name || ''}`.trim() ||
             'Your Instructor';
 
-          // Send invitation emails to unregistered students using session URL
+          // Send invitation emails to unregistered students using session URL with email parameter
           const emailPromises = unregisteredEmails.map(async (email: string) => {
             try {
+              // Create personalized URL with email parameter for auto-login/verification
+              const personalizedUrl = `${sessionUrl}?email=${encodeURIComponent(email)}`;
+
               const result = await sendEmail({
                 to: email,
                 subject: `New Exam: ${examData.exam_name} - ${courseName}`,
@@ -291,7 +310,7 @@ export async function POST(request: Request) {
                   examName: examData.exam_name,
                   courseName,
                   teacherName,
-                  examUrl: sessionUrl,
+                  examUrl: personalizedUrl,
                   dueDate: due_date ? new Date(due_date).toLocaleDateString('en-US', {
                     weekday: 'long',
                     year: 'numeric',

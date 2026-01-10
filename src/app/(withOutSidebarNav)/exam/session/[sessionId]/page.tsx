@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, use, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -115,8 +115,12 @@ interface Responses {
 
 export default function SessionExamPage({ params }: { params: Promise<PageParams> }) {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { user, isLoaded } = useUser();
     const { sessionId } = use(params);
+
+    // Get email from URL query parameter (for Google Classroom invitations)
+    const invitedEmail = searchParams.get('email');
 
     // State
     const [loading, setLoading] = useState(true);
@@ -135,6 +139,7 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showSubmitDialog, setShowSubmitDialog] = useState(false);
     const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
+    const [accessError, setAccessError] = useState<string | null>(null);
 
     // Location state
     const [currentLocation, setCurrentLocation] = useState<{ lat: number; lon: number } | null>(null);
@@ -303,6 +308,13 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
             if (result.success) {
                 setSessionData(result.session);
                 setExamData(result.exam);
+                setAccessError(null);
+            } else if (response.status === 403) {
+                // Access denied - show error with email info
+                setAccessError(result.error || 'You are not authorized to access this exam');
+            } else if (response.status === 401 && result.requiresAuth) {
+                // Not authenticated - will be handled by the sign-in screen
+                setAccessError(null);
             } else {
                 toast.error(result.error || 'Failed to load exam session');
                 router.push('/');
@@ -769,6 +781,14 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
 
     // Require login to take exam
     if (!user) {
+        // Build sign-in URL with redirect and optional email hint
+        const redirectUrl = invitedEmail
+            ? `/exam/session/${sessionId}?email=${encodeURIComponent(invitedEmail)}`
+            : `/exam/session/${sessionId}`;
+        const signInUrl = invitedEmail
+            ? `/sign-in?redirect_url=${encodeURIComponent(redirectUrl)}&email_address=${encodeURIComponent(invitedEmail)}`
+            : `/sign-in?redirect_url=${encodeURIComponent(redirectUrl)}`;
+
         return (
             <div className="flex flex-col items-center justify-center min-h-screen gap-4 p-4">
                 <Card className="max-w-md w-full text-center">
@@ -776,11 +796,59 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
                         <CardTitle>Sign In Required</CardTitle>
                         <CardDescription>
                             You need to sign in to take this exam.
+                            {invitedEmail && (
+                                <span className="block mt-2 text-primary font-medium">
+                                    Please sign in with: {invitedEmail}
+                                </span>
+                            )}
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <Button onClick={() => router.push(`/sign-in?redirect_url=/exam/session/${sessionId}`)}>
+                        <Button onClick={() => router.push(signInUrl)}>
                             Sign In to Continue
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+
+    // Show access error if logged in but not authorized
+    if (accessError) {
+        const userEmail = user.primaryEmailAddress?.emailAddress;
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen gap-4 p-4">
+                <Card className="max-w-md w-full text-center">
+                    <CardHeader>
+                        <Lock className="h-12 w-12 mx-auto mb-4 text-destructive" />
+                        <CardTitle>Access Denied</CardTitle>
+                        <CardDescription className="space-y-2">
+                            <p>{accessError}</p>
+                            {invitedEmail && userEmail && invitedEmail.toLowerCase() !== userEmail.toLowerCase() && (
+                                <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-900">
+                                    <p className="text-amber-800 dark:text-amber-200 text-sm">
+                                        This exam was sent to <strong>{invitedEmail}</strong>,
+                                        but you are signed in as <strong>{userEmail}</strong>.
+                                    </p>
+                                    <p className="text-amber-700 dark:text-amber-300 text-xs mt-1">
+                                        Please sign in with the correct email address.
+                                    </p>
+                                </div>
+                            )}
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                        {invitedEmail && userEmail && invitedEmail.toLowerCase() !== userEmail.toLowerCase() && (
+                            <Button
+                                variant="default"
+                                className="w-full"
+                                onClick={() => router.push(`/sign-in?redirect_url=${encodeURIComponent(`/exam/session/${sessionId}?email=${encodeURIComponent(invitedEmail)}`)}&email_address=${encodeURIComponent(invitedEmail)}`)}
+                            >
+                                Sign In as {invitedEmail}
+                            </Button>
+                        )}
+                        <Button variant="outline" onClick={() => router.push('/')} className="w-full">
+                            Go Home
                         </Button>
                     </CardContent>
                 </Card>
