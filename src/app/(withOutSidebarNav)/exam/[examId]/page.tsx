@@ -83,6 +83,9 @@ interface ExamData {
     show_results_immediately: boolean;
     attempts_allowed: number;
     passing_score: number;
+    // Access control
+    allowed_emails?: string[];
+    is_public?: boolean;
     // Cheating detection settings
     console_detection?: boolean;
     translation_detection?: boolean;

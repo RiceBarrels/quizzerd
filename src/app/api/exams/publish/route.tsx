@@ -172,29 +172,10 @@ export async function POST(request: Request) {
 
     const classroomData = await classroomResponse.json();
 
-    // Update the exam status in database
-    const { data, error } = await supabase
-      .from('exams')
-      .update({
-        status: 'published',
-        is_published: true,
-        google_classroom_id: classroomData.id,
-        google_course_id: course_id,
-        start_date: scheduled_time || new Date().toISOString(),
-        end_date: due_date || null,
-        updated_at: new Date().toISOString()
-      })
-      .eq('exam_id', exam_id)
-      .select()
-      .single();
+    // Fetch students from Google Classroom to whitelist their emails
+    let allowedEmails: string[] = [];
+    let courseName = 'Your Course';
 
-    if (error) {
-      console.error('Error updating exam status:', error);
-      // Still return success since it was published to Classroom
-    }
-
-    // Fetch students from Google Classroom and send invitation emails to unregistered students
-    let invitationResults = { sent: 0, failed: 0, skipped: 0 };
     try {
       // Get the course details to get the course name
       const courseResponse = await googleApiFetch(
@@ -205,7 +186,6 @@ export async function POST(request: Request) {
         expiresAt
       );
 
-      let courseName = 'Your Course';
       if (courseResponse.ok) {
         const courseData = await courseResponse.json();
         courseName = courseData.name || 'Your Course';
@@ -224,84 +204,109 @@ export async function POST(request: Request) {
         const studentsData = await studentsResponse.json();
         const classroomStudents = studentsData.students || [];
 
-        if (classroomStudents.length > 0) {
-          // Extract student emails from Google Classroom
-          const studentEmails = classroomStudents
-            .map((s: any) => s.profile?.emailAddress)
-            .filter(Boolean);
+        // Extract and store all student emails for whitelisting
+        allowedEmails = classroomStudents
+          .map((s: any) => s.profile?.emailAddress?.toLowerCase())
+          .filter(Boolean);
+      }
+    } catch (fetchError) {
+      console.error('Error fetching students for whitelist:', fetchError);
+      // Continue without whitelist - exam will be accessible to anyone
+    }
 
-          if (studentEmails.length > 0) {
-            // Check which students are NOT in our database
-            const { data: existingUsers } = await supabase
-              .from('user')
-              .select('email')
-              .in('email', studentEmails);
+    // Update the exam status in database with allowed emails
+    const { data, error } = await supabase
+      .from('exams')
+      .update({
+        status: 'published',
+        is_published: true,
+        google_classroom_id: classroomData.id,
+        google_course_id: course_id,
+        start_date: scheduled_time || new Date().toISOString(),
+        end_date: due_date || null,
+        allowed_emails: allowedEmails,
+        updated_at: new Date().toISOString()
+      })
+      .eq('exam_id', exam_id)
+      .select()
+      .single();
 
-            const existingEmails = new Set(
-              (existingUsers || []).map((u: any) => u.email?.toLowerCase())
-            );
+    if (error) {
+      console.error('Error updating exam status:', error);
+      // Still return success since it was published to Classroom
+    }
 
-            // Filter out students who are already registered
-            const unregisteredStudents = classroomStudents.filter((s: any) => {
-              const email = s.profile?.emailAddress?.toLowerCase();
-              return email && !existingEmails.has(email);
-            });
+    // Send invitation emails to unregistered students
+    let invitationResults = { sent: 0, failed: 0, skipped: 0, whitelisted: allowedEmails.length };
+    try {
+      if (allowedEmails.length > 0) {
+        // Check which students are NOT in our database
+        const { data: existingUsers } = await supabase
+          .from('user')
+          .select('email')
+          .in('email', allowedEmails);
 
-            // Get teacher name from user table
-            const { data: teacherData } = await supabase
-              .from('user')
-              .select('full_name, first_name, last_name')
-              .eq('user_id', userId)
-              .single();
+        const existingEmails = new Set(
+          (existingUsers || []).map((u: any) => u.email?.toLowerCase())
+        );
 
-            const teacherName = teacherData?.full_name ||
-              `${teacherData?.first_name || ''} ${teacherData?.last_name || ''}`.trim() ||
-              'Your Instructor';
+        // Get unregistered emails
+        const unregisteredEmails = allowedEmails.filter(
+          (email: string) => !existingEmails.has(email)
+        );
 
-            // Build exam URL
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://quizzerd.com';
-            const studentExamUrl = `${baseUrl}/exam/${exam_id}`;
+        if (unregisteredEmails.length > 0) {
+          // Get teacher name from user table
+          const { data: teacherData } = await supabase
+            .from('user')
+            .select('full_name, first_name, last_name')
+            .eq('user_id', userId)
+            .single();
 
-            // Send invitation emails to unregistered students
-            const emailPromises = unregisteredStudents.map(async (student: any) => {
-              const email = student.profile?.emailAddress;
-              const studentName = student.profile?.name?.givenName ||
-                student.profile?.name?.fullName?.split(' ')[0];
+          const teacherName = teacherData?.full_name ||
+            `${teacherData?.first_name || ''} ${teacherData?.last_name || ''}`.trim() ||
+            'Your Instructor';
 
-              try {
-                const result = await sendEmail({
-                  to: email,
-                  subject: `New Exam: ${examData.exam_name} - ${courseName}`,
-                  html: generateExamInvitationHtml({
-                    studentName,
-                    examName: examData.exam_name,
-                    courseName,
-                    teacherName,
-                    examUrl: studentExamUrl,
-                    dueDate: due_date ? new Date(due_date).toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    }) : undefined,
-                    description: examData.exam_description || undefined,
-                  }),
-                });
+          // Build exam URL
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://quizzerd.com';
+          const studentExamUrl = `${baseUrl}/exam/${exam_id}`;
 
-                return result.success ? 'sent' : 'failed';
-              } catch (err) {
-                console.error(`Failed to send email to ${email}:`, err);
-                return 'failed';
-              }
-            });
+          // Send invitation emails to unregistered students
+          const emailPromises = unregisteredEmails.map(async (email: string) => {
+            try {
+              const result = await sendEmail({
+                to: email,
+                subject: `New Exam: ${examData.exam_name} - ${courseName}`,
+                html: generateExamInvitationHtml({
+                  examName: examData.exam_name,
+                  courseName,
+                  teacherName,
+                  examUrl: studentExamUrl,
+                  dueDate: due_date ? new Date(due_date).toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  }) : undefined,
+                  description: examData.exam_description || undefined,
+                }),
+              });
 
-            const results = await Promise.all(emailPromises);
-            invitationResults.sent = results.filter(r => r === 'sent').length;
-            invitationResults.failed = results.filter(r => r === 'failed').length;
-            invitationResults.skipped = existingEmails.size;
-          }
+              return result.success ? 'sent' : 'failed';
+            } catch (err) {
+              console.error(`Failed to send email to ${email}:`, err);
+              return 'failed';
+            }
+          });
+
+          const results = await Promise.all(emailPromises);
+          invitationResults.sent = results.filter(r => r === 'sent').length;
+          invitationResults.failed = results.filter(r => r === 'failed').length;
+          invitationResults.skipped = existingEmails.size;
+        } else {
+          invitationResults.skipped = existingEmails.size;
         }
       }
     } catch (inviteError) {

@@ -25,10 +25,10 @@ export async function POST(request: Request) {
             );
         }
 
-        // Get exam details
+        // Get exam details including allowed_emails for whitelist check
         const { data: exam, error: examError } = await supabase
             .from('exams')
-            .select('exam_id, exam_name, is_published, attempts_allowed, start_date, end_date')
+            .select('exam_id, exam_name, is_published, attempts_allowed, start_date, end_date, allowed_emails, is_public')
             .eq('exam_id', examId)
             .single();
 
@@ -45,6 +45,36 @@ export async function POST(request: Request) {
                 { success: false, error: 'This exam is not available' },
                 { status: 403 }
             );
+        }
+
+        // Check email whitelist if allowed_emails is set
+        const allowedEmails = exam.allowed_emails as string[] | null;
+        if (allowedEmails && allowedEmails.length > 0) {
+            // Get user's email from the user table
+            const { data: userData, error: userError } = await supabase
+                .from('user')
+                .select('email')
+                .eq('user_id', userId)
+                .single();
+
+            if (userError || !userData?.email) {
+                return NextResponse.json(
+                    { success: false, error: 'Could not verify your email address. Please update your profile.' },
+                    { status: 403 }
+                );
+            }
+
+            const userEmail = userData.email.toLowerCase();
+            const isAllowed = allowedEmails.some(
+                (email: string) => email.toLowerCase() === userEmail
+            );
+
+            if (!isAllowed) {
+                return NextResponse.json(
+                    { success: false, error: 'You are not authorized to take this exam. Please contact your instructor.' },
+                    { status: 403 }
+                );
+            }
         }
 
         // Check date constraints
