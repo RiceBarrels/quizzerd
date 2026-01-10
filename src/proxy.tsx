@@ -3,13 +3,11 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)',
   '/profile(.*)',
-  '/class(.*)',
   '/todos(.*)',
   '/calender(.*)',
   '/exam/(.*)/edit(.*)',
   '/exam/(.*)/response(.*)',
   '/api/user(.*)',
-  '/api/classes(.*)',
   '/api/exams/create(.*)',
   '/api/exams/update(.*)',
   '/api/exams/delete(.*)',
@@ -41,8 +39,8 @@ export default clerkMiddleware(async (auth, req) => {
   const path = req.nextUrl.pathname;
   
   if (userId && (path === '/sign-in' || path === '/sign-up')) {
-    const classUrl = new URL('/class', req.url);
-    return Response.redirect(classUrl);
+    const dashboardUrl = new URL('/dashboard', req.url);
+    return Response.redirect(dashboardUrl);
   }
   
   // // Redirect unauthenticated users to sign-in from root

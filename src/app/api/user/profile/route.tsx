@@ -24,8 +24,7 @@ export async function GET() {
       const { data: newUser, error: createError } = await supabase
         .from('user')
         .insert({
-          user_id: userId,
-          class_ids: []
+          user_id: userId
         })
         .select()
         .single()

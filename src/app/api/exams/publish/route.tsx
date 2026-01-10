@@ -91,25 +91,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Build the exam URL for students to take the exam
+    // We'll update the exam URL after creating the session
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://quizzerd.com';
-    const examUrl = `${baseUrl}/exam/${exam_id}`;
 
-    // Create coursework in Google Classroom
+    // Create coursework in Google Classroom (we'll update the link after creating session)
     const courseworkData: any = {
       title: examData.exam_name,
-      description: `${examData.exam_description || ''}\n\nTake the exam here: ${examUrl}`,
+      description: `${examData.exam_description || ''}\n\nTake the exam on QuizZerd`,
       workType: 'ASSIGNMENT',
       state: scheduled_time ? 'DRAFT' : 'PUBLISHED',
-      maxPoints: examData.total_points || 100,
-      materials: [
-        {
-          link: {
-            url: examUrl,
-            title: examData.exam_name
-          }
-        }
-      ]
+      maxPoints: examData.total_points || 100
     };
 
     // Add due date if provided
@@ -214,17 +205,37 @@ export async function POST(request: Request) {
       // Continue without whitelist - exam will be accessible to anyone
     }
 
-    // Update the exam status in database with allowed emails
+    // Create a session for this Google Classroom publishing
+    const { data: sessionData, error: sessionError } = await supabase
+      .from('exam_sessions')
+      .insert({
+        exam_id: exam_id,
+        google_course_id: course_id,
+        google_course_name: courseName,
+        google_classroom_id: classroomData.id,
+        allowed_emails: allowedEmails,
+        start_date: scheduled_time || new Date().toISOString(),
+        end_date: due_date || null,
+        status: 'active',
+        created_by: userId
+      })
+      .select()
+      .single();
+
+    if (sessionError) {
+      console.error('Error creating session:', sessionError);
+      return NextResponse.json(
+        { error: 'Failed to create exam session', details: sessionError.message },
+        { status: 500 }
+      );
+    }
+
+    // Update the exam status to published (if not already)
     const { data, error } = await supabase
       .from('exams')
       .update({
         status: 'published',
         is_published: true,
-        google_classroom_id: classroomData.id,
-        google_course_id: course_id,
-        start_date: scheduled_time || new Date().toISOString(),
-        end_date: due_date || null,
-        allowed_emails: allowedEmails,
         updated_at: new Date().toISOString()
       })
       .eq('exam_id', exam_id)
@@ -233,8 +244,11 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error('Error updating exam status:', error);
-      // Still return success since it was published to Classroom
+      // Continue - session was created successfully
     }
+
+    // Build the session URL for students
+    const sessionUrl = `${baseUrl}/exam/session/${sessionData.session_id}`;
 
     // Send invitation emails to unregistered students
     let invitationResults = { sent: 0, failed: 0, skipped: 0, whitelisted: allowedEmails.length };
@@ -267,11 +281,7 @@ export async function POST(request: Request) {
             `${teacherData?.first_name || ''} ${teacherData?.last_name || ''}`.trim() ||
             'Your Instructor';
 
-          // Build exam URL
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://quizzerd.com';
-          const studentExamUrl = `${baseUrl}/exam/${exam_id}`;
-
-          // Send invitation emails to unregistered students
+          // Send invitation emails to unregistered students using session URL
           const emailPromises = unregisteredEmails.map(async (email: string) => {
             try {
               const result = await sendEmail({
@@ -281,7 +291,7 @@ export async function POST(request: Request) {
                   examName: examData.exam_name,
                   courseName,
                   teacherName,
-                  examUrl: studentExamUrl,
+                  examUrl: sessionUrl,
                   dueDate: due_date ? new Date(due_date).toLocaleDateString('en-US', {
                     weekday: 'long',
                     year: 'numeric',
@@ -317,6 +327,12 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       data: data || examData,
+      session: {
+        id: sessionData.session_id,
+        url: sessionUrl,
+        courseName: courseName,
+        allowedEmails: allowedEmails.length
+      },
       classroom: {
         id: classroomData.id,
         alternateLink: classroomData.alternateLink,

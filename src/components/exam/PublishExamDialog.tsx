@@ -28,13 +28,7 @@ interface PublishExamDialogProps {
   examDescription: string;
   isPublic: boolean;
   isPublished: boolean;
-  selectedClassIds: string[];
-  onPublish: (
-    publishType: 'public' | 'classroom' | 'link',
-    classIds: string[],
-    existingAssignments: string[],
-    classAssignments?: Record<string, { access_at: string | null; due_at: string | null }>
-  ) => Promise<void>;
+  onPublish: (publishType: 'public' | 'classroom' | 'link') => Promise<void>;
   saving: boolean;
 }
 
@@ -130,7 +124,7 @@ export default function PublishExamDialog({
       await handlePublishToClassroom();
     } else {
       // For public or link, use the original onPublish
-      await onPublish(publishType === 'public' ? 'public' : 'link' as any, [], [], {});
+      await onPublish(publishType === 'public' ? 'public' : 'link');
     }
   }, [publishType, handlePublishToClassroom, onPublish]);
 

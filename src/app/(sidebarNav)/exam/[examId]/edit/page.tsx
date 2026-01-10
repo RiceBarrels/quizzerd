@@ -394,17 +394,14 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
   });
 
   const handlePublish = useCallback(async (
-    publishType: 'public' | 'classroom' | 'link',
-    classIds: string[],
-    existingAssignments: string[],
-    classAssignments?: Record<string, { access_at: string | null; due_at: string | null }>
+    publishType: 'public' | 'classroom' | 'link'
   ) => {
     setPublishDialogOpen(false);
 
     try {
       // For public/link, use the existing publish flow
       if (publishType === 'public' || publishType === 'link') {
-        await publishExam(publishType as any, [], [], {});
+        await publishExam(publishType === 'public' ? 'public' : 'code');
         if (publishType === 'public') {
           setIsPublic(true);
         }
@@ -737,7 +734,6 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
         examDescription={examDescription}
         isPublic={isPublic}
         isPublished={isPublished}
-        selectedClassIds={[]}
         onPublish={handlePublish}
         saving={saving || publishSaving}
       />

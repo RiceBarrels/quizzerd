@@ -3,25 +3,24 @@ import { createSupabaseClient } from '@/lib/supabase';
 
 /**
  * GET /api/exams/public
- * 
+ *
  * Fetches a paginated list of public, published exams.
- * 
+ *
  * @param request - The incoming HTTP request
  * @param request.url - URL with query parameters:
  *   - search (string, optional): Search term to filter exams by name or description
  *   - page (number, optional): Page number for pagination (default: 1)
  *   - limit (number, optional): Number of exams per page (default: 12)
- *   - includeClasses (boolean, optional): If true, includes class names in response (default: false)
- * 
+ *
  * @returns JSON response with:
  *   - success: boolean
  *   - data: Array of exam objects
  *   - pagination: Object with page, limit, total, totalPages, hasMore
  *   - summary: Object with totalPublicExams, uniqueCreators, statuses
- * 
+ *
  * @example
- * GET /api/exams/public?search=math&page=1&limit=10&includeClasses=true
- * 
+ * GET /api/exams/public?search=math&page=1&limit=10
+ *
  * @throws {500} If database query fails
  */
 export async function GET(request: Request) {
@@ -30,7 +29,6 @@ export async function GET(request: Request) {
     const search = searchParams.get('search') || '';
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '12');
-    const includeClasses = searchParams.get('includeClasses') === 'true';
     const offset = (page - 1) * limit;
 
     const supabase = await createSupabaseClient();
@@ -61,59 +59,12 @@ export async function GET(request: Request) {
       );
     }
 
-    // Optionally fetch class names
-    let formattedData = data;
-    if (includeClasses) {
-      // Collect all unique class IDs
-      const allClassIds = [];
-      for (const exam of data) {
-        if (exam.class_id && Array.isArray(exam.class_id)) {
-          allClassIds.push(...exam.class_id);
-        }
-      }
-      const uniqueClassIds = [...new Set(allClassIds)];
-      
-      // Fetch all class names at once
-      let classMap: any = {};
-      if (uniqueClassIds.length > 0) {
-        const { data: classes } = await supabase
-          .from('class')
-          .select('class_id, class_name')
-          .in('class_id', uniqueClassIds);
-        
-        if (classes) {
-          classMap = classes.reduce((acc: any, cls: any) => {
-            acc[cls.class_id] = cls.class_name;
-            return acc;
-          }, {} as any);
-        }
-      }
-      
-      // Format the response with class names
-      formattedData = data.map(exam => {
-        const classNames = [];
-        if (exam.class_id && Array.isArray(exam.class_id)) {
-          for (const classId of exam.class_id) {
-            if (classMap[classId]) {
-              classNames.push(classMap[classId]);
-            }
-          }
-        }
-        
-        return {
-          ...exam,
-          class_names: classNames,
-          questions: exam.questions || []
-        };
-      });
-    }
-
     // Get creator information (optional - you might want to fetch user names)
     const creatorIds = [...new Set(data.map(exam => exam.creator_id))];
-    
-    return NextResponse.json({ 
+
+    return NextResponse.json({
       success: true,
-      data: formattedData,
+      data,
       pagination: {
         page,
         limit,

@@ -15,9 +15,9 @@ export default function navLayout({children}: {children: React.ReactNode}){
                     <div id="main-content" className="flex-1 bg-background rounded-4xl border overflow-y-auto flex flex-col">
                         <div style={{ viewTransitionName: 'main-content' }} className="flex-1">
                             {children}
-                            <Toaster />
                         </div>
                         <Footer className="rounded-b-4xl border-t-0" />
+                        <Toaster />
                     </div>
                 </div>
             </SidebarProvider>

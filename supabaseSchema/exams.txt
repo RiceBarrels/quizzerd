@@ -1,9 +1,9 @@
 -- Exams table schema
+-- Note: class_id removed - using Google Classroom with allowed_emails whitelist instead
 CREATE TABLE IF NOT EXISTS exams (
     exam_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     exam_name VARCHAR(255) NOT NULL,
     exam_description TEXT,
-    class_id UUID REFERENCES class(class_id) ON DELETE CASCADE,
     creator_id TEXT NOT NULL, -- Clerk user ID
     
     -- Visibility settings
@@ -41,10 +41,10 @@ CREATE TABLE IF NOT EXISTS exams (
 
 -- Create indexes for better query performance
 CREATE INDEX idx_exams_creator ON exams(creator_id);
-CREATE INDEX idx_exams_class ON exams(class_id);
 CREATE INDEX idx_exams_public ON exams(is_public);
 CREATE INDEX idx_exams_status ON exams(status);
 CREATE INDEX idx_exams_collaborators ON exams USING GIN(collaborator_ids);
+CREATE INDEX idx_exams_allowed_emails ON exams USING GIN(allowed_emails);
 
 -- RLS Policies for exams table
 ALTER TABLE exams ENABLE ROW LEVEL SECURITY;
@@ -64,19 +64,8 @@ CREATE POLICY "Collaborators can view shared exams" ON exams
     FOR SELECT
     USING (collaborator_ids::jsonb ? (auth.jwt() ->> 'sub'::text));
 
--- Policy: Class admins/teachers can view class exams
-CREATE POLICY "Class admins can view class exams" ON exams
-    FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM class
-            WHERE class.class_id = exams.class_id
-            AND (
-                class.admin_ids::jsonb ? (auth.jwt() ->> 'sub'::text)
-                OR class.teacher_ids::jsonb ? (auth.jwt() ->> 'sub'::text)
-            )
-        )
-    );
+-- Policy: Users with whitelisted emails can view exams (for Google Classroom integration)
+-- Note: This is enforced at the application level via allowed_emails column
 
 -- Policy: Creators can insert their own exams
 CREATE POLICY "Users can create exams" ON exams
@@ -112,12 +101,12 @@ CREATE TRIGGER update_exams_updated_at BEFORE UPDATE ON exams
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Exam attempts table to track student attempts
+-- Note: class_id removed - using Google Classroom with allowed_emails whitelist instead
 CREATE TABLE IF NOT EXISTS exam_attempts (
     attempt_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     exam_id UUID REFERENCES exams(exam_id) ON DELETE CASCADE,
     student_id TEXT NOT NULL, -- Clerk user ID
-    class_id UUID REFERENCES class(class_id) ON DELETE CASCADE,
-    
+
     -- Attempt details
     attempt_number INTEGER NOT NULL DEFAULT 1,
     start_time TIMESTAMPTZ DEFAULT NOW(),
@@ -149,7 +138,6 @@ CREATE TABLE IF NOT EXISTS exam_attempts (
 -- Create indexes for exam_attempts
 CREATE INDEX idx_exam_attempts_exam ON exam_attempts(exam_id);
 CREATE INDEX idx_exam_attempts_student ON exam_attempts(student_id);
-CREATE INDEX idx_exam_attempts_class ON exam_attempts(class_id);
 CREATE INDEX idx_exam_attempts_status ON exam_attempts(status);
 
 -- RLS Policies for exam_attempts
@@ -160,16 +148,16 @@ CREATE POLICY "Students view own attempts" ON exam_attempts
     FOR SELECT
     USING (student_id = (auth.jwt() ->> 'sub'::text));
 
--- Teachers/admins can view all attempts for their class exams
-CREATE POLICY "Teachers view class attempts" ON exam_attempts
+-- Teachers/creators can view all attempts for their exams
+CREATE POLICY "Teachers view exam attempts" ON exam_attempts
     FOR SELECT
     USING (
         EXISTS (
-            SELECT 1 FROM class
-            WHERE class.class_id = exam_attempts.class_id
+            SELECT 1 FROM exams
+            WHERE exams.exam_id = exam_attempts.exam_id
             AND (
-                class.admin_ids::jsonb ? (auth.jwt() ->> 'sub'::text)
-                OR class.teacher_ids::jsonb ? (auth.jwt() ->> 'sub'::text)
+                exams.creator_id = (auth.jwt() ->> 'sub'::text)
+                OR exams.collaborator_ids::jsonb ? (auth.jwt() ->> 'sub'::text)
             )
         )
     );

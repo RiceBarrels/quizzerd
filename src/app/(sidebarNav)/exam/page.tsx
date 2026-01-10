@@ -60,14 +60,12 @@ export default function ExamPage() {
   const [googleAccessToken, setGoogleAccessToken] = useState("");
   const [loadingForms, setLoadingForms] = useState(false);
   const [importMode, setImportMode] = useState('url'); // 'url' or 'browse'
-  const [classes, setClasses] = useState<any[]>([]);
   const router = useTransitionRouter();
   const limit = 12;
 
   const [newExam, setNewExam] = useState<any>({
     exam_name: "",
     exam_description: "",
-    class_ids: [],
     subjects: [],
     is_public: false,
     duration_minutes: 60,
@@ -79,23 +77,7 @@ export default function ExamPage() {
 
   useEffect(() => {
     fetchExams();
-    fetchClasses();
   }, [page, search, activeTab]);
-
-  const fetchClasses = async () => {
-    // Only fetch classes if user is signed in
-    if (!isSignedIn) return;
-    
-    try {
-      const response = await fetch('/api/classes/get');
-      const data = await response.json();
-      if (data.success) {
-        setClasses(data.data || []);
-      }
-    } catch (error) {
-      console.error("Failed to fetch classes:", error);
-    }
-  };
 
   const fetchExams = async () => {
     setLoading(true);
@@ -190,7 +172,6 @@ export default function ExamPage() {
     setIsImporting(true);
     try {
       const payload: any = {
-        class_ids: [],
         is_public: false
       };
       
@@ -257,7 +238,6 @@ export default function ExamPage() {
         setNewExam({
           exam_name: "",
           exam_description: "",
-          class_ids: [],
           subjects: [],
           is_public: false,
           duration_minutes: 60,
@@ -566,37 +546,6 @@ export default function ExamPage() {
                     />
                   </div>
                   
-                  <div className="space-y-2">
-                    <Label htmlFor="classes">Classes (Optional)</Label>
-                    <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-2">
-                      {classes.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No classes available</p>
-                      ) : (
-                        classes.map((cls) => (
-                          <div key={cls.class_id} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`class-${cls.class_id}`}
-                              checked={newExam.class_ids.includes(cls.class_id)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setNewExam({...newExam, class_ids: [...newExam.class_ids, cls.class_id]});
-                                } else {
-                                  setNewExam({...newExam, class_ids: newExam.class_ids.filter((id: any) => id !== cls.class_id)});
-                                }
-                              }}
-                            />
-                            <Label
-                              htmlFor={`class-${cls.class_id}`}
-                              className="text-sm font-normal cursor-pointer"
-                            >
-                              {cls.class_name}
-                            </Label>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                  
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="duration">Duration (minutes)</Label>
@@ -766,12 +715,6 @@ export default function ExamPage() {
                           <div className="flex gap-2 flex-wrap">
                             {getStatusBadge(exam.status)}
                             {getVisibilityBadge(exam.is_public)}
-                            {exam.class_id && Array.isArray(exam.class_id) && exam.class_id.length > 0 && (
-                              <Badge variant="secondary" className="gap-1 text-xs">
-                                <Users className="h-3 w-3" />
-                                {exam.class_id.length}
-                              </Badge>
-                            )}
                           </div>
                           
                           {/* Stats Grid */}
@@ -806,15 +749,8 @@ export default function ExamPage() {
                           </div>
                           
                           {/* Additional Info */}
-                          {(exam.start_date || exam.end_date || exam.class_names?.length > 0) && (
+                          {(exam.start_date || exam.end_date) && (
                             <div className="space-y-1.5 pt-1 border-t">
-                              {exam.class_names && exam.class_names.length > 0 && (
-                                <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                                  <Users className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                                  <span className="line-clamp-1">{exam.class_names.join(", ")}</span>
-                                </div>
-                              )}
-                              
                               <div className="flex flex-col gap-1">
                                 {exam.start_date && (
                                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -824,7 +760,7 @@ export default function ExamPage() {
                                     </span>
                                   </div>
                                 )}
-                                
+
                                 {exam.end_date && (
                                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                     <Calendar className="h-3 w-3 flex-shrink-0" />

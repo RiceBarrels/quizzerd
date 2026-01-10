@@ -18,7 +18,6 @@ export async function PUT(request: Request) {
       exam_id,
       exam_name,
       exam_description,
-      class_ids = [],
       subjects = [],
       is_public,
       is_published,
@@ -63,7 +62,7 @@ export async function PUT(request: Request) {
     // First, check if the exam exists and user has permission to edit
     const { data: existingExam, error: fetchError } = await supabase
       .from('exams')
-      .select('creator_id, collaborator_ids, class_id')
+      .select('creator_id, collaborator_ids')
       .eq('exam_id', exam_id)
       .single();
 
@@ -75,31 +74,9 @@ export async function PUT(request: Request) {
     }
 
     // Check if user has permission to edit (must be creator or collaborator)
-    let canEdit = 
+    const canEdit =
       existingExam.creator_id === userId ||
       (existingExam.collaborator_ids && existingExam.collaborator_ids.includes(userId));
-
-    // If exam belongs to classes, check if user is admin/teacher of any of them
-    if (!canEdit && existingExam.class_id && Array.isArray(existingExam.class_id) && existingExam.class_id.length > 0) {
-      for (const classId of existingExam.class_id) {
-        const { data: classData } = await supabase
-          .from('class')
-          .select('admin_ids, teacher_ids')
-          .eq('class_id', classId)
-          .single();
-
-        if (classData) {
-          const isAuthorized = 
-            classData.admin_ids?.includes(userId) ||
-            classData.teacher_ids?.includes(userId);
-          
-          if (isAuthorized) {
-            canEdit = true;
-            break;
-          }
-        }
-      }
-    }
 
     if (!canEdit) {
       return NextResponse.json(
@@ -108,42 +85,10 @@ export async function PUT(request: Request) {
       );
     }
 
-    // If class_ids are provided, verify user has permission for those classes
-    const validClassIds = [];
-    if (class_ids && Array.isArray(class_ids) && class_ids.length > 0) {
-      for (const classId of class_ids) {
-        if (classId && classId !== "" && classId !== "no-class") {
-          const { data: classData, error: classError } = await supabase
-            .from('class')
-            .select('admin_ids, teacher_ids')
-            .eq('class_id', classId)
-            .single();
-
-          if (classError || !classData) {
-            console.log(`Class not found: ${classId}, skipping`);
-            continue; // Skip invalid class IDs
-          }
-
-          // Check if user is admin or teacher of the class
-          const hasPermission = 
-            classData.admin_ids?.includes(userId) ||
-            classData.teacher_ids?.includes(userId);
-
-          if (!hasPermission) {
-            console.log(`User lacks permission for class: ${classId}, skipping`);
-            continue; // Skip classes user doesn't have permission for
-          }
-          
-          validClassIds.push(classId);
-        }
-      }
-    }
-
     // Prepare update data
     const updateData = {
       exam_name,
       exam_description: exam_description || null,
-      class_id: validClassIds,
       subject: subjects || [],
       is_public: is_public || false,
       is_published: is_published || false,
@@ -227,7 +172,7 @@ export async function DELETE(request: Request) {
     // Check if exam exists and user has permission
     const { data: existingExam, error: fetchError } = await supabase
       .from('exams')
-      .select('creator_id, collaborator_ids, class_id')
+      .select('creator_id, collaborator_ids')
       .eq('exam_id', examId)
       .single();
 
@@ -238,32 +183,10 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // Check if user has permission to delete (creator, collaborator, or admin/teacher of class)
-    let canDelete = 
+    // Check if user has permission to delete (must be creator or collaborator)
+    const canDelete =
       existingExam.creator_id === userId ||
       (existingExam.collaborator_ids && existingExam.collaborator_ids.includes(userId));
-
-    // If exam belongs to classes, check if user is admin/teacher of any of them
-    if (!canDelete && existingExam.class_id && Array.isArray(existingExam.class_id) && existingExam.class_id.length > 0) {
-      for (const classId of existingExam.class_id) {
-        const { data: classData } = await supabase
-          .from('class')
-          .select('admin_ids, teacher_ids')
-          .eq('class_id', classId)
-          .single();
-
-        if (classData) {
-          const isAuthorized = 
-            classData.admin_ids?.includes(userId) ||
-            classData.teacher_ids?.includes(userId);
-          
-          if (isAuthorized) {
-            canDelete = true;
-            break;
-          }
-        }
-      }
-    }
 
     if (!canDelete) {
       return NextResponse.json(

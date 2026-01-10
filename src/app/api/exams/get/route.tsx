@@ -48,33 +48,26 @@ export async function GET(request: Request) {
 
       // Check if user has access to this exam
       let hasAccess = exam.is_public; // Public exams are accessible to everyone
-      
+
       // For authenticated users, check additional permissions
       if (userId) {
-        hasAccess = hasAccess || 
+        hasAccess = hasAccess ||
           exam.creator_id === userId ||
           exam.collaborator_ids?.includes(userId);
 
-        // If exam is part of classes, check class membership
-        if (!hasAccess && exam.class_id && Array.isArray(exam.class_id) && exam.class_id.length > 0) {
-          for (const classId of exam.class_id) {
-            const { data: classData } = await supabase
-              .from('class')
-              .select('admin_ids, teacher_ids, student_ids')
-              .eq('class_id', classId)
-              .single();
+        // Check if user's email is in allowed_emails (Google Classroom whitelist)
+        if (!hasAccess && exam.allowed_emails && Array.isArray(exam.allowed_emails) && exam.allowed_emails.length > 0) {
+          const { data: userData } = await supabase
+            .from('user')
+            .select('email')
+            .eq('user_id', userId)
+            .single();
 
-            if (classData) {
-              const isInClass = 
-                classData.admin_ids?.includes(userId) ||
-                classData.teacher_ids?.includes(userId) ||
-                classData.student_ids?.includes(userId);
-              
-              if (isInClass) {
-                hasAccess = true;
-                break;
-              }
-            }
+          if (userData?.email) {
+            const userEmail = userData.email.toLowerCase();
+            hasAccess = exam.allowed_emails.some(
+              (email: string) => email.toLowerCase() === userEmail
+            );
           }
         }
       }
@@ -86,25 +79,9 @@ export async function GET(request: Request) {
         );
       }
 
-      // Fetch class names if exam has classes
-      let classNames = [];
-      if (exam.class_id && Array.isArray(exam.class_id) && exam.class_id.length > 0) {
-        const { data: classes } = await supabase
-          .from('class')
-          .select('class_id, class_name')
-          .in('class_id', exam.class_id);
-        
-        if (classes) {
-          classNames = classes.map(c => c.class_name);
-        }
-      }
-
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: true,
-        data: {
-          ...exam,
-          class_names: classNames
-        }
+        data: exam
       });
     }
 
@@ -187,50 +164,13 @@ export async function GET(request: Request) {
       );
     }
 
-    // Collect all unique class IDs from all exams
-    const allClassIds = [];
-    for (const exam of data) {
-      if (exam.class_id && Array.isArray(exam.class_id)) {
-        allClassIds.push(...exam.class_id);
-      }
-    }
-    const uniqueClassIds = [...new Set(allClassIds)];
-    
-    // Fetch all class names at once
-    let classMap: any = {};
-    if (uniqueClassIds.length > 0) {
-      const { data: classes } = await supabase
-        .from('class')
-        .select('class_id, class_name')
-        .in('class_id', uniqueClassIds);
-      
-      if (classes) {
-        classMap = classes.reduce((acc: any, cls: any) => {
-          acc[cls.class_id] = cls.class_name;
-          return acc;
-        }, {} as any);
-      }
-    }
-    
     // Format the response
-    const formattedData = data.map(exam => {
-      const classNames = [];
-      if (exam.class_id && Array.isArray(exam.class_id)) {
-        for (const classId of exam.class_id) {
-          if (classMap[classId]) {
-            classNames.push(classMap[classId]);
-          }
-        }
-      }
-      
-      return {
-        ...exam,
-        class_names: classNames,
-        items: exam.items || []
-      };
-    });
+    const formattedData = data.map(exam => ({
+      ...exam,
+      items: exam.items || []
+    }));
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       data: formattedData,
       pagination: {

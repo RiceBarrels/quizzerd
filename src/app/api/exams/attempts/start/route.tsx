@@ -6,7 +6,7 @@ export async function POST(request: Request) {
     try {
         const { userId: authUserId } = await auth();
         const body = await request.json();
-        const { examId, userId } = body;
+        const { examId, userId, sessionId } = body;
 
         const supabase = await createSupabaseClient();
 
@@ -18,25 +18,89 @@ export async function POST(request: Request) {
             );
         }
 
-        if (!examId || !userId) {
+        if (!userId) {
             return NextResponse.json(
                 { success: false, error: 'Missing required fields' },
                 { status: 400 }
             );
         }
 
-        // Get exam details including allowed_emails for whitelist check
-        const { data: exam, error: examError } = await supabase
-            .from('exams')
-            .select('exam_id, exam_name, is_published, attempts_allowed, start_date, end_date, allowed_emails, is_public')
-            .eq('exam_id', examId)
-            .single();
-
-        if (examError || !exam) {
+        // Must have either examId or sessionId
+        if (!examId && !sessionId) {
             return NextResponse.json(
-                { success: false, error: 'Exam not found' },
-                { status: 404 }
+                { success: false, error: 'Either examId or sessionId is required' },
+                { status: 400 }
             );
+        }
+
+        let exam: any;
+        let session: any = null;
+        let allowedEmails: string[] | null = null;
+        let startDate: string | null = null;
+        let endDate: string | null = null;
+
+        // If sessionId is provided, get session and exam from session
+        if (sessionId) {
+            const { data: sessionData, error: sessionError } = await supabase
+                .from('exam_sessions')
+                .select('*')
+                .eq('session_id', sessionId)
+                .single();
+
+            if (sessionError || !sessionData) {
+                return NextResponse.json(
+                    { success: false, error: 'Session not found' },
+                    { status: 404 }
+                );
+            }
+
+            session = sessionData;
+            allowedEmails = session.allowed_emails as string[] | null;
+            startDate = session.start_date;
+            endDate = session.end_date;
+
+            // Check session status
+            if (session.status !== 'active') {
+                return NextResponse.json(
+                    { success: false, error: 'This exam session is no longer active' },
+                    { status: 403 }
+                );
+            }
+
+            // Get exam from session
+            const { data: examData, error: examError } = await supabase
+                .from('exams')
+                .select('exam_id, exam_name, is_published, attempts_allowed')
+                .eq('exam_id', session.exam_id)
+                .single();
+
+            if (examError || !examData) {
+                return NextResponse.json(
+                    { success: false, error: 'Exam not found' },
+                    { status: 404 }
+                );
+            }
+
+            exam = examData;
+        } else {
+            // Get exam directly by examId (for backwards compatibility)
+            const { data: examData, error: examError } = await supabase
+                .from('exams')
+                .select('exam_id, exam_name, is_published, attempts_allowed, start_date, end_date, allowed_emails, is_public')
+                .eq('exam_id', examId)
+                .single();
+
+            if (examError || !examData) {
+                return NextResponse.json(
+                    { success: false, error: 'Exam not found' },
+                    { status: 404 }
+                );
+            }
+
+            exam = examData;
+            allowedEmails = exam.allowed_emails as string[] | null;
+            startDate = exam.start_date;
+            endDate = exam.end_date;
         }
 
         // Check if exam is published
@@ -48,7 +112,6 @@ export async function POST(request: Request) {
         }
 
         // Check email whitelist if allowed_emails is set
-        const allowedEmails = exam.allowed_emails as string[] | null;
         if (allowedEmails && allowedEmails.length > 0) {
             // Get user's email from the user table
             const { data: userData, error: userError } = await supabase
@@ -79,26 +142,33 @@ export async function POST(request: Request) {
 
         // Check date constraints
         const now = new Date();
-        if (exam.start_date && new Date(exam.start_date) > now) {
+        if (startDate && new Date(startDate) > now) {
             return NextResponse.json(
                 { success: false, error: 'This exam has not started yet' },
                 { status: 403 }
             );
         }
 
-        if (exam.end_date && new Date(exam.end_date) < now) {
+        if (endDate && new Date(endDate) < now) {
             return NextResponse.json(
                 { success: false, error: 'This exam has ended' },
                 { status: 403 }
             );
         }
 
-        // Check existing attempts
-        const { data: existingAttempts, error: attemptsError } = await supabase
+        // Check existing attempts for this exam (and session if provided)
+        let attemptsQuery = supabase
             .from('exam_attempts')
             .select('attempt_id, status, attempt_number')
-            .eq('exam_id', examId)
-            .eq('student_id', userId)
+            .eq('exam_id', exam.exam_id)
+            .eq('student_id', userId);
+
+        // If using session, filter by session_id for attempt tracking
+        if (sessionId) {
+            attemptsQuery = attemptsQuery.eq('session_id', sessionId);
+        }
+
+        const { data: existingAttempts, error: attemptsError } = await attemptsQuery
             .order('attempt_number', { ascending: false });
 
         if (attemptsError) {
@@ -133,16 +203,23 @@ export async function POST(request: Request) {
         // Create new attempt
         const attemptNumber = (existingAttempts?.[0]?.attempt_number || 0) + 1;
 
+        const attemptData: any = {
+            exam_id: exam.exam_id,
+            student_id: userId,
+            attempt_number: attemptNumber,
+            status: 'in_progress',
+            start_time: new Date().toISOString(),
+            responses: {}
+        };
+
+        // Add session_id if using session-based access
+        if (sessionId) {
+            attemptData.session_id = sessionId;
+        }
+
         const { data: newAttempt, error: createError } = await supabase
             .from('exam_attempts')
-            .insert({
-                exam_id: examId,
-                student_id: userId,
-                attempt_number: attemptNumber,
-                status: 'in_progress',
-                start_time: new Date().toISOString(),
-                responses: {}
-            })
+            .insert(attemptData)
             .select('attempt_id')
             .single();
 
