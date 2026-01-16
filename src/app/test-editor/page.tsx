@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import TextEditor from '@/components/editors/text-editor';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 
 export default function TestEditorPage() {
   const [content, setContent] = useState('');
@@ -37,7 +38,7 @@ export default function TestEditorPage() {
           </div>
           
           <div className="space-y-2">
-            <label className="font-semibold">Editor:</label>
+            <Label className="font-semibold">Editor:</Label>
             <TextEditor
               value={content}
               onChange={handleChange}
@@ -46,14 +47,14 @@ export default function TestEditorPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="font-semibold">Raw HTML Output:</label>
+            <Label className="font-semibold">Raw HTML Output:</Label>
             <pre className="p-4 bg-gray-100 rounded overflow-auto text-xs">
               {rawContent || '(empty)'}
             </pre>
           </div>
 
           <div className="space-y-2">
-            <label className="font-semibold">Rendered Preview:</label>
+            <Label className="font-semibold">Rendered Preview:</Label>
             <div 
               className="p-4 border rounded prose prose-sm"
               dangerouslySetInnerHTML={{ __html: content || '<p>(empty)</p>' }}

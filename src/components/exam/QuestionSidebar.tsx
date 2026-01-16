@@ -19,7 +19,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { FileText, Minus, GripVertical } from 'lucide-react';
+import { FileText, Minus, GripVertical, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { ExamItem } from '@/types/exam';
 import { QuestionTypeOption } from '@/types/exam';
 import QuestionContextMenu from './QuestionContextMenu';
@@ -49,6 +49,10 @@ interface QuestionSidebarProps {
   onShuffleOptions?: (index: number) => void;
   onClearOptions?: (index: number) => void;
   onExportQuestion?: (index: number) => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: () => boolean;
+  canRedo?: () => boolean;
   selectedQuestions?: Set<string>;
   onQuestionSelect?: (questionId: string, event: React.MouseEvent) => void;
 }
@@ -108,10 +112,15 @@ export default function QuestionSidebar({
   onShuffleOptions,
   onClearOptions,
   onExportQuestion,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
   selectedQuestions = new Set(),
   onQuestionSelect,
 }: QuestionSidebarProps) {
   const [sidebarPosition, setSidebarPosition] = useState({ top: 64, maxHeight: 'calc(100vh - 312px)' });
+  const [collapsed, setCollapsed] = useState(false);
   const sidebarScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const sidebarQuestionRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const { open } = useSidebar();
@@ -328,6 +337,10 @@ export default function QuestionSidebar({
               onShuffleOptions={onShuffleOptions}
               onClearOptions={onClearOptions}
               onExportQuestion={onExportQuestion}
+              onUndo={onUndo}
+              onRedo={onRedo}
+              canUndo={canUndo}
+              canRedo={canRedo}
               selectedIndices={allSelectedIndices.length > 0 ? allSelectedIndices : [sidebarItemIndex]}
             >
               <div onClick={(e) => {
@@ -434,6 +447,10 @@ export default function QuestionSidebar({
             onShuffleOptions={onShuffleOptions}
             onClearOptions={onClearOptions}
             onExportQuestion={onExportQuestion}
+            onUndo={onUndo}
+            onRedo={onRedo}
+            canUndo={canUndo}
+            canRedo={canRedo}
             selectedIndices={allSelectedIndices.length > 0 ? allSelectedIndices : [sidebarItemIndex]}
           >
             {buttonContent}
@@ -454,24 +471,59 @@ export default function QuestionSidebar({
     <AnimatePresence initial={false} mode="wait">
       <motion.div
         key="questions-sidebar"
-        className="w-72 z-50 fixed left-8" 
+        className="z-50 fixed left-8"
         style={{ top: `${sidebarPosition.top}px` }}
-        initial={{ opacity: 0, x: "-32rem", filter: "blur(8px)" }} 
-        animate={{ opacity: 1, x: open ? "16rem" : "3rem", filter: "blur(0px)" }} 
-        transition={{ duration: 0.3, type: "spring", visualDuration: 0.25, bounce: 0.3 }} 
+        initial={{ opacity: 0, x: "-32rem", filter: "blur(8px)" }}
+        animate={{
+          opacity: 1,
+          x: open ? "16rem" : "3rem",
+          width: collapsed ? 'auto' : '288px',
+          filter: "blur(0px)"
+        }}
+        transition={{ duration: 0.3, type: "spring", visualDuration: 0.25, bounce: 0.3 }}
         exit={{ opacity: 0, x: "-32rem", filter: "blur(8px)" }}
       >
+        {collapsed ? (
+          <button
+            onClick={() => setCollapsed(false)}
+            className="bg-card border rounded-lg shadow-lg flex items-center gap-2 px-3 py-2 hover:bg-muted transition-colors"
+            title="Open Questions Overview"
+          >
+            <FileText className="h-4 w-4" />
+            <div className="flex flex-col items-start text-left">
+              <span className="text-xs font-medium">
+                {items.filter(i => i.question_type !== 'section_header' && i.question_type !== 'page_break').length} Questions
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {items.reduce((sum, i) => sum + (i.question_type !== 'section_header' && i.question_type !== 'page_break' ? (i.points || 0) : 0), 0)} pts
+              </span>
+            </div>
+          </button>
+        ) : (
         <DndContext
           sensors={sidebarSensors}
           collisionDetection={closestCenter}
           onDragEnd={handleSidebarDragEnd}
         >
-          <div 
+          <div
             ref={sidebarScrollContainerRef}
-            className="bg-card overflow-y-auto border rounded-lg p-4 shadow-lg scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground/40" 
+            className="bg-card overflow-y-auto border rounded-lg shadow-lg scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground/40"
             style={{ maxHeight: sidebarPosition.maxHeight }}
           >
-            <h3 className="text-sm font-semibold mb-3">Questions Overview</h3>
+            {/* Header */}
+            <div className="sticky top-0 bg-card border-b px-4 py-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">Questions Overview</h3>
+                <button
+                  onClick={() => setCollapsed(true)}
+                  className="p-1 hover:bg-muted rounded transition-colors"
+                  title="Hide Questions Overview"
+                >
+                  <PanelLeftClose className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </div>
+            </div>
+            <div className="p-4">
             <div className="space-y-3">
               {items.length === 0 ? (
                 <div className="text-sm text-muted-foreground p-3 text-center">
@@ -590,8 +642,10 @@ export default function QuestionSidebar({
                 </SortableContext>
               )}
             </div>
+            </div>
           </div>
         </DndContext>
+        )}
       </motion.div>
     </AnimatePresence>
   );

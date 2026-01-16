@@ -76,7 +76,7 @@ export default function CodeEditorModal({
       
       {/* Modal Content */}
       <div className="flex-1 p-6 overflow-auto">
-        <div className="max-w-7xl mx-auto h-full">
+        <div className="max-w-7xl mx-auto h-screen">
           <CodeEditor
             key={`modal-code-editor-${questionIndex}`}
             files={files}

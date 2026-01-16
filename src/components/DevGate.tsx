@@ -2,6 +2,7 @@
 
 import { useState, useEffect, ReactNode } from 'react';
 import { Lock, Construction, Loader2 } from 'lucide-react';
+import { Label } from '@/components/ui/label';
 
 interface DevGateProps {
   children: ReactNode;
@@ -89,9 +90,9 @@ export default function DevGate({ children }: DevGateProps) {
           {/* Password Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium">
+              <Label htmlFor="password" className="text-sm font-medium">
                 Access Password
-              </label>
+              </Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <input

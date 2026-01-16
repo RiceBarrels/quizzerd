@@ -18,7 +18,8 @@ import {
     Star, Heart, ThumbsUp, Loader2, Clock, Upload, Heading,
     Code2, ChevronUp, MapPin, Terminal, Languages, Monitor,
     Shield, FileText, AlertTriangle, Ban, Lock, CheckCircle2,
-    Timer, Send, Save, AlertCircle
+    Timer, Send, Save, AlertCircle, Flag, ChevronLeft, ChevronRight,
+    List, X, Check, Maximize, Minimize
 } from 'lucide-react';
 import { ExamItem } from '@/types/exam';
 import { toast } from 'sonner';
@@ -141,16 +142,34 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
     const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
     const [accessError, setAccessError] = useState<string | null>(null);
 
+    // Question navigation state
+    const [flaggedQuestions, setFlaggedQuestions] = useState<Set<string>>(new Set());
+    const [showNavigator, setShowNavigator] = useState(false);
+    const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
+    const questionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+    // Teacher dashboard state
+    const [isTeacher, setIsTeacher] = useState(false);
+    const [attempts, setAttempts] = useState<any[]>([]);
+    const [violations, setViolations] = useState<any[]>([]);
+    const [selectedAttempt, setSelectedAttempt] = useState<any | null>(null);
+
     // Location state
     const [currentLocation, setCurrentLocation] = useState<{ lat: number; lon: number } | null>(null);
     const [locationError, setLocationError] = useState<string | null>(null);
     const [locationPermission, setLocationPermission] = useState<'prompt' | 'granted' | 'denied' | 'checking'>('checking');
     const [locationVerified, setLocationVerified] = useState<boolean>(false);
 
+    // Fullscreen state
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [fullscreenExitCount, setFullscreenExitCount] = useState(0);
+    const [showFullscreenDialog, setShowFullscreenDialog] = useState(false);
+
     const watchIdRef = useRef<number | null>(null);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     const autoSaveRef = useRef<NodeJS.Timeout | null>(null);
     const startTimeRef = useRef<Date | null>(null);
+    const examStartedRef = useRef(false);
 
     useEffect(() => {
         setMounted(true);
@@ -300,6 +319,72 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
         requestLocationAccess();
     }, [mounted, examData?.location_detection, requestLocationAccess]);
 
+    // Fullscreen functions
+    const enterFullscreen = useCallback(async () => {
+        try {
+            if (!document.fullscreenElement) {
+                await document.documentElement.requestFullscreen();
+            }
+        } catch (error) {
+            console.error('Failed to enter fullscreen:', error);
+            toast.error('Failed to enter fullscreen. Please try again.');
+        }
+    }, []);
+
+    const exitFullscreen = useCallback(async () => {
+        try {
+            if (document.fullscreenElement) {
+                await document.exitFullscreen();
+            }
+            setIsFullscreen(false);
+        } catch (error) {
+            console.error('Failed to exit fullscreen:', error);
+        }
+    }, []);
+
+    // Handle fullscreen change events
+    useEffect(() => {
+        const handleFullscreenChange = () => {
+            if (document.fullscreenElement) {
+                // Entered fullscreen
+                setIsFullscreen(true);
+                setShowFullscreenDialog(false);
+            } else {
+                // Exited fullscreen
+                setIsFullscreen(false);
+
+                // Show dialog if exam is in progress
+                if (examStartedRef.current) {
+                    setShowFullscreenDialog(true);
+                    setFullscreenExitCount(prev => prev + 1);
+                }
+            }
+        };
+
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+        return () => {
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
+        };
+    }, []);
+
+    // Prevent keyboard shortcuts that could exit fullscreen
+    useEffect(() => {
+        if (!examStarted || !isFullscreen) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Prevent F11 (toggle fullscreen)
+            if (e.key === 'F11') {
+                e.preventDefault();
+            }
+            // Note: ESC cannot be prevented by JavaScript for security reasons
+            // The browser will always allow ESC to exit fullscreen
+        };
+
+        window.addEventListener('keydown', handleKeyDown, true);
+        return () => window.removeEventListener('keydown', handleKeyDown, true);
+    }, [examStarted, isFullscreen]);
+
     const fetchSession = async () => {
         try {
             const response = await fetch(`/api/exams/sessions/${sessionId}`);
@@ -309,6 +394,13 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
                 setSessionData(result.session);
                 setExamData(result.exam);
                 setAccessError(null);
+
+                // Handle teacher dashboard data
+                if (result.isTeacher) {
+                    setIsTeacher(true);
+                    setAttempts(result.attempts || []);
+                    setViolations(result.violations || []);
+                }
             } else if (response.status === 403) {
                 // Access denied - show error with email info
                 setAccessError(result.error || 'You are not authorized to access this exam');
@@ -348,6 +440,7 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
                 setAttemptId(result.attemptId);
                 setTimeRemaining(examData!.duration_minutes * 60);
                 setExamStarted(true);
+                examStartedRef.current = true;
                 startTimeRef.current = new Date();
                 toast.success('Exam started! Good luck!');
             } else {
@@ -387,11 +480,28 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
 
         if (!autoSubmit) {
             // Check for unanswered required questions
+            const isResponseEmpty = (questionType: string, response: any): boolean => {
+                if (response === undefined || response === null || response === '') {
+                    return true;
+                }
+                // For coding questions, check if any file has content
+                if (questionType === 'coding' && Array.isArray(response)) {
+                    return !response.some((file: { name: string; content: string }) =>
+                        file.content && file.content.trim().length > 0
+                    );
+                }
+                // For arrays (like multiple_select), check if non-empty
+                if (Array.isArray(response)) {
+                    return response.length === 0;
+                }
+                return false;
+            };
+
             const unansweredRequired = examData?.items.filter(item =>
                 item.required &&
                 item.question_type !== 'section_header' &&
                 item.question_type !== 'page_break' &&
-                !responses[item.question_id]
+                isResponseEmpty(item.question_type, responses[item.question_id])
             );
 
             if (unansweredRequired && unansweredRequired.length > 0) {
@@ -422,6 +532,8 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
             const result = await response.json();
 
             if (result.success) {
+                // Exit fullscreen before navigating
+                exitFullscreen();
                 toast.success(autoSubmit ? 'Time\'s up! Exam submitted.' : 'Exam submitted successfully!');
 
                 if (examData?.show_results_immediately) {
@@ -443,6 +555,99 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
     const updateResponse = (questionId: string, value: ResponseValue) => {
         setResponses(prev => ({ ...prev, [questionId]: value }));
     };
+
+    // Toggle flag for a question
+    const toggleFlag = (questionId: string) => {
+        setFlaggedQuestions(prev => {
+            const next = new Set(prev);
+            if (next.has(questionId)) {
+                next.delete(questionId);
+            } else {
+                next.add(questionId);
+            }
+            return next;
+        });
+    };
+
+    // Scroll to a specific question
+    const scrollToQuestion = (questionId: string) => {
+        const element = questionRefs.current[questionId];
+        if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setActiveQuestionId(questionId);
+            // Clear active highlight after animation
+            setTimeout(() => setActiveQuestionId(null), 2000);
+        }
+        setShowNavigator(false);
+    };
+
+    // Get all answerable questions (excluding section headers and page breaks)
+    const getAnswerableQuestions = useCallback(() => {
+        if (!examData) return [];
+        return examData.items.filter(item =>
+            item.question_type !== 'section_header' && item.question_type !== 'page_break'
+        );
+    }, [examData]);
+
+    // Navigate to next/previous question
+    const navigateQuestion = useCallback((direction: 'next' | 'prev') => {
+        const questions = getAnswerableQuestions();
+        if (questions.length === 0) return;
+
+        const currentIndex = activeQuestionId
+            ? questions.findIndex(q => q.question_id === activeQuestionId)
+            : -1;
+
+        let newIndex;
+        if (direction === 'next') {
+            newIndex = currentIndex < questions.length - 1 ? currentIndex + 1 : 0;
+        } else {
+            newIndex = currentIndex > 0 ? currentIndex - 1 : questions.length - 1;
+        }
+
+        scrollToQuestion(questions[newIndex].question_id);
+    }, [activeQuestionId, getAnswerableQuestions]);
+
+    // Keyboard shortcuts
+    useEffect(() => {
+        if (!examStarted) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Don't trigger shortcuts when typing in inputs
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+                return;
+            }
+
+            switch (e.key) {
+                case 'ArrowRight':
+                case 'j':
+                    e.preventDefault();
+                    navigateQuestion('next');
+                    break;
+                case 'ArrowLeft':
+                case 'k':
+                    e.preventDefault();
+                    navigateQuestion('prev');
+                    break;
+                case 'f':
+                    e.preventDefault();
+                    if (activeQuestionId) {
+                        toggleFlag(activeQuestionId);
+                    }
+                    break;
+                case 'n':
+                    e.preventDefault();
+                    setShowNavigator(prev => !prev);
+                    break;
+                case 'Escape':
+                    setShowNavigator(false);
+                    break;
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [examStarted, activeQuestionId, navigateQuestion]);
 
     const formatTime = (seconds: number): string => {
         const hours = Math.floor(seconds / 3600);
@@ -867,6 +1072,16 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
         );
     }
 
+    // Redirect teachers to admin page
+    if (isTeacher) {
+        router.replace(`/exam/session/${sessionId}/admin`);
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+        );
+    }
+
     // Check if exam is published
     if (!examData.is_published) {
         return (
@@ -938,6 +1153,17 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
                                     </div>
                                 </div>
 
+                                {/* Fullscreen requirement */}
+                                <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900">
+                                    <Maximize className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="font-medium text-sm">Fullscreen Mode</p>
+                                        <p className="text-sm text-muted-foreground">
+                                            This exam will run in fullscreen mode. Exiting fullscreen will be recorded as a potential violation.
+                                        </p>
+                                    </div>
+                                </div>
+
                                 {/* Security measures */}
                                 {(examData.console_detection || examData.visibility_change_detection || examData.translation_detection) && (
                                     <div className="flex items-start gap-3 p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200">
@@ -987,17 +1213,20 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
                                 <Button
                                     size="lg"
                                     className="w-full"
-                                    onClick={() => {
+                                    onClick={async () => {
                                         if (examData.location_detection && !locationVerified) {
                                             toast.error('Please verify your location first');
                                             return;
                                         }
+                                        // Enter fullscreen first (must be triggered by user gesture)
+                                        await enterFullscreen();
                                         setShowExam(true);
                                         startExam();
                                     }}
                                     disabled={examData.location_detection && !locationVerified}
                                 >
-                                    Start Exam
+                                    <Maximize className="h-4 w-4 mr-2" />
+                                    Start Exam in Fullscreen
                                 </Button>
                             </div>
                         </CardContent>
@@ -1024,39 +1253,70 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
                 <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-lg border-b shadow-sm">
                     <div className="container mx-auto px-4 py-3">
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <h1 className="font-semibold text-lg truncate max-w-[200px] md:max-w-none">
+                            <div className="flex items-center gap-2 md:gap-4">
+                                {/* Question Navigator Toggle */}
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowNavigator(true)}
+                                    className="gap-1"
+                                >
+                                    <List className="h-4 w-4" />
+                                    <span className="hidden sm:inline">Questions</span>
+                                </Button>
+                                <h1 className="font-semibold text-lg truncate max-w-[120px] sm:max-w-[200px] md:max-w-none">
                                     {examData.exam_name}
                                 </h1>
-                                <Badge variant="outline">
-                                    {answeredQuestions}/{totalQuestions} answered
-                                </Badge>
                             </div>
 
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2 md:gap-4">
+                                {/* Fullscreen indicator */}
+                                {!isFullscreen && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={enterFullscreen}
+                                        className="gap-1 border-red-300 bg-red-50 hover:bg-red-100 text-red-700 dark:border-red-800 dark:bg-red-950 dark:hover:bg-red-900 dark:text-red-400"
+                                    >
+                                        <Maximize className="h-4 w-4" />
+                                        <span className="hidden sm:inline">Enter Fullscreen</span>
+                                    </Button>
+                                )}
+
+                                {/* Progress indicator */}
+                                <div className="hidden sm:flex items-center gap-2 text-sm">
+                                    <div className="flex items-center gap-1">
+                                        <Check className="h-3 w-3 text-green-600" />
+                                        <span className="text-muted-foreground">{answeredQuestions}</span>
+                                    </div>
+                                    {flaggedQuestions.size > 0 && (
+                                        <div className="flex items-center gap-1">
+                                            <Flag className="h-3 w-3 text-orange-500" />
+                                            <span className="text-muted-foreground">{flaggedQuestions.size}</span>
+                                        </div>
+                                    )}
+                                    <span className="text-muted-foreground">/ {totalQuestions}</span>
+                                </div>
+
                                 {/* Auto-save status */}
                                 {autoSaveStatus && (
                                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
                                         {autoSaveStatus === 'saving' && <Loader2 className="h-3 w-3 animate-spin" />}
                                         {autoSaveStatus === 'saved' && <Save className="h-3 w-3 text-green-600" />}
                                         {autoSaveStatus === 'error' && <AlertCircle className="h-3 w-3 text-red-600" />}
-                                        <span className="hidden md:inline">
-                                            {autoSaveStatus === 'saving' && 'Saving...'}
-                                            {autoSaveStatus === 'saved' && 'Saved'}
-                                            {autoSaveStatus === 'error' && 'Save failed'}
-                                        </span>
                                     </div>
                                 )}
 
                                 {/* Timer */}
                                 {timeRemaining !== null && (
                                     <div className={cn(
-                                        "flex items-center gap-2 px-4 py-2 rounded-lg font-mono font-bold",
-                                        timeRemaining <= 300 ? "bg-red-100 text-red-700" :
-                                        timeRemaining <= 600 ? "bg-orange-100 text-orange-700" :
+                                        "flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono font-bold text-sm transition-all",
+                                        timeRemaining <= 60 && "animate-pulse",
+                                        timeRemaining <= 300 ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400" :
+                                        timeRemaining <= 600 ? "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400" :
                                         "bg-primary/10 text-primary"
                                     )}>
-                                        <Timer className="h-4 w-4" />
+                                        <Timer className={cn("h-4 w-4", timeRemaining <= 60 && "animate-bounce")} />
                                         {formatTime(timeRemaining)}
                                     </div>
                                 )}
@@ -1065,13 +1325,14 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
                                 <Button
                                     onClick={() => setShowSubmitDialog(true)}
                                     disabled={isSubmitting}
+                                    size="sm"
                                 >
                                     {isSubmitting ? (
-                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                        <Loader2 className="h-4 w-4 animate-spin sm:mr-2" />
                                     ) : (
-                                        <Send className="h-4 w-4 mr-2" />
+                                        <Send className="h-4 w-4 sm:mr-2" />
                                     )}
-                                    Submit
+                                    <span className="hidden sm:inline">Submit</span>
                                 </Button>
                             </div>
                         </div>
@@ -1080,6 +1341,129 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
                         <Progress value={progressPercent} className="mt-2 h-1" />
                     </div>
                 </div>
+
+                {/* Question Navigator Sidebar */}
+                {showNavigator && (
+                    <>
+                        {/* Backdrop */}
+                        <div
+                            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 animate-in fade-in duration-200"
+                            onClick={() => setShowNavigator(false)}
+                        />
+                        {/* Sidebar */}
+                        <div className="fixed left-0 top-0 h-full w-80 max-w-[85vw] bg-background z-50 shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-left duration-300">
+                            {/* Header */}
+                            <div className="p-4 border-b bg-gradient-to-r from-primary/10 to-transparent flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                                        <List className="h-4 w-4 text-primary" />
+                                    </div>
+                                    <div>
+                                        <h2 className="font-semibold">Questions</h2>
+                                        <p className="text-xs text-muted-foreground">{answeredQuestions} of {totalQuestions} answered</p>
+                                    </div>
+                                </div>
+                                <Button variant="ghost" size="icon" onClick={() => setShowNavigator(false)} className="h-8 w-8">
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            </div>
+
+                            {/* Quick Stats */}
+                            <div className="px-4 py-3 border-b bg-muted/30">
+                                <div className="flex gap-3">
+                                    <div className="flex-1 flex items-center gap-2 p-2 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900">
+                                        <div className="h-6 w-6 rounded-full bg-green-500 flex items-center justify-center">
+                                            <Check className="h-3 w-3 text-white" />
+                                        </div>
+                                        <div>
+                                            <div className="text-sm font-semibold text-green-700 dark:text-green-400">{answeredQuestions}</div>
+                                            <div className="text-[10px] text-green-600 dark:text-green-500">Answered</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex-1 flex items-center gap-2 p-2 rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900">
+                                        <div className="h-6 w-6 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
+                                            <Flag className="h-3 w-3 text-white fill-white" />
+                                        </div>
+                                        <div>
+                                            <div className="text-sm font-semibold text-orange-700 dark:text-orange-400">{flaggedQuestions.size}</div>
+                                            <div className="text-[10px] text-orange-600 dark:text-orange-500">Flagged</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Question Grid */}
+                            <div className="flex-1 overflow-y-auto p-4">
+                                <div className="grid grid-cols-5 gap-2">
+                                    {getAnswerableQuestions().map((item, index) => {
+                                        const hasAnswer = responses[item.question_id] !== undefined &&
+                                            responses[item.question_id] !== null &&
+                                            responses[item.question_id] !== '';
+                                        const isFlagged = flaggedQuestions.has(item.question_id);
+
+                                        return (
+                                            <button
+                                                key={item.question_id}
+                                                onClick={() => scrollToQuestion(item.question_id)}
+                                                className={cn(
+                                                    "aspect-square rounded-xl font-semibold text-sm flex items-center justify-center relative transition-all duration-200 hover:scale-110 hover:shadow-lg",
+                                                    hasAnswer && !isFlagged && "bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-green-200 dark:shadow-green-900/30",
+                                                    isFlagged && "bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-orange-200 dark:shadow-orange-900/30",
+                                                    !hasAnswer && !isFlagged && "bg-muted border-2 border-dashed border-muted-foreground/30 hover:border-primary hover:bg-primary/5"
+                                                )}
+                                            >
+                                                {index + 1}
+                                                {isFlagged && (
+                                                    <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-white dark:bg-background flex items-center justify-center shadow-sm">
+                                                        <Flag className="h-2.5 w-2.5 text-orange-500 fill-orange-500" />
+                                                    </div>
+                                                )}
+                                                {hasAnswer && !isFlagged && (
+                                                    <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-white dark:bg-background flex items-center justify-center shadow-sm">
+                                                        <Check className="h-2.5 w-2.5 text-green-600" />
+                                                    </div>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Progress Bar */}
+                            <div className="px-4 py-3 border-t">
+                                <div className="flex items-center justify-between text-xs mb-2">
+                                    <span className="text-muted-foreground">Overall Progress</span>
+                                    <span className="font-semibold">{Math.round(progressPercent)}%</span>
+                                </div>
+                                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-gradient-to-r from-primary to-primary/80 transition-all duration-500 ease-out rounded-full"
+                                        style={{ width: `${progressPercent}%` }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Keyboard shortcuts hint */}
+                            <div className="p-3 border-t bg-muted/30 text-xs text-muted-foreground">
+                                <div className="flex flex-wrap items-center justify-center gap-3">
+                                    <span className="flex items-center gap-1">
+                                        <kbd className="px-1.5 py-0.5 bg-background border rounded text-[10px] font-mono">←</kbd>
+                                        <kbd className="px-1.5 py-0.5 bg-background border rounded text-[10px] font-mono">→</kbd>
+                                        <span className="ml-1">Navigate</span>
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                        <kbd className="px-1.5 py-0.5 bg-background border rounded text-[10px] font-mono">F</kbd>
+                                        <span className="ml-1">Flag</span>
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                        <kbd className="px-1.5 py-0.5 bg-background border rounded text-[10px] font-mono">Esc</kbd>
+                                        <span className="ml-1">Close</span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </>
+                )}
 
                 {/* Questions */}
                 <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -1112,17 +1496,35 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
                                 .length + 1;
 
                             const hasAnswer = responses[item.question_id] !== undefined && responses[item.question_id] !== null && responses[item.question_id] !== '';
+                            const isFlagged = flaggedQuestions.has(item.question_id);
+                            const isActive = activeQuestionId === item.question_id;
 
                             return (
-                                <Card key={item.question_id} className={cn(
-                                    "shadow-md transition-all",
-                                    hasAnswer && "border-green-200 dark:border-green-900"
-                                )}>
-                                    <CardHeader>
+                                <Card
+                                    key={item.question_id}
+                                    ref={(el) => { questionRefs.current[item.question_id] = el; }}
+                                    className={cn(
+                                        "shadow-md transition-all duration-300 relative overflow-hidden",
+                                        hasAnswer && !isFlagged && "border-green-200 dark:border-green-900",
+                                        isFlagged && "border-orange-400 dark:border-orange-600 shadow-orange-100 dark:shadow-orange-900/20",
+                                        isActive && "ring-2 ring-primary ring-offset-2 scale-[1.01]"
+                                    )}
+                                >
+                                    {/* Flagged Ribbon */}
+                                    {isFlagged && (
+                                        <div className="absolute top-0 right-0 w-24 h-24 overflow-hidden pointer-events-none">
+                                            <div className="absolute top-3 -right-6 w-32 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs font-semibold py-1 text-center rotate-45 shadow-md">
+                                                Review
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <CardHeader className={cn(isFlagged && "bg-gradient-to-r from-orange-50/50 to-transparent dark:from-orange-950/20")}>
                                         <div className="flex items-start justify-between gap-4">
                                             <div className="flex-1">
-                                                <div className="flex items-center gap-2 mb-2">
-                                                    <Badge variant={hasAnswer ? "default" : "outline"}>
+                                                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                                    <Badge variant={hasAnswer ? "default" : "outline"} className="gap-1">
+                                                        {hasAnswer && <Check className="h-3 w-3" />}
                                                         Q{questionNumber}
                                                     </Badge>
                                                     {item.required && (
@@ -1136,6 +1538,31 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
                                                     </div>
                                                 </CardTitle>
                                             </div>
+                                            {/* Flag Button */}
+                                            <button
+                                                onClick={() => toggleFlag(item.question_id)}
+                                                className={cn(
+                                                    "shrink-0 group relative p-2 rounded-full transition-all duration-200",
+                                                    isFlagged
+                                                        ? "bg-orange-100 dark:bg-orange-900/50 hover:bg-orange-200 dark:hover:bg-orange-800/50"
+                                                        : "hover:bg-muted"
+                                                )}
+                                                title={isFlagged ? "Remove flag" : "Flag for review"}
+                                            >
+                                                <Flag
+                                                    className={cn(
+                                                        "h-5 w-5 transition-all duration-200",
+                                                        isFlagged
+                                                            ? "text-orange-500 fill-orange-500 scale-110"
+                                                            : "text-muted-foreground group-hover:text-orange-400 group-hover:scale-110"
+                                                    )}
+                                                />
+                                                {!isFlagged && (
+                                                    <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-xs bg-foreground text-background px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                                                        Flag for review
+                                                    </span>
+                                                )}
+                                            </button>
                                         </div>
                                     </CardHeader>
                                     <CardContent>
@@ -1209,25 +1636,105 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
 
             {/* Submit Confirmation Dialog */}
             <AlertDialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
-                <AlertDialogContent>
+                <AlertDialogContent className="max-w-md">
                     <AlertDialogHeader>
                         <AlertDialogTitle>Submit Exam?</AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                            <div className="space-y-4">
+                                {/* Progress Summary */}
+                                <div className="grid grid-cols-2 gap-3 p-3 bg-muted rounded-lg">
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-950 flex items-center justify-center">
+                                            <Check className="h-4 w-4 text-green-600" />
+                                        </div>
+                                        <div>
+                                            <div className="font-semibold text-foreground">{answeredQuestions}</div>
+                                            <div className="text-xs">Answered</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-8 w-8 rounded-full bg-muted-foreground/10 flex items-center justify-center">
+                                            <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                                        </div>
+                                        <div>
+                                            <div className="font-semibold text-foreground">{totalQuestions - answeredQuestions}</div>
+                                            <div className="text-xs">Unanswered</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Warnings */}
+                                {answeredQuestions < totalQuestions && (
+                                    <div className="flex items-start gap-2 p-3 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 rounded-lg">
+                                        <AlertTriangle className="h-4 w-4 text-orange-600 shrink-0 mt-0.5" />
+                                        <div className="text-sm text-orange-800 dark:text-orange-200">
+                                            You have <strong>{totalQuestions - answeredQuestions}</strong> unanswered question(s).
+                                            {examData?.items.filter(i =>
+                                                i.required &&
+                                                i.question_type !== 'section_header' &&
+                                                i.question_type !== 'page_break' &&
+                                                (responses[i.question_id] === undefined || responses[i.question_id] === null || responses[i.question_id] === '')
+                                            ).length > 0 && (
+                                                <span className="block mt-1 text-red-600">
+                                                    Some required questions are unanswered!
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {flaggedQuestions.size > 0 && (
+                                    <div className="flex items-start gap-2 p-3 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 rounded-lg">
+                                        <Flag className="h-4 w-4 text-orange-600 shrink-0 mt-0.5" />
+                                        <div className="text-sm text-orange-800 dark:text-orange-200">
+                                            You have <strong>{flaggedQuestions.size}</strong> flagged question(s) for review.
+                                            <button
+                                                className="block mt-1 text-primary hover:underline"
+                                                onClick={() => {
+                                                    setShowSubmitDialog(false);
+                                                    setShowNavigator(true);
+                                                }}
+                                            >
+                                                Review flagged questions →
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <p className="text-sm text-muted-foreground">
+                                    Once submitted, you cannot change your answers.
+                                </p>
+                            </div>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="gap-2 sm:gap-0">
+                        <AlertDialogCancel>Continue Exam</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => handleSubmit(false)}
+                            className="bg-primary"
+                        >
+                            <Send className="h-4 w-4 mr-2" />
+                            Submit Exam
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Fullscreen Required Dialog */}
+            <AlertDialog open={showFullscreenDialog} onOpenChange={setShowFullscreenDialog}>
+                <AlertDialogContent className="max-w-md">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2">
+                            <Maximize className="h-5 w-5" />
+                            Fullscreen Required
+                        </AlertDialogTitle>
                         <AlertDialogDescription>
-                            You have answered {answeredQuestions} out of {totalQuestions} questions.
-                            {answeredQuestions < totalQuestions && (
-                                <span className="block mt-2 text-orange-600">
-                                    Warning: You have {totalQuestions - answeredQuestions} unanswered questions.
-                                </span>
-                            )}
-                            <span className="block mt-2">
-                                Once submitted, you cannot change your answers.
-                            </span>
+                            This exam must be taken in fullscreen mode. Please click OK to continue.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel>Continue Exam</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => handleSubmit(false)}>
-                            Submit Exam
+                        <AlertDialogAction onClick={enterFullscreen}>
+                            OK
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

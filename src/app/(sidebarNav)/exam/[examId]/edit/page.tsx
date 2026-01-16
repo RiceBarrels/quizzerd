@@ -16,6 +16,7 @@ import ExamSettingsTab from '@/components/exam/ExamSettingsTab';
 import PublishExamDialog from '@/components/exam/PublishExamDialog';
 import CodeEditorModal from '@/components/exam/CodeEditorModal';
 import QuestionSidebar from '@/components/exam/QuestionSidebar';
+import AISidebar from '@/components/exam/AISidebar';
 import { useQuestionOperations } from '@/hooks/useQuestionOperations';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { useExamPublish } from '@/hooks/useExamPublish';
@@ -196,6 +197,11 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     setActiveTab('questions');
   }, []);
 
+  const addAIQuestions = useCallback((questions: ExamItem[]) => {
+    setItems(prevItems => [...prevItems, ...questions]);
+    setActiveTab('questions');
+  }, []);
+
   // Use auto-save hook (must be before updateQuestion that uses triggerSave)
   const { triggerSave: triggerAutoSave } = useAutoSave({
     dependencies: [
@@ -209,7 +215,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
   });
 
   // Use question operations hook
-  const questionOperations = useQuestionOperations(items, setItems);
+  const questionOperations = useQuestionOperations(items, setItems, examId);
   
   // Store triggerAutoSave in ref to avoid dependency issues
   const triggerAutoSaveRef = useRef(triggerAutoSave);
@@ -535,12 +541,128 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     };
 
     scrollContainer.addEventListener('scroll', handleScroll);
-    
+
     return () => {
       scrollContainer.removeEventListener('scroll', handleScroll);
       clearTimeout(scrollTimeout);
     };
   }, [activeTab]);
+
+  // Keyboard shortcuts for questions (Cmd/Ctrl + C, A, V, X)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle shortcuts when questions tab is active
+      if (activeTab !== 'questions') return;
+
+      // Check if user is typing in an input, textarea, or contenteditable
+      const target = e.target as HTMLElement;
+      const isEditing =
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable ||
+        target.closest('[contenteditable="true"]') ||
+        target.closest('.ProseMirror') ||
+        target.closest('.tiptap');
+
+      // Don't intercept if user is editing text
+      if (isEditing) return;
+
+      const isCmdOrCtrl = e.metaKey || e.ctrlKey;
+
+      if (isCmdOrCtrl && e.key.toLowerCase() === 'a') {
+        // Select all questions
+        e.preventDefault();
+        const allQuestionIds = new Set(items.map(item => item.question_id));
+        setSelectedQuestions(allQuestionIds);
+        toast.success(`Selected all ${items.length} questions`);
+      } else if (isCmdOrCtrl && e.key.toLowerCase() === 'c') {
+        // Copy selected questions
+        e.preventDefault();
+        if (selectedQuestions.size > 0) {
+          const selectedIndices = items
+            .map((item, index) => selectedQuestions.has(item.question_id) ? index : -1)
+            .filter(index => index !== -1);
+          questionOperations.copyQuestion(selectedIndices);
+          toast.success(`Copied ${selectedIndices.length} question${selectedIndices.length > 1 ? 's' : ''}`);
+        } else if (highlightedCard) {
+          const index = items.findIndex(item => item.question_id === highlightedCard);
+          if (index !== -1) {
+            questionOperations.copyQuestion(index);
+            toast.success('Copied question');
+          }
+        }
+      } else if (isCmdOrCtrl && e.key.toLowerCase() === 'x') {
+        // Cut selected questions
+        e.preventDefault();
+        if (selectedQuestions.size > 0) {
+          const selectedIndices = items
+            .map((item, index) => selectedQuestions.has(item.question_id) ? index : -1)
+            .filter(index => index !== -1);
+          questionOperations.cutQuestion(selectedIndices);
+          setSelectedQuestions(new Set());
+          toast.success(`Cut ${selectedIndices.length} question${selectedIndices.length > 1 ? 's' : ''}`);
+        } else if (highlightedCard) {
+          const index = items.findIndex(item => item.question_id === highlightedCard);
+          if (index !== -1) {
+            questionOperations.cutQuestion(index);
+            setHighlightedCard(null);
+            toast.success('Cut question');
+          }
+        }
+      } else if (isCmdOrCtrl && e.key.toLowerCase() === 'v') {
+        // Paste questions
+        e.preventDefault();
+        // Find the index to paste after (last selected or highlighted, or end of list)
+        let pasteAfterIndex = items.length - 1;
+        if (selectedQuestions.size > 0) {
+          const selectedIndices = items
+            .map((item, index) => selectedQuestions.has(item.question_id) ? index : -1)
+            .filter(index => index !== -1);
+          pasteAfterIndex = Math.max(...selectedIndices);
+        } else if (highlightedCard) {
+          const index = items.findIndex(item => item.question_id === highlightedCard);
+          if (index !== -1) pasteAfterIndex = index;
+        }
+        questionOperations.pasteQuestion(pasteAfterIndex);
+      } else if ((isCmdOrCtrl && (e.key === 'Backspace' || e.key === 'Delete')) || (e.key === 'Backspace' && !isCmdOrCtrl)) {
+        // Delete selected questions (Cmd/Ctrl + Backspace/Delete, or just Backspace when not editing)
+        e.preventDefault();
+        if (selectedQuestions.size > 0) {
+          const selectedIndices = items
+            .map((item, index) => selectedQuestions.has(item.question_id) ? index : -1)
+            .filter(index => index !== -1)
+            .sort((a, b) => b - a); // Sort descending to delete from end first
+          selectedIndices.forEach(index => questionOperations.removeQuestion(index));
+          setSelectedQuestions(new Set());
+          setHighlightedCard(null);
+          toast.success(`Deleted ${selectedIndices.length} question${selectedIndices.length > 1 ? 's' : ''}`);
+        } else if (highlightedCard) {
+          const index = items.findIndex(item => item.question_id === highlightedCard);
+          if (index !== -1) {
+            questionOperations.removeQuestion(index);
+            setHighlightedCard(null);
+            toast.success('Deleted question');
+          }
+        }
+      } else if (isCmdOrCtrl && (e.key.toLowerCase() === 'n' || e.key.toLowerCase() === 't')) {
+        // Create new question (Cmd/Ctrl + N or T)
+        e.preventDefault();
+        addNewQuestion();
+        toast.success('Added new question');
+      } else if (isCmdOrCtrl && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        // Undo (Cmd/Ctrl + Z)
+        e.preventDefault();
+        questionOperations.undo();
+      } else if ((isCmdOrCtrl && e.key.toLowerCase() === 'y') || (isCmdOrCtrl && e.shiftKey && e.key.toLowerCase() === 'z')) {
+        // Redo (Cmd/Ctrl + Y or Cmd/Ctrl + Shift + Z)
+        e.preventDefault();
+        questionOperations.redo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab, items, selectedQuestions, highlightedCard, questionOperations, addNewQuestion]);
 
 
   if (loading) {
@@ -601,8 +723,18 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
         onShuffleOptions={questionOperations.shuffleOptions}
         onClearOptions={questionOperations.clearOptions}
         onExportQuestion={questionOperations.exportQuestion}
+        onUndo={questionOperations.undo}
+        onRedo={questionOperations.redo}
+        canUndo={questionOperations.canUndo}
+        canRedo={questionOperations.canRedo}
         selectedQuestions={selectedQuestions}
         onQuestionSelect={handleQuestionSelect}
+      />
+
+      {/* AI Sidebar */}
+      <AISidebar
+        activeTab={activeTab}
+        onAddQuestions={addAIQuestions}
       />
 
       <Tabs value={activeTab} onValueChange={(value) => {
@@ -675,8 +807,13 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
               onShuffleOptions={questionOperations.shuffleOptions}
               onClearOptions={questionOperations.clearOptions}
               onExportQuestion={questionOperations.exportQuestion}
+              onUndo={questionOperations.undo}
+              onRedo={questionOperations.redo}
+              canUndo={questionOperations.canUndo}
+              canRedo={questionOperations.canRedo}
               onAddNewQuestion={addNewQuestion}
               onAddPageBreak={addPageBreak}
+              onAddAIQuestions={addAIQuestions}
               onReorderQuestions={questionOperations.reorderQuestions}
               onOpenCodeEditor={openCodeEditor}
               onScrollToQuestionRef={(scrollFn) => {

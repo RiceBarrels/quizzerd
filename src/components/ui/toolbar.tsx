@@ -31,7 +31,7 @@ export default function Toolbar(){
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
             setIsHoveringTrigger(true)
-            console.log("hovering trigger")
+            // console.log("hovering trigger")
             if (isToolbarHidden) {
                 // Show toolbar when mouse is near the top (within 10px)
                 if (e.clientY <= 10) {
@@ -93,7 +93,7 @@ export default function Toolbar(){
         >
           <div className="flex items-center p-2 pt-0 pl-6 gap-4">
 
-              <Link href="/class">
+              <Link href="/dashboard">
                 <Button variant="ghost" size="icon">
                   <HomeIcon/>
                 </Button>

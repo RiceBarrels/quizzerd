@@ -135,7 +135,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <ViewTransitions>
         <html lang="en" suppressHydrationWarning>
           <body
-            className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+            className={`${geistSans.variable} ${geistMono.variable} antialiased cursor-default `}
           >
 
             <ThemeProvider

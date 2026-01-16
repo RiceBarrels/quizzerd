@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Clock, Trash2, AlertTriangle } from 'lucide-react';
 import LocationPicker from '@/components/ui/location-picker';
+import { TemplateSelector, SaveAsTemplateButton } from '@/components/exam/TemplateSelector';
 
 interface LocationData {
   coordinates: string;
@@ -55,6 +56,17 @@ interface ExamSettingsTabProps {
   onLocationDetectionChange?: (value: boolean) => void;
   onLocationChange?: (value: LocationData) => void;
   onDeleteExam?: () => void;
+  onApplyTemplate?: (settings: {
+    duration_minutes: number;
+    attempts_allowed: number;
+    passing_score: number;
+    shuffle_items: boolean;
+    show_results_immediately: boolean;
+    console_detection: boolean;
+    translation_detection: boolean;
+    visibility_change_detection: boolean;
+    location_detection: boolean;
+  }) => void;
 }
 
 /**
@@ -116,18 +128,56 @@ export default function ExamSettingsTab({
   onVisibilityChangeDetectionChange,
   onLocationDetectionChange,
   onLocationChange,
-  onDeleteExam
+  onDeleteExam,
+  onApplyTemplate
 }: ExamSettingsTabProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  const currentSettings = {
+    duration_minutes: durationMinutes,
+    attempts_allowed: attemptsAllowed,
+    passing_score: passingScore,
+    shuffle_items: shuffleItems,
+    show_results_immediately: showResultsImmediately,
+    console_detection: consoleDetection,
+    translation_detection: translationDetection,
+    visibility_change_detection: visibilityChangeDetection,
+    location_detection: locationDetection,
+  };
+
+  const handleApplyTemplate = (settings: typeof currentSettings) => {
+    if (onApplyTemplate) {
+      onApplyTemplate(settings);
+    } else {
+      // Apply settings individually if no combined handler
+      onDurationChange(settings.duration_minutes);
+      onAttemptsChange(settings.attempts_allowed);
+      onPassingScoreChange(settings.passing_score);
+      onShuffleChange(settings.shuffle_items);
+      onShowResultsChange(settings.show_results_immediately);
+      onConsoleDetectionChange?.(settings.console_detection);
+      onTranslationDetectionChange?.(settings.translation_detection);
+      onVisibilityChangeDetectionChange?.(settings.visibility_change_detection);
+      onLocationDetectionChange?.(settings.location_detection);
+    }
+  };
 
   return (
     <>
       <Card className="overflow-auto">
         <CardHeader>
-          <CardTitle>Exam Settings</CardTitle>
-          <CardDescription>
-            Configure exam behavior and scoring
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Exam Settings</CardTitle>
+              <CardDescription>
+                Configure exam behavior and scoring
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <TemplateSelector onApply={handleApplyTemplate} />
+              <SaveAsTemplateButton currentSettings={currentSettings} />
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
         <div className="grid grid-cols-2 gap-4">

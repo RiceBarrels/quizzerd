@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseClient } from '@/lib/supabase';
+import { createSupabaseAdminClient } from '@/lib/supabase';
 import { auth } from '@clerk/nextjs/server';
 
 interface ExamItem {
@@ -115,7 +115,7 @@ export async function POST(request: Request) {
             );
         }
 
-        const supabase = await createSupabaseClient();
+        const supabase = createSupabaseAdminClient();
 
         // Get the attempt with exam data
         const { data: attempt, error: fetchError } = await supabase

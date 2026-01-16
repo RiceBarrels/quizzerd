@@ -32,7 +32,7 @@ export default async function Footer({ className }: { className?: string }) {
                             <li>
                                 <Link 
                                     href="/" 
-                                    className="flex items-center gap-2 hover:text-foreground transition-colors"
+                                    className="flex items-center gap-2 hover:text-foreground transition-colors cursor-pointer"
                                 >
                                     <HomeIcon className="h-4 w-4" />
                                     Home
@@ -41,7 +41,7 @@ export default async function Footer({ className }: { className?: string }) {
                             <li>
                                 <Link 
                                     href="/exam" 
-                                    className="flex items-center gap-2 hover:text-foreground transition-colors"
+                                    className="flex items-center gap-2 hover:text-foreground transition-colors cursor-pointer"
                                 >
                                     <ListTodoIcon className="h-4 w-4" />
                                     Exams
@@ -50,7 +50,7 @@ export default async function Footer({ className }: { className?: string }) {
                             <li>
                                 <Link 
                                     href="/calender" 
-                                    className="flex items-center gap-2 hover:text-foreground transition-colors"
+                                    className="flex items-center gap-2 hover:text-foreground transition-colors cursor-pointer"
                                 >
                                     <Calendar1Icon className="h-4 w-4" />
                                     Calendar
@@ -66,7 +66,7 @@ export default async function Footer({ className }: { className?: string }) {
                             <li>
                                 <Link 
                                     href="/about" 
-                                    className="hover:text-foreground transition-colors"
+                                    className="hover:text-foreground transition-colors cursor-pointer"
                                 >
                                     About Us
                                 </Link>
@@ -74,7 +74,7 @@ export default async function Footer({ className }: { className?: string }) {
                             <li>
                                 <Link 
                                     href="/help" 
-                                    className="hover:text-foreground transition-colors"
+                                    className="hover:text-foreground transition-colors cursor-pointer"
                                 >
                                     Help Center
                                 </Link>
@@ -82,7 +82,7 @@ export default async function Footer({ className }: { className?: string }) {
                             <li>
                                 <Link 
                                     href="/features" 
-                                    className="hover:text-foreground transition-colors"
+                                    className="hover:text-foreground transition-colors cursor-pointer"
                                 >
                                     Features
                                 </Link>
@@ -90,7 +90,7 @@ export default async function Footer({ className }: { className?: string }) {
                             <li>
                                 <Link 
                                     href="/contact" 
-                                    className="hover:text-foreground transition-colors"
+                                    className="hover:text-foreground transition-colors cursor-pointer"
                                 >
                                     Contact
                                 </Link>
@@ -105,7 +105,7 @@ export default async function Footer({ className }: { className?: string }) {
                             <li>
                                 <Link 
                                     href="/privacy" 
-                                    className="hover:text-foreground transition-colors"
+                                    className="hover:text-foreground transition-colors cursor-pointer"
                                 >
                                     Privacy Policy
                                 </Link>
@@ -113,7 +113,7 @@ export default async function Footer({ className }: { className?: string }) {
                             <li>
                                 <Link 
                                     href="/terms" 
-                                    className="hover:text-foreground transition-colors"
+                                    className="hover:text-foreground transition-colors cursor-pointer"
                                 >
                                     Terms of Service
                                 </Link>
@@ -121,7 +121,7 @@ export default async function Footer({ className }: { className?: string }) {
                             <li>
                                 <Link 
                                     href="/cookie-policy" 
-                                    className="hover:text-foreground transition-colors"
+                                    className="hover:text-foreground transition-colors cursor-pointer"
                                 >
                                     Cookie Policy
                                 </Link>
@@ -129,7 +129,7 @@ export default async function Footer({ className }: { className?: string }) {
                             <li>
                                 <Link 
                                     href="/site-map" 
-                                    className="hover:text-foreground transition-colors"
+                                    className="hover:text-foreground transition-colors cursor-pointer"
                                 >
                                     Sitemap
                                 </Link>

@@ -41,7 +41,12 @@ interface QuestionsTabProps {
   onShuffleOptions?: (index: number) => void;
   onClearOptions?: (index: number) => void;
   onExportQuestion?: (index: number) => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: () => boolean;
+  canRedo?: () => boolean;
   onAddNewQuestion: () => void;
+  onAddAIQuestions?: (questions: ExamItem[]) => void;
   onAddPageBreak: () => void;
   onReorderQuestions?: (items: ExamItem[]) => void;
   onOpenCodeEditor?: (questionIndex: number) => void;
@@ -108,7 +113,12 @@ export default function QuestionsTab({
   onShuffleOptions,
   onClearOptions,
   onExportQuestion,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
   onAddNewQuestion,
+  onAddAIQuestions,
   onAddPageBreak,
   onReorderQuestions,
   onOpenCodeEditor,
@@ -426,6 +436,10 @@ export default function QuestionsTab({
                       onShuffleOptions={onShuffleOptions}
                       onClearOptions={onClearOptions}
                       onExportQuestion={onExportQuestion}
+                      onUndo={onUndo}
+                      onRedo={onRedo}
+                      canUndo={canUndo}
+                      canRedo={canRedo}
                       onOpenCodeEditor={onOpenCodeEditor}
                       isScrollHighlighted={isScrollHighlighted}
                       isClickHighlighted={isClickHighlighted}
@@ -457,6 +471,9 @@ export default function QuestionsTab({
           </Button>
         </div>
       </div>
+
+      {/* Spacer for AI Sidebar */}
+      {onAddAIQuestions && <div className="w-72 shrink-0" />}
     </div>
   );
 }

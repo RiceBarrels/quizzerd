@@ -145,7 +145,7 @@ export default function PublishExamDialog({
             className="space-y-3"
           >
             {/* Google Classroom Option */}
-            <label
+            <Label
               htmlFor="classroom"
               className={`flex items-start space-x-4 p-5 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
                 publishType === 'classroom'
@@ -178,10 +178,10 @@ export default function PublishExamDialog({
                   Post this exam as an assignment to your Google Classroom course. Students will see it in their Classroom feed.
                 </p>
               </div>
-            </label>
+            </Label>
 
             {/* Public Option */}
-            <label
+            <Label
               htmlFor="public"
               className={`flex items-start space-x-4 p-5 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
                 publishType === 'public'
@@ -214,10 +214,10 @@ export default function PublishExamDialog({
                   Make this exam accessible to everyone. It will be discoverable in the public exams directory.
                 </p>
               </div>
-            </label>
+            </Label>
 
             {/* Private Link Option */}
-            <label
+            <Label
               htmlFor="link"
               className={`flex items-start space-x-4 p-5 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
                 publishType === 'link'
@@ -247,7 +247,7 @@ export default function PublishExamDialog({
                   Keep this exam private. Only those with the direct link can access it.
                 </p>
               </div>
-            </label>
+            </Label>
           </RadioGroup>
 
           {/* Google Classroom Course Selection */}

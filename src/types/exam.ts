@@ -47,6 +47,8 @@ export interface ExamItem {
   description?: string;
   // Internal tracking
   index?: number;
+  // Question tags (tag IDs)
+  tags?: string[];
 }
 
 export interface Exam {
@@ -67,6 +69,10 @@ export interface Exam {
   status: 'draft' | 'published';
   created_at?: string;
   updated_at?: string;
+  // Practice mode settings
+  is_practice_mode?: boolean;
+  show_explanations?: boolean;
+  allow_retry_questions?: boolean;
 }
 
 export interface QuestionTypeOption {

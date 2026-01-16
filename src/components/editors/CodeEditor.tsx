@@ -1,10 +1,10 @@
 import dynamic from 'next/dynamic';
-import { useState, useEffect, useRef, memo } from 'react';
+import { useState, useEffect, useRef, memo, useCallback } from 'react';
 import { formatHex, parse } from 'culori';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, X, FileCode } from 'lucide-react';
+import { Plus, X, FileCode, Play, Terminal, Loader2, Trash2, ChevronDown, ChevronUp, Eye } from 'lucide-react';
 import type * as Monaco from 'monaco-editor';
 
 const MonacoEditor = dynamic(
@@ -22,6 +22,14 @@ interface CodeEditorProps {
   onChange?: (files: CodeFile[]) => void;
   height?: string;
   width?: string;
+  showOutput?: boolean;
+  outputHeight?: string;
+}
+
+interface OutputLine {
+  type: 'log' | 'error' | 'warn' | 'info' | 'result';
+  content: string;
+  timestamp: Date;
 }
 
 type LanguageMap = Record<string, string>;
@@ -104,7 +112,9 @@ const CodeEditor = memo(function CodeEditor({
   files = [{ name: 'index.html', content: '<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>Document</title>\n</head>\n<body>\n    \n</body>\n</html>\n' }],
   onChange,
   height = '400px',
-  width = '100%'
+  width = '100%',
+  showOutput = true,
+  outputHeight = '200px'
 }: CodeEditorProps) {
   const [editorFiles, setEditorFiles] = useState<CodeFile[]>(files);
   const [activeFile, setActiveFile] = useState<string>(files[0]?.name || 'index.html');
@@ -118,6 +128,319 @@ const CodeEditor = memo(function CodeEditor({
   const modelsRef = useRef<Map<string, Monaco.editor.ITextModel>>(new Map());
   const isInitializedRef = useRef<boolean>(false);
   const lastSyncedFilesRef = useRef<string>('');
+
+  // Output panel state
+  const [outputLines, setOutputLines] = useState<OutputLine[]>([]);
+  const [isRunning, setIsRunning] = useState(false);
+  const [outputExpanded, setOutputExpanded] = useState(true);
+  const [outputTab, setOutputTab] = useState<'console' | 'preview'>('console');
+  const [previewHtml, setPreviewHtml] = useState<string>('');
+  const outputRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const pyodideRef = useRef<any>(null);
+  const pyodideLoadingRef = useRef<boolean>(false);
+
+  // Add output line helper
+  const addOutput = useCallback((type: OutputLine['type'], content: string) => {
+    setOutputLines(prev => [...prev, { type, content, timestamp: new Date() }]);
+  }, []);
+
+  // Clear output
+  const clearOutput = useCallback(() => {
+    setOutputLines([]);
+  }, []);
+
+  // Scroll output to bottom
+  useEffect(() => {
+    if (outputRef.current) {
+      outputRef.current.scrollTop = outputRef.current.scrollHeight;
+    }
+  }, [outputLines]);
+
+  // Load Pyodide for Python execution
+  const loadPyodide = useCallback(async () => {
+    if (pyodideRef.current) return pyodideRef.current;
+    if (pyodideLoadingRef.current) {
+      // Wait for existing load
+      while (pyodideLoadingRef.current && !pyodideRef.current) {
+        await new Promise(r => setTimeout(r, 100));
+      }
+      return pyodideRef.current;
+    }
+
+    pyodideLoadingRef.current = true;
+    addOutput('info', 'Loading Python runtime...');
+
+    try {
+      // Dynamically load Pyodide
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js';
+      document.head.appendChild(script);
+
+      await new Promise<void>((resolve, reject) => {
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load Pyodide'));
+      });
+
+      const pyodide = await (window as any).loadPyodide({
+        indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
+      });
+
+      pyodideRef.current = pyodide;
+      addOutput('info', 'Python runtime loaded successfully');
+      return pyodide;
+    } catch (error) {
+      addOutput('error', `Failed to load Python: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw error;
+    } finally {
+      pyodideLoadingRef.current = false;
+    }
+  }, [addOutput]);
+
+  // Run Python code
+  const runPython = useCallback(async (code: string) => {
+    try {
+      const pyodide = await loadPyodide();
+
+      // Capture stdout/stderr
+      await pyodide.runPythonAsync(`
+import sys
+from io import StringIO
+sys.stdout = StringIO()
+sys.stderr = StringIO()
+      `);
+
+      // Run the code
+      const result = await pyodide.runPythonAsync(code);
+
+      // Get captured output
+      const stdout = await pyodide.runPythonAsync('sys.stdout.getvalue()');
+      const stderr = await pyodide.runPythonAsync('sys.stderr.getvalue()');
+
+      if (stdout) {
+        stdout.split('\n').filter((line: string) => line).forEach((line: string) => {
+          addOutput('log', line);
+        });
+      }
+
+      if (stderr) {
+        stderr.split('\n').filter((line: string) => line).forEach((line: string) => {
+          addOutput('error', line);
+        });
+      }
+
+      if (result !== undefined && result !== null) {
+        addOutput('result', `→ ${result}`);
+      }
+
+      // Reset stdout/stderr
+      await pyodide.runPythonAsync(`
+sys.stdout = sys.__stdout__
+sys.stderr = sys.__stderr__
+      `);
+    } catch (error) {
+      addOutput('error', error instanceof Error ? error.message : String(error));
+    }
+  }, [loadPyodide, addOutput]);
+
+  // Run JavaScript code in sandboxed iframe
+  const runJavaScript = useCallback((code: string) => {
+    // Create a sandboxed iframe for execution
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.sandbox.add('allow-scripts');
+    document.body.appendChild(iframe);
+
+    const iframeWindow = iframe.contentWindow;
+    if (!iframeWindow) {
+      addOutput('error', 'Failed to create sandbox');
+      document.body.removeChild(iframe);
+      return;
+    }
+
+    // Override console methods
+    const script = `
+      const __output__ = [];
+      const originalConsole = { ...console };
+
+      console.log = (...args) => {
+        __output__.push({ type: 'log', content: args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ') });
+      };
+      console.error = (...args) => {
+        __output__.push({ type: 'error', content: args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ') });
+      };
+      console.warn = (...args) => {
+        __output__.push({ type: 'warn', content: args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ') });
+      };
+      console.info = (...args) => {
+        __output__.push({ type: 'info', content: args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ') });
+      };
+
+      try {
+        const __result__ = eval(${JSON.stringify(code)});
+        if (__result__ !== undefined) {
+          __output__.push({ type: 'result', content: '→ ' + (typeof __result__ === 'object' ? JSON.stringify(__result__, null, 2) : String(__result__)) });
+        }
+        window.parent.postMessage({ type: 'output', data: __output__ }, '*');
+      } catch (e) {
+        __output__.push({ type: 'error', content: e.message || String(e) });
+        window.parent.postMessage({ type: 'output', data: __output__ }, '*');
+      }
+    `;
+
+    // Listen for output
+    const handleMessage = (event: MessageEvent) => {
+      if (event.source === iframeWindow && event.data?.type === 'output') {
+        event.data.data.forEach((line: { type: OutputLine['type']; content: string }) => {
+          addOutput(line.type, line.content);
+        });
+        window.removeEventListener('message', handleMessage);
+        document.body.removeChild(iframe);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+
+    // Execute in iframe
+    const doc = iframe.contentDocument;
+    if (doc) {
+      doc.open();
+      doc.write(`<script>${script}<\/script>`);
+      doc.close();
+    }
+
+    // Timeout cleanup
+    setTimeout(() => {
+      window.removeEventListener('message', handleMessage);
+      if (iframe.parentNode) {
+        document.body.removeChild(iframe);
+      }
+    }, 5000);
+  }, [addOutput]);
+
+  // Run HTML/CSS/JS preview
+  const runHtmlPreview = useCallback((files: CodeFile[]) => {
+    const htmlFile = files.find(f => f.name.endsWith('.html'));
+    const cssFiles = files.filter(f => f.name.endsWith('.css'));
+    const jsFiles = files.filter(f => f.name.endsWith('.js') || f.name.endsWith('.ts'));
+
+    if (!htmlFile) {
+      addOutput('error', 'No HTML file found for preview');
+      return;
+    }
+
+    let html = htmlFile.content;
+
+    // Inject CSS
+    cssFiles.forEach(cssFile => {
+      const styleTag = `<style>/* ${cssFile.name} */\n${cssFile.content}</style>`;
+      if (html.includes('</head>')) {
+        html = html.replace('</head>', `${styleTag}\n</head>`);
+      } else {
+        html = styleTag + html;
+      }
+    });
+
+    // Inject JS with console capture
+    const consoleCapture = `
+      <script>
+        const __output__ = [];
+        console.log = (...args) => {
+          const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ');
+          __output__.push({ type: 'log', content: msg });
+          window.parent.postMessage({ type: 'console', data: { type: 'log', content: msg } }, '*');
+        };
+        console.error = (...args) => {
+          const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ');
+          __output__.push({ type: 'error', content: msg });
+          window.parent.postMessage({ type: 'console', data: { type: 'error', content: msg } }, '*');
+        };
+        console.warn = (...args) => {
+          const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ');
+          __output__.push({ type: 'warn', content: msg });
+          window.parent.postMessage({ type: 'console', data: { type: 'warn', content: msg } }, '*');
+        };
+        window.onerror = (msg, src, line, col, err) => {
+          window.parent.postMessage({ type: 'console', data: { type: 'error', content: msg + ' (line ' + line + ')' } }, '*');
+        };
+      <\/script>
+    `;
+
+    if (html.includes('<head>')) {
+      html = html.replace('<head>', `<head>${consoleCapture}`);
+    } else if (html.includes('<html>')) {
+      html = html.replace('<html>', `<html><head>${consoleCapture}</head>`);
+    } else {
+      html = consoleCapture + html;
+    }
+
+    // Inject JS files
+    jsFiles.forEach(jsFile => {
+      const scriptTag = `<script>/* ${jsFile.name} */\n${jsFile.content}<\/script>`;
+      if (html.includes('</body>')) {
+        html = html.replace('</body>', `${scriptTag}\n</body>`);
+      } else {
+        html = html + scriptTag;
+      }
+    });
+
+    // Set preview HTML and switch to preview tab
+    setPreviewHtml(html);
+    setOutputTab('preview');
+    addOutput('info', 'Preview rendered in iframe');
+  }, [addOutput]);
+
+  // Run code based on current language
+  const runCode = useCallback(async () => {
+    setIsRunning(true);
+    clearOutput();
+
+    const currentFile = editorFiles.find(f => f.name === activeFile);
+    if (!currentFile) {
+      addOutput('error', 'No file selected');
+      setIsRunning(false);
+      return;
+    }
+
+    const language = getLanguageFromFileName(activeFile);
+    addOutput('info', `Running ${activeFile}...`);
+
+    try {
+      switch (language) {
+        case 'python':
+          await runPython(currentFile.content);
+          break;
+
+        case 'javascript':
+        case 'typescript':
+          runJavaScript(currentFile.content);
+          break;
+
+        case 'html':
+          runHtmlPreview(editorFiles);
+          break;
+
+        default:
+          addOutput('warn', `Language "${language}" is not supported for execution. Supported: Python, JavaScript, HTML`);
+      }
+    } catch (error) {
+      addOutput('error', error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsRunning(false);
+    }
+  }, [editorFiles, activeFile, clearOutput, addOutput, runPython, runJavaScript, runHtmlPreview]);
+
+  // Listen for console messages from preview iframe
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'console') {
+        addOutput(event.data.data.type, event.data.data.content);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [addOutput]);
 
   // Sync external files prop with internal state only when files structurally change
   useEffect(() => {
@@ -1146,6 +1469,158 @@ const CodeEditor = memo(function CodeEditor({
           }}
         />
       </div>
+
+      {/* Output Panel */}
+      {showOutput && (
+        <div className="border-t border-border">
+          {/* Output Header */}
+          <div className="flex items-center justify-between px-3 py-2 bg-muted/50">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={() => setOutputExpanded(!outputExpanded)}
+              >
+                {outputExpanded ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronUp className="h-4 w-4" />
+                )}
+              </Button>
+              {/* Tab buttons */}
+              <div className="flex items-center gap-1 bg-muted rounded-md p-0.5">
+                <button
+                  onClick={() => setOutputTab('console')}
+                  className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
+                    outputTab === 'console'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Terminal className="h-3 w-3" />
+                  Console
+                </button>
+                <button
+                  onClick={() => setOutputTab('preview')}
+                  className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
+                    outputTab === 'preview'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Eye className="h-3 w-3" />
+                  Preview
+                </button>
+              </div>
+              {outputTab === 'console' && outputLines.length > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  ({outputLines.length} {outputLines.length === 1 ? 'line' : 'lines'})
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {outputTab === 'console' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={clearOutput}
+                  disabled={outputLines.length === 0}
+                >
+                  <Trash2 className="h-3 w-3 mr-1" />
+                  Clear
+                </Button>
+              )}
+              <Button
+                variant="default"
+                size="sm"
+                className="h-7 px-3 text-xs gap-1"
+                onClick={runCode}
+                disabled={isRunning}
+              >
+                {isRunning ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Running...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-3 w-3" />
+                    Run
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* Output Content */}
+          {outputExpanded && (
+            <>
+              {/* Console Tab */}
+              {outputTab === 'console' && (
+                <div
+                  ref={outputRef}
+                  className="font-mono text-xs overflow-y-auto bg-zinc-950 text-zinc-100"
+                  style={{ height: outputHeight }}
+                >
+                  {outputLines.length === 0 ? (
+                    <div className="flex items-center justify-center h-full text-zinc-500">
+                      Click &quot;Run&quot; to execute code and see output here
+                    </div>
+                  ) : (
+                    <div className="p-3 space-y-1">
+                      {outputLines.map((line, index) => (
+                        <div
+                          key={index}
+                          className={`flex items-start gap-2 ${
+                            line.type === 'error'
+                              ? 'text-red-400'
+                              : line.type === 'warn'
+                              ? 'text-yellow-400'
+                              : line.type === 'info'
+                              ? 'text-blue-400'
+                              : line.type === 'result'
+                              ? 'text-green-400'
+                              : 'text-zinc-100'
+                          }`}
+                        >
+                          <span className="text-zinc-600 select-none shrink-0">
+                            [{line.timestamp.toLocaleTimeString()}]
+                          </span>
+                          <span className="whitespace-pre-wrap break-all">{line.content}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Preview Tab */}
+              {outputTab === 'preview' && (
+                <div
+                  className="bg-white"
+                  style={{ height: outputHeight }}
+                >
+                  {previewHtml ? (
+                    <iframe
+                      ref={iframeRef}
+                      srcDoc={previewHtml}
+                      className="w-full h-full border-0"
+                      sandbox="allow-scripts allow-forms allow-modals"
+                      title="Preview"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                      Run an HTML file to see the preview here
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Footer */}
       <div className="border-t border-border bg-card p-2 px-4">

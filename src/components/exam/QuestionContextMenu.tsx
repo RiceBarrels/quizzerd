@@ -31,6 +31,8 @@ import {
   Shuffle,
   MousePointerClick,
   Trash2 as Trash2Icon,
+  Undo2,
+  Redo2,
   ListTodoIcon,
   ListChecksIcon,
   TextAlignStartIcon,
@@ -47,6 +49,7 @@ import {
   Minus,
 } from 'lucide-react';
 import { ExamItem, QuestionTypeOption } from '@/types/exam';
+import { Kbd } from '@/components/ui/kbd';
 
 const questionTypes: QuestionTypeOption[] = [
   { value: 'multiple_choice', label: 'Multiple Choice', icon: ListTodoIcon },
@@ -84,6 +87,10 @@ interface QuestionContextMenuProps {
   onShuffleOptions?: (index: number) => void;
   onClearOptions?: (index: number) => void;
   onExportQuestion?: (index: number) => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: () => boolean;
+  canRedo?: () => boolean;
   selectedIndices?: number[]; // Array of selected question indices (for multi-select operations)
   children: React.ReactNode;
 }
@@ -133,6 +140,10 @@ export default function QuestionContextMenu({
   onShuffleOptions,
   onClearOptions,
   onExportQuestion,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
   selectedIndices = [index], // Default to current index if not provided
   children,
 }: QuestionContextMenuProps) {
@@ -218,24 +229,36 @@ export default function QuestionContextMenu({
           <>
             {hasTextSelection && (
               <>
-                <ContextMenuItem onClick={handleCopyText}>
-                  <Clipboard className="mr-2 h-4 w-4" />
-                  <span>Copy</span>
+                <ContextMenuItem onClick={handleCopyText} className="flex items-center justify-between">
+                  <span className="flex items-center">
+                    <Clipboard className="mr-2 h-4 w-4" />
+                    Copy
+                  </span>
+                  <Kbd className="ml-auto">⌘C</Kbd>
                 </ContextMenuItem>
-                <ContextMenuItem onClick={handleCutText}>
-                  <Scissors className="mr-2 h-4 w-4" />
-                  <span>Cut</span>
+                <ContextMenuItem onClick={handleCutText} className="flex items-center justify-between">
+                  <span className="flex items-center">
+                    <Scissors className="mr-2 h-4 w-4" />
+                    Cut
+                  </span>
+                  <Kbd className="ml-auto">⌘X</Kbd>
                 </ContextMenuItem>
               </>
             )}
-            <ContextMenuItem onClick={handlePasteText}>
-              <ClipboardPaste className="mr-2 h-4 w-4" />
-              <span>Paste</span>
+            <ContextMenuItem onClick={handlePasteText} className="flex items-center justify-between">
+              <span className="flex items-center">
+                <ClipboardPaste className="mr-2 h-4 w-4" />
+                Paste
+              </span>
+              <Kbd className="ml-auto">⌘V</Kbd>
             </ContextMenuItem>
             <ContextMenuSeparator />
-            <ContextMenuItem onClick={handleSelectAll}>
-              <MousePointerClick className="mr-2 h-4 w-4" />
-              <span>Select All</span>
+            <ContextMenuItem onClick={handleSelectAll} className="flex items-center justify-between">
+              <span className="flex items-center">
+                <MousePointerClick className="mr-2 h-4 w-4" />
+                Select All
+              </span>
+              <Kbd className="ml-auto">⌘A</Kbd>
             </ContextMenuItem>
             {hasTextSelection && (
               <ContextMenuItem onClick={handleClearText}>
@@ -276,33 +299,78 @@ export default function QuestionContextMenu({
               </ContextMenuItem>
             )}
             {onCopyQuestion && (
-              <ContextMenuItem onClick={() => {
-                // Copy all selected questions, or just the current one
-                const indicesToCopy = selectedIndices.length > 1 ? selectedIndices : [index];
-                onCopyQuestion(indicesToCopy);
-              }}>
-                <ClipboardCopy className="mr-2 h-4 w-4" />
-                <span>Copy {selectedIndices.length > 1 ? `${selectedIndices.length} Questions` : 'Question'}</span>
+              <ContextMenuItem
+                onClick={() => {
+                  // Copy all selected questions, or just the current one
+                  const indicesToCopy = selectedIndices.length > 1 ? selectedIndices : [index];
+                  onCopyQuestion(indicesToCopy);
+                }}
+                className="flex items-center justify-between"
+              >
+                <span className="flex items-center">
+                  <ClipboardCopy className="mr-2 h-4 w-4" />
+                  Copy {selectedIndices.length > 1 ? `${selectedIndices.length} Questions` : 'Question'}
+                </span>
+                <Kbd className="ml-auto">⌘C</Kbd>
               </ContextMenuItem>
             )}
             {onCutQuestion && (
-              <ContextMenuItem onClick={() => {
-                // Cut all selected questions, or just the current one
-                const indicesToCut = selectedIndices.length > 1 ? selectedIndices : [index];
-                onCutQuestion(indicesToCut);
-              }}>
-                <Scissors className="mr-2 h-4 w-4" />
-                <span>Cut {selectedIndices.length > 1 ? `${selectedIndices.length} Questions` : 'Question'}</span>
+              <ContextMenuItem
+                onClick={() => {
+                  // Cut all selected questions, or just the current one
+                  const indicesToCut = selectedIndices.length > 1 ? selectedIndices : [index];
+                  onCutQuestion(indicesToCut);
+                }}
+                className="flex items-center justify-between"
+              >
+                <span className="flex items-center">
+                  <Scissors className="mr-2 h-4 w-4" />
+                  Cut {selectedIndices.length > 1 ? `${selectedIndices.length} Questions` : 'Question'}
+                </span>
+                <Kbd className="ml-auto">⌘X</Kbd>
               </ContextMenuItem>
             )}
             {onPasteQuestion && (
-              <ContextMenuItem onClick={() => onPasteQuestion(index)}>
-                <ClipboardPaste className="mr-2 h-4 w-4" />
-                <span>Paste Question</span>
+              <ContextMenuItem onClick={() => onPasteQuestion(index)} className="flex items-center justify-between">
+                <span className="flex items-center">
+                  <ClipboardPaste className="mr-2 h-4 w-4" />
+                  Paste Question
+                </span>
+                <Kbd className="ml-auto">⌘V</Kbd>
               </ContextMenuItem>
             )}
-            
+
             {(onDuplicateQuestion || onCopyQuestion || onCutQuestion || onPasteQuestion) && <ContextMenuSeparator />}
+
+            {/* Undo/Redo Actions */}
+            {onUndo && (
+              <ContextMenuItem
+                onClick={onUndo}
+                disabled={canUndo ? !canUndo() : false}
+                className="flex items-center justify-between"
+              >
+                <span className="flex items-center">
+                  <Undo2 className="mr-2 h-4 w-4" />
+                  Undo
+                </span>
+                <Kbd className="ml-auto">⌘Z</Kbd>
+              </ContextMenuItem>
+            )}
+            {onRedo && (
+              <ContextMenuItem
+                onClick={onRedo}
+                disabled={canRedo ? !canRedo() : false}
+                className="flex items-center justify-between"
+              >
+                <span className="flex items-center">
+                  <Redo2 className="mr-2 h-4 w-4" />
+                  Redo
+                </span>
+                <Kbd className="ml-auto">⇧⌘Z</Kbd>
+              </ContextMenuItem>
+            )}
+
+            {(onUndo || onRedo) && <ContextMenuSeparator />}
 
             {/* Move Actions */}
             {onMoveUp && index > 0 && (
@@ -420,7 +488,7 @@ export default function QuestionContextMenu({
             <ContextMenuSeparator />
 
             {/* Delete Action */}
-            <ContextMenuItem 
+            <ContextMenuItem
               variant="destructive"
               onClick={() => {
                 // Delete all selected questions, or just the current one
@@ -429,9 +497,13 @@ export default function QuestionContextMenu({
                 indicesToDelete.sort((a, b) => b - a).forEach(idx => onRemoveQuestion(idx));
                 toast.success(`${indicesToDelete.length} question${indicesToDelete.length === 1 ? '' : 's'} deleted`);
               }}
+              className="flex items-center justify-between"
             >
-              <Trash2Icon className="mr-2 h-4 w-4" />
-              <span>Delete {selectedIndices.length > 1 ? `${selectedIndices.length} Questions` : 'Question'}</span>
+              <span className="flex items-center">
+                <Trash2Icon className="mr-2 h-4 w-4" />
+                Delete {selectedIndices.length > 1 ? `${selectedIndices.length} Questions` : 'Question'}
+              </span>
+              <Kbd className="ml-auto">⌫</Kbd>
             </ContextMenuItem>
           </>
         )}

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseClient } from '@/lib/supabase';
-import { auth } from '@clerk/nextjs/server';
+import { createSupabaseAdminClient } from '@/lib/supabase';
+import { auth, currentUser } from '@clerk/nextjs/server';
 
 export async function POST(request: Request) {
     try {
@@ -8,7 +8,7 @@ export async function POST(request: Request) {
         const body = await request.json();
         const { examId, userId, sessionId } = body;
 
-        const supabase = await createSupabaseClient();
+        const supabase = createSupabaseAdminClient();
 
         // Verify user is authenticated
         if (!authUserId || authUserId !== userId) {
@@ -112,23 +112,33 @@ export async function POST(request: Request) {
         }
 
         // Check email whitelist if allowed_emails is set
-        if (allowedEmails && allowedEmails.length > 0) {
-            // Get user's email from the user table
-            const { data: userData, error: userError } = await supabase
-                .from('user')
-                .select('email')
-                .eq('user_id', userId)
-                .single();
+        // Parse allowed_emails - handle both string (JSON) and array formats
+        let parsedAllowedEmails: string[] = [];
+        if (allowedEmails) {
+            if (typeof allowedEmails === 'string') {
+                try {
+                    parsedAllowedEmails = JSON.parse(allowedEmails);
+                } catch {
+                    parsedAllowedEmails = [];
+                }
+            } else if (Array.isArray(allowedEmails)) {
+                parsedAllowedEmails = allowedEmails;
+            }
+        }
 
-            if (userError || !userData?.email) {
+        if (parsedAllowedEmails.length > 0) {
+            // Get user's email from Clerk
+            const user = await currentUser();
+            const userEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase();
+
+            if (!userEmail) {
                 return NextResponse.json(
                     { success: false, error: 'Could not verify your email address. Please update your profile.' },
                     { status: 403 }
                 );
             }
 
-            const userEmail = userData.email.toLowerCase();
-            const isAllowed = allowedEmails.some(
+            const isAllowed = parsedAllowedEmails.some(
                 (email: string) => email.toLowerCase() === userEmail
             );
 

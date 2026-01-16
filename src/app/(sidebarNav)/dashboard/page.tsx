@@ -6,27 +6,49 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SimpleBarChart, StatRing } from "@/components/ui/simple-bar-chart";
 import {
   FileText,
   Plus,
   Users,
-  Clock,
   TrendingUp,
-  Calendar,
   ArrowRight,
   BookOpen,
   BarChart3,
   GraduationCap,
-  ExternalLink
+  ExternalLink,
+  CheckCircle,
+  Target
 } from "lucide-react";
 import Link from "next/link";
 import { useTransitionRouter } from "next-view-transitions";
 
 interface DashboardStats {
-  totalExams: number;
-  publishedExams: number;
-  totalSessions: number;
-  totalAttempts: number;
+  exams: {
+    total: number;
+    published: number;
+    draft: number;
+  };
+  sessions: {
+    total: number;
+    active: number;
+  };
+  attempts: {
+    total: number;
+    completed: number;
+    completionRate: number;
+  };
+  students: {
+    total: number;
+  };
+  performance: {
+    averageScore: number;
+  };
+  chartData: {
+    date: string;
+    label: string;
+    attempts: number;
+  }[];
 }
 
 interface RecentExam {
@@ -68,21 +90,23 @@ export default function DashboardPage() {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      // Fetch recent exams
-      const examsResponse = await fetch('/api/exams/get?type=my-exams&limit=5');
-      const examsData = await examsResponse.json();
+      // Fetch stats and recent exams in parallel
+      const [statsResponse, examsResponse] = await Promise.all([
+        fetch('/api/dashboard/stats'),
+        fetch('/api/exams/get?type=my-exams&limit=5')
+      ]);
+
+      const [statsData, examsData] = await Promise.all([
+        statsResponse.json(),
+        examsResponse.json()
+      ]);
+
+      if (statsData.success) {
+        setStats(statsData.data);
+      }
 
       if (examsData.success) {
         setRecentExams(examsData.data || []);
-
-        // Calculate stats from the response
-        const allExams = examsData.data || [];
-        setStats({
-          totalExams: examsData.pagination?.total || allExams.length,
-          publishedExams: allExams.filter((e: any) => e.status === 'published').length,
-          totalSessions: 0, // Will be updated if we have session data
-          totalAttempts: 0
-        });
       }
     } catch (error) {
       console.error("Failed to fetch dashboard data:", error);
@@ -165,23 +189,12 @@ export default function DashboardPage() {
             {loading ? (
               <Skeleton className="h-8 w-16" />
             ) : (
-              <div className="text-2xl font-bold">{stats?.totalExams || 0}</div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Published
-            </CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-8 w-16" />
-            ) : (
-              <div className="text-2xl font-bold">{stats?.publishedExams || 0}</div>
+              <>
+                <div className="text-2xl font-bold">{stats?.exams.total || 0}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {stats?.exams.published || 0} published, {stats?.exams.draft || 0} drafts
+                </p>
+              </>
             )}
           </CardContent>
         </Card>
@@ -197,7 +210,33 @@ export default function DashboardPage() {
             {loading ? (
               <Skeleton className="h-8 w-16" />
             ) : (
-              <div className="text-2xl font-bold">{stats?.totalSessions || 0}</div>
+              <>
+                <div className="text-2xl font-bold">{stats?.sessions.active || 0}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {stats?.sessions.total || 0} total sessions
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Students
+            </CardTitle>
+            <GraduationCap className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold">{stats?.students.total || 0}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Across all sessions
+                </p>
+              </>
             )}
           </CardContent>
         </Card>
@@ -213,11 +252,62 @@ export default function DashboardPage() {
             {loading ? (
               <Skeleton className="h-8 w-16" />
             ) : (
-              <div className="text-2xl font-bold">{stats?.totalAttempts || 0}</div>
+              <>
+                <div className="text-2xl font-bold">{stats?.attempts.total || 0}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {stats?.attempts.completed || 0} completed
+                </p>
+              </>
             )}
           </CardContent>
         </Card>
       </div>
+
+      {/* Performance Charts */}
+      {!loading && stats && (stats.attempts.total > 0 || stats.chartData?.some(d => d.attempts > 0)) && (
+        <div className="grid gap-6 lg:grid-cols-3">
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-lg">Attempt Activity</CardTitle>
+              <CardDescription>Student attempts over the last 7 days</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {stats.chartData && stats.chartData.length > 0 ? (
+                <SimpleBarChart
+                  data={stats.chartData.map(d => ({
+                    label: d.label,
+                    value: d.attempts
+                  }))}
+                  height={140}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-[140px] text-muted-foreground">
+                  No activity data yet
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Performance</CardTitle>
+              <CardDescription>Overall student metrics</CardDescription>
+            </CardHeader>
+            <CardContent className="flex items-center justify-around pt-4">
+              <StatRing
+                value={stats.attempts.completionRate}
+                label="Completion"
+                size={90}
+              />
+              <StatRing
+                value={stats.performance.averageScore}
+                label="Avg Score"
+                size={90}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Main Content Grid */}
       <div className="grid gap-6 lg:grid-cols-2">

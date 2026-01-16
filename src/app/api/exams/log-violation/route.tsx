@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseClient } from '@/lib/supabase';
+import { createSupabaseAdminClient } from '@/lib/supabase';
 import { auth } from '@clerk/nextjs/server';
 
 export async function POST(request: Request) {
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = await createSupabaseClient();
+    const supabase = createSupabaseAdminClient();
 
     // Verify the exam exists
     const { data: exam, error: examError } = await supabase
@@ -146,7 +146,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const supabase = await createSupabaseClient();
+    const supabase = createSupabaseAdminClient();
 
     let query = supabase
       .from('exam_violations')

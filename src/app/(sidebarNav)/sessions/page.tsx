@@ -26,6 +26,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -43,11 +44,14 @@ import {
   FileText,
   CheckCircle,
   XCircle,
-  Archive
+  Archive,
+  Upload,
+  Download
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTransitionRouter } from "next-view-transitions";
 import Link from "next/link";
+import { BatchStudentImport } from "@/components/batch-student-import";
 
 interface Session {
   session_id: string;
@@ -339,6 +343,26 @@ export default function SessionsPage() {
                                 <Copy className="h-4 w-4 mr-2" />
                                 Copy Link
                               </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <BatchStudentImport
+                                sessionId={session.session_id}
+                                onImportComplete={() => fetchSessions()}
+                                trigger={
+                                  <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                    <Upload className="h-4 w-4 mr-2" />
+                                    Import Students
+                                  </DropdownMenuItem>
+                                }
+                              />
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  window.open(`/api/exams/sessions/${session.session_id}/import-students`, '_blank');
+                                }}
+                              >
+                                <Download className="h-4 w-4 mr-2" />
+                                Export Students
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => router.push(`/exam/${session.exam_id}/analytics`)}>
                                 <FileText className="h-4 w-4 mr-2" />
                                 View Analytics

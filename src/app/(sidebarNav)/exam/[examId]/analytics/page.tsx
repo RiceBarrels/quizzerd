@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
+import { SimpleBarChart } from '@/components/ui/simple-bar-chart';
 import {
     Table,
     TableBody,
@@ -19,7 +20,7 @@ import {
 import {
     Loader2, ArrowLeft, Users, Trophy, Clock, BarChart3,
     CheckCircle2, XCircle, AlertTriangle, TrendingUp, TrendingDown,
-    Eye, Download, RefreshCw
+    Eye, Download, RefreshCw, AlertCircle, HelpCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -28,51 +29,67 @@ interface PageParams {
     examId: string;
 }
 
-interface ExamData {
-    exam_id: string;
-    exam_name: string;
-    creator_id: string;
-    total_points: number;
-    passing_score: number;
-    items: any[];
-}
-
-interface AttemptData {
-    attempt_id: string;
-    student_id: string;
-    attempt_number: number;
-    status: string;
-    score: number | null;
-    percentage: number | null;
-    passed: boolean | null;
-    time_spent_seconds: number | null;
-    start_time: string;
-    end_time: string | null;
-    submitted_at: string | null;
-    responses: Record<string, any>;
-    graded_at: string | null;
-    created_at: string;
-}
-
-interface ViolationData {
-    violation_id: string;
-    student_id: string;
-    attempt_id: string;
-    violation_type: string;
-    timestamp: string;
-    details: Record<string, any>;
-}
-
-interface QuestionStats {
-    question_id: string;
-    question_text: string;
-    question_type: string;
-    points: number;
-    correct_count: number;
-    incorrect_count: number;
-    unanswered_count: number;
-    total_attempts: number;
-    success_rate: number;
+interface AnalyticsData {
+    exam: {
+        examId: string;
+        examName: string;
+        totalPoints: number;
+        passingScore: number;
+        questionCount: number;
+    };
+    overview: {
+        totalAttempts: number;
+        submittedCount: number;
+        gradedCount: number;
+        inProgressCount: number;
+        averageScore: number;
+        passRate: number;
+        averageTimeSeconds: number;
+        uniqueStudents: number;
+    };
+    scoreDistribution: { range: string; count: number }[];
+    questionStats: {
+        questionNumber: number;
+        questionId: string;
+        questionText: string;
+        questionType: string;
+        points: number;
+        stats: {
+            correct: number;
+            incorrect: number;
+            partialCredit: number;
+            unanswered: number;
+            total: number;
+            successRate: number;
+            difficulty: 'easy' | 'medium' | 'hard';
+        };
+    }[];
+    problematicQuestions: any[];
+    violations: {
+        total: number;
+        byType: Record<string, number>;
+        studentsWithViolations: number;
+    };
+    sessions: {
+        sessionId: string;
+        courseName: string;
+        studentCount: number;
+        status: string;
+        attemptCount: number;
+    }[];
+    activityChart: { date: string; label: string; attempts: number }[];
+    attempts: {
+        attemptId: string;
+        studentId: string;
+        attemptNumber: number;
+        status: string;
+        score: number | null;
+        percentage: number | null;
+        passed: boolean | null;
+        timeSpentSeconds: number | null;
+        submittedAt: string | null;
+        violationCount: number;
+    }[];
 }
 
 export default function ExamAnalyticsPage({ params }: { params: Promise<PageParams> }) {
@@ -81,9 +98,7 @@ export default function ExamAnalyticsPage({ params }: { params: Promise<PagePara
     const { examId } = use(params);
 
     const [loading, setLoading] = useState(true);
-    const [examData, setExamData] = useState<ExamData | null>(null);
-    const [attempts, setAttempts] = useState<AttemptData[]>([]);
-    const [violations, setViolations] = useState<ViolationData[]>([]);
+    const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
     const [refreshing, setRefreshing] = useState(false);
 
     useEffect(() => {
@@ -94,39 +109,20 @@ export default function ExamAnalyticsPage({ params }: { params: Promise<PagePara
 
     const fetchData = async () => {
         try {
-            // Fetch exam data
-            const examRes = await fetch(`/api/exams/get?examId=${examId}`);
-            const examResult = await examRes.json();
+            const response = await fetch(`/api/exams/${examId}/analytics`);
+            const result = await response.json();
 
-            if (!examResult.success) {
-                toast.error('Failed to load exam');
+            if (!result.success) {
+                if (response.status === 403) {
+                    toast.error('You do not have permission to view analytics');
+                } else {
+                    toast.error(result.error || 'Failed to load analytics');
+                }
                 router.push('/exam');
                 return;
             }
 
-            // Check if user is the creator
-            if (examResult.data.creator_id !== user?.id) {
-                toast.error('You do not have permission to view analytics');
-                router.push('/exam');
-                return;
-            }
-
-            setExamData(examResult.data);
-
-            // Fetch attempts
-            const attemptsRes = await fetch(`/api/exams/attempts/list?examId=${examId}`);
-            const attemptsResult = await attemptsRes.json();
-            if (attemptsResult.success) {
-                setAttempts(attemptsResult.attempts || []);
-            }
-
-            // Fetch violations
-            const violationsRes = await fetch(`/api/exams/log-violation?examId=${examId}`);
-            const violationsResult = await violationsRes.json();
-            if (violationsResult.success) {
-                setViolations(violationsResult.data || []);
-            }
-
+            setAnalyticsData(result.data);
         } catch (error) {
             console.error('Error fetching analytics:', error);
             toast.error('Failed to load analytics');
@@ -141,68 +137,6 @@ export default function ExamAnalyticsPage({ params }: { params: Promise<PagePara
         fetchData();
     };
 
-    // Calculate statistics
-    const submittedAttempts = attempts.filter(a => a.status === 'submitted' || a.status === 'graded');
-    const gradedAttempts = attempts.filter(a => a.status === 'graded' && a.score !== null);
-
-    const totalSubmissions = submittedAttempts.length;
-    const averageScore = gradedAttempts.length > 0
-        ? gradedAttempts.reduce((sum, a) => sum + (a.percentage || 0), 0) / gradedAttempts.length
-        : 0;
-    const passRate = gradedAttempts.length > 0
-        ? (gradedAttempts.filter(a => a.passed).length / gradedAttempts.length) * 100
-        : 0;
-    const averageTime = submittedAttempts.length > 0
-        ? submittedAttempts.reduce((sum, a) => sum + (a.time_spent_seconds || 0), 0) / submittedAttempts.length
-        : 0;
-
-    // Calculate question statistics
-    const questionStats: QuestionStats[] = examData?.items
-        .filter(item => item.question_type !== 'section_header' && item.question_type !== 'page_break')
-        .map(item => {
-            const responses = submittedAttempts.map(a => a.responses?.[item.question_id]);
-            const answered = responses.filter(r => r !== undefined && r !== null && r !== '').length;
-            const unanswered = responses.length - answered;
-
-            // Calculate correct answers for auto-gradable types
-            let correct = 0;
-            let incorrect = 0;
-
-            if (['multiple_choice', 'true_false', 'dropdown'].includes(item.question_type) && item.correct_answer !== undefined) {
-                responses.forEach(r => {
-                    if (r === item.correct_answer) correct++;
-                    else if (r !== undefined && r !== null && r !== '') incorrect++;
-                });
-            } else if (item.question_type === 'multiple_select' && Array.isArray(item.correct_answer)) {
-                responses.forEach(r => {
-                    if (Array.isArray(r)) {
-                        const correctSet = new Set(item.correct_answer);
-                        const responseSet = new Set(r);
-                        if (correctSet.size === responseSet.size && [...correctSet].every(v => responseSet.has(v))) {
-                            correct++;
-                        } else if (r.length > 0) {
-                            incorrect++;
-                        }
-                    }
-                });
-            } else {
-                // For non-auto-gradable, just count as answered
-                correct = answered;
-            }
-
-            return {
-                question_id: item.question_id,
-                question_text: item.question_text,
-                question_type: item.question_type,
-                points: item.points,
-                correct_count: correct,
-                incorrect_count: incorrect,
-                unanswered_count: unanswered,
-                total_attempts: submittedAttempts.length,
-                success_rate: submittedAttempts.length > 0 ? (correct / submittedAttempts.length) * 100 : 0
-            };
-        }) || [];
-
     const formatTime = (seconds: number): string => {
         const mins = Math.floor(seconds / 60);
         const secs = Math.floor(seconds % 60);
@@ -214,9 +148,21 @@ export default function ExamAnalyticsPage({ params }: { params: Promise<PagePara
     };
 
     const stripHtml = (html: string): string => {
+        if (typeof window === 'undefined') return html;
         const tmp = document.createElement('div');
         tmp.innerHTML = html;
         return tmp.textContent || tmp.innerText || '';
+    };
+
+    const getDifficultyBadge = (difficulty: 'easy' | 'medium' | 'hard') => {
+        switch (difficulty) {
+            case 'easy':
+                return <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Easy</Badge>;
+            case 'medium':
+                return <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20">Medium</Badge>;
+            case 'hard':
+                return <Badge className="bg-red-500/10 text-red-600 border-red-500/20">Hard</Badge>;
+        }
     };
 
     if (loading || !isLoaded) {
@@ -227,7 +173,7 @@ export default function ExamAnalyticsPage({ params }: { params: Promise<PagePara
         );
     }
 
-    if (!examData) {
+    if (!analyticsData) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen gap-4">
                 <h1 className="text-2xl font-bold">Exam Not Found</h1>
@@ -235,6 +181,8 @@ export default function ExamAnalyticsPage({ params }: { params: Promise<PagePara
             </div>
         );
     }
+
+    const { exam, overview, scoreDistribution, questionStats, problematicQuestions, violations, sessions, activityChart, attempts } = analyticsData;
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/20">
@@ -252,7 +200,7 @@ export default function ExamAnalyticsPage({ params }: { params: Promise<PagePara
                                 Back to Editor
                             </Button>
                             <Separator orientation="vertical" className="h-6" />
-                            <h1 className="font-semibold text-lg">{examData.exam_name}</h1>
+                            <h1 className="font-semibold text-lg">{exam.examName}</h1>
                             <Badge variant="secondary">Analytics</Badge>
                         </div>
                         <Button
@@ -277,9 +225,9 @@ export default function ExamAnalyticsPage({ params }: { params: Promise<PagePara
                             <Users className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{totalSubmissions}</div>
+                            <div className="text-2xl font-bold">{overview.submittedCount}</div>
                             <p className="text-xs text-muted-foreground">
-                                {attempts.filter(a => a.status === 'in_progress').length} in progress
+                                {overview.inProgressCount} in progress
                             </p>
                         </CardContent>
                     </Card>
@@ -290,9 +238,9 @@ export default function ExamAnalyticsPage({ params }: { params: Promise<PagePara
                             <BarChart3 className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{averageScore.toFixed(1)}%</div>
+                            <div className="text-2xl font-bold">{overview.averageScore}%</div>
                             <p className="text-xs text-muted-foreground">
-                                of {examData.total_points} total points
+                                of {exam.totalPoints} total points
                             </p>
                         </CardContent>
                     </Card>
@@ -303,9 +251,9 @@ export default function ExamAnalyticsPage({ params }: { params: Promise<PagePara
                             <Trophy className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{passRate.toFixed(1)}%</div>
+                            <div className="text-2xl font-bold">{overview.passRate}%</div>
                             <p className="text-xs text-muted-foreground">
-                                {gradedAttempts.filter(a => a.passed).length} of {gradedAttempts.length} passed
+                                {overview.uniqueStudents} unique students
                             </p>
                         </CardContent>
                     </Card>
@@ -316,7 +264,7 @@ export default function ExamAnalyticsPage({ params }: { params: Promise<PagePara
                             <Clock className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{formatTime(averageTime)}</div>
+                            <div className="text-2xl font-bold">{formatTime(overview.averageTimeSeconds)}</div>
                             <p className="text-xs text-muted-foreground">
                                 average completion time
                             </p>
@@ -324,8 +272,77 @@ export default function ExamAnalyticsPage({ params }: { params: Promise<PagePara
                     </Card>
                 </div>
 
+                {/* Charts Row */}
+                {(overview.submittedCount > 0 || activityChart.some(d => d.attempts > 0)) && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                        {/* Score Distribution */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-lg">Score Distribution</CardTitle>
+                                <CardDescription>How students scored on this exam</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <SimpleBarChart
+                                    data={scoreDistribution.map(d => ({
+                                        label: d.range.split('-')[0],
+                                        value: d.count
+                                    }))}
+                                    height={160}
+                                />
+                            </CardContent>
+                        </Card>
+
+                        {/* Activity Chart */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-lg">Recent Activity</CardTitle>
+                                <CardDescription>Attempts over the last 7 days</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <SimpleBarChart
+                                    data={activityChart.map(d => ({
+                                        label: d.label,
+                                        value: d.attempts
+                                    }))}
+                                    height={160}
+                                />
+                            </CardContent>
+                        </Card>
+                    </div>
+                )}
+
+                {/* Problematic Questions Alert */}
+                {problematicQuestions.length > 0 && (
+                    <Card className="mb-8 border-yellow-200 dark:border-yellow-900 bg-yellow-50 dark:bg-yellow-950/20">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
+                                <HelpCircle className="h-5 w-5" />
+                                Questions Needing Attention
+                            </CardTitle>
+                            <CardDescription>
+                                These questions have low success rates and may need review
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-2">
+                                {problematicQuestions.map((q: any) => (
+                                    <div key={q.questionId} className="flex items-center justify-between p-2 rounded-lg bg-yellow-100/50 dark:bg-yellow-900/20">
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant="outline">Q{q.questionNumber}</Badge>
+                                            <span className="text-sm truncate max-w-xs">
+                                                {stripHtml(q.questionText).slice(0, 40)}...
+                                            </span>
+                                        </div>
+                                        <Badge variant="destructive">{q.stats.successRate}% success</Badge>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
                 {/* Violations Alert */}
-                {violations.length > 0 && (
+                {violations.total > 0 && (
                     <Card className="mb-8 border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/20">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
@@ -333,13 +350,12 @@ export default function ExamAnalyticsPage({ params }: { params: Promise<PagePara
                                 Cheating Violations Detected
                             </CardTitle>
                             <CardDescription>
-                                {violations.length} violation(s) detected across all attempts
+                                {violations.total} violation(s) from {violations.studentsWithViolations} student(s)
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
                             <div className="flex flex-wrap gap-2">
-                                {['console', 'visibility', 'translation', 'location'].map(type => {
-                                    const count = violations.filter(v => v.violation_type === type).length;
+                                {Object.entries(violations.byType).map(([type, count]) => {
                                     if (count === 0) return null;
                                     return (
                                         <Badge key={type} variant="outline" className="bg-orange-100 dark:bg-orange-900/30">
@@ -361,7 +377,7 @@ export default function ExamAnalyticsPage({ params }: { params: Promise<PagePara
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {submittedAttempts.length === 0 ? (
+                        {attempts.length === 0 ? (
                             <div className="text-center py-8 text-muted-foreground">
                                 No submissions yet
                             </div>
@@ -379,62 +395,59 @@ export default function ExamAnalyticsPage({ params }: { params: Promise<PagePara
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {submittedAttempts.map(attempt => {
-                                        const attemptViolations = violations.filter(v => v.attempt_id === attempt.attempt_id);
-                                        return (
-                                            <TableRow key={attempt.attempt_id}>
-                                                <TableCell className="font-mono text-sm">
-                                                    {attempt.student_id.slice(0, 12)}...
-                                                </TableCell>
-                                                <TableCell>#{attempt.attempt_number}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant={attempt.status === 'graded' ? 'default' : 'secondary'}>
-                                                        {attempt.status}
+                                    {attempts.map(attempt => (
+                                        <TableRow key={attempt.attemptId}>
+                                            <TableCell className="font-mono text-sm">
+                                                {attempt.studentId.slice(0, 12)}...
+                                            </TableCell>
+                                            <TableCell>#{attempt.attemptNumber}</TableCell>
+                                            <TableCell>
+                                                <Badge variant={attempt.status === 'graded' ? 'default' : 'secondary'}>
+                                                    {attempt.status}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                {attempt.score !== null ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={cn(
+                                                            "font-semibold",
+                                                            attempt.passed ? "text-green-600" : "text-red-600"
+                                                        )}>
+                                                            {attempt.percentage?.toFixed(1)}%
+                                                        </span>
+                                                        {attempt.passed ? (
+                                                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                                        ) : (
+                                                            <XCircle className="h-4 w-4 text-red-600" />
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-muted-foreground">Pending</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                {attempt.timeSpentSeconds
+                                                    ? formatTime(attempt.timeSpentSeconds)
+                                                    : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-sm">
+                                                {attempt.submittedAt
+                                                    ? formatDate(attempt.submittedAt)
+                                                    : '-'}
+                                            </TableCell>
+                                            <TableCell>
+                                                {attempt.violationCount > 0 ? (
+                                                    <Badge variant="destructive">
+                                                        {attempt.violationCount}
                                                     </Badge>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {attempt.score !== null ? (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={cn(
-                                                                "font-semibold",
-                                                                attempt.passed ? "text-green-600" : "text-red-600"
-                                                            )}>
-                                                                {attempt.percentage?.toFixed(1)}%
-                                                            </span>
-                                                            {attempt.passed ? (
-                                                                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                                                            ) : (
-                                                                <XCircle className="h-4 w-4 text-red-600" />
-                                                            )}
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-muted-foreground">Pending</span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {attempt.time_spent_seconds
-                                                        ? formatTime(attempt.time_spent_seconds)
-                                                        : '-'}
-                                                </TableCell>
-                                                <TableCell className="text-sm">
-                                                    {attempt.submitted_at
-                                                        ? formatDate(attempt.submitted_at)
-                                                        : '-'}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {attemptViolations.length > 0 ? (
-                                                        <Badge variant="destructive">
-                                                            {attemptViolations.length}
-                                                        </Badge>
-                                                    ) : (
-                                                        <Badge variant="outline" className="text-green-600">
-                                                            None
-                                                        </Badge>
-                                                    )}
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
+                                                ) : (
+                                                    <Badge variant="outline" className="text-green-600">
+                                                        None
+                                                    </Badge>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
                                 </TableBody>
                             </Table>
                         )}
@@ -446,7 +459,7 @@ export default function ExamAnalyticsPage({ params }: { params: Promise<PagePara
                     <CardHeader>
                         <CardTitle>Question Performance</CardTitle>
                         <CardDescription>
-                            Success rate for each question
+                            Success rate and difficulty for each question
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -456,39 +469,40 @@ export default function ExamAnalyticsPage({ params }: { params: Promise<PagePara
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                {questionStats.map((stat, index) => (
-                                    <div key={stat.question_id} className="space-y-2">
+                                {questionStats.map((stat) => (
+                                    <div key={stat.questionId} className="space-y-2">
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-2">
-                                                <Badge variant="outline">Q{index + 1}</Badge>
+                                                <Badge variant="outline">Q{stat.questionNumber}</Badge>
                                                 <span className="text-sm font-medium truncate max-w-md">
-                                                    {typeof stat.question_text === 'string'
-                                                        ? stripHtml(stat.question_text).slice(0, 50)
+                                                    {typeof stat.questionText === 'string'
+                                                        ? stripHtml(stat.questionText).slice(0, 50)
                                                         : 'Question'}
-                                                    {stripHtml(stat.question_text).length > 50 && '...'}
+                                                    {stripHtml(stat.questionText).length > 50 && '...'}
                                                 </span>
                                                 <Badge variant="secondary" className="text-xs">
-                                                    {stat.question_type.replace('_', ' ')}
+                                                    {stat.questionType.replace('_', ' ')}
                                                 </Badge>
+                                                {getDifficultyBadge(stat.stats.difficulty)}
                                             </div>
                                             <div className="flex items-center gap-4 text-sm">
                                                 <span className="text-green-600">
-                                                    {stat.correct_count} correct
+                                                    {stat.stats.correct} correct
                                                 </span>
                                                 <span className="text-red-600">
-                                                    {stat.incorrect_count} incorrect
+                                                    {stat.stats.incorrect} incorrect
                                                 </span>
                                                 <span className="font-semibold">
-                                                    {stat.success_rate.toFixed(0)}%
+                                                    {stat.stats.successRate}%
                                                 </span>
                                             </div>
                                         </div>
                                         <Progress
-                                            value={stat.success_rate}
+                                            value={stat.stats.successRate}
                                             className={cn(
                                                 "h-2",
-                                                stat.success_rate >= 70 ? "[&>div]:bg-green-500" :
-                                                stat.success_rate >= 40 ? "[&>div]:bg-yellow-500" :
+                                                stat.stats.successRate >= 70 ? "[&>div]:bg-green-500" :
+                                                stat.stats.successRate >= 40 ? "[&>div]:bg-yellow-500" :
                                                 "[&>div]:bg-red-500"
                                             )}
                                         />

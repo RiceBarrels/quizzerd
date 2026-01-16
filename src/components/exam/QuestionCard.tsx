@@ -21,6 +21,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { UniqueIdentifier } from '@dnd-kit/core';
 import QuestionContextMenu from './QuestionContextMenu';
+import { TagSelector } from '@/components/tags/tag-selector';
 
 const questionTypes: QuestionTypeOption[] = [
   { value: 'multiple_choice', label: 'Multiple Choice', icon: ListTodoIcon },
@@ -62,6 +63,10 @@ interface QuestionCardProps {
   onShuffleOptions?: (index: number) => void;
   onClearOptions?: (index: number) => void;
   onExportQuestion?: (index: number) => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: () => boolean;
+  canRedo?: () => boolean;
   isScrollHighlighted?: boolean; // Scroll-based highlight (background only)
   isClickHighlighted?: boolean; // Click-based highlight (border only)
   isSelected?: boolean; // Selection state (for multi-select)
@@ -123,6 +128,10 @@ const QuestionCard = memo(function QuestionCard({
   onShuffleOptions,
   onClearOptions,
   onExportQuestion,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
   isScrollHighlighted = false,
   isClickHighlighted = false,
   isSelected = false,
@@ -153,6 +162,10 @@ const QuestionCard = memo(function QuestionCard({
       onShuffleOptions={onShuffleOptions}
       onClearOptions={onClearOptions}
       onExportQuestion={onExportQuestion}
+      onUndo={onUndo}
+      onRedo={onRedo}
+      canUndo={canUndo}
+      canRedo={canRedo}
       selectedIndices={selectedIndices}
     >
       <Card 
@@ -251,6 +264,16 @@ const QuestionCard = memo(function QuestionCard({
             />
           </div>
         </div>
+
+        {item.question_type !== 'section_header' && item.question_type !== 'page_break' && (
+          <div className="space-y-2">
+            <Label>Tags</Label>
+            <TagSelector
+              selectedTagIds={item.tags || []}
+              onTagsChange={(tagIds) => onUpdateQuestion(index, 'tags', tagIds)}
+            />
+          </div>
+        )}
 
         <div className="space-y-2">
           <Label>Question Text</Label>

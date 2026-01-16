@@ -365,11 +365,28 @@ export default function StudentExamPage({ params }: { params: Promise<PageParams
 
         if (!autoSubmit) {
             // Check for unanswered required questions
+            const isResponseEmpty = (questionType: string, response: any): boolean => {
+                if (response === undefined || response === null || response === '') {
+                    return true;
+                }
+                // For coding questions, check if any file has content
+                if (questionType === 'coding' && Array.isArray(response)) {
+                    return !response.some((file: { name: string; content: string }) =>
+                        file.content && file.content.trim().length > 0
+                    );
+                }
+                // For arrays (like multiple_select), check if non-empty
+                if (Array.isArray(response)) {
+                    return response.length === 0;
+                }
+                return false;
+            };
+
             const unansweredRequired = examData?.items.filter(item =>
                 item.required &&
                 item.question_type !== 'section_header' &&
                 item.question_type !== 'page_break' &&
-                !responses[item.question_id]
+                isResponseEmpty(item.question_type, responses[item.question_id])
             );
 
             if (unansweredRequired && unansweredRequired.length > 0) {

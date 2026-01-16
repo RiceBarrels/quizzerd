@@ -4,7 +4,9 @@
   width: 100%;
   position: relative;
 }
-
+.text-editor-container {
+  cursor: var(--cursor-text);
+}
 .text-editor-container .ql-container {
   font-family: inherit;
   border: 1px solid var(--input);
@@ -140,7 +142,7 @@
 
 /* Ensure proper cursor */
 .text-editor-container .ql-editor {
-  cursor: text;
+  cursor: var(--cursor-text);
   border: 1px solid var(--input);
   border-radius: calc(var(--radius) - 2px);
   background-color: color-mix(in oklab, var(--input) 30%, transparent);
