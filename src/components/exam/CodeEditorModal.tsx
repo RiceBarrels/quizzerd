@@ -1,8 +1,6 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
 import CodeEditor from '@/components/editors/CodeEditor';
 
@@ -50,40 +48,39 @@ export default function CodeEditorModal({
 
   return (
     <div className="fixed inset-0 z-[9999] bg-background flex flex-col">
-      {/* Modal Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b bg-muted/50">
-        <div className="flex items-center gap-4">
-          <h2 className="text-lg font-semibold">
-            Code Editor - Question {questionIndex !== null ? questionIndex + 1 : ''}
-          </h2>
-          <Badge variant="secondary">
-            {files.length} file(s)
-          </Badge>
-          <Badge variant="outline" className="text-xs font-normal">
+      {/* Title Bar */}
+      <div className="flex items-center justify-between px-4 py-2 bg-muted border-b border-border">
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-foreground">
+            Starter Code - Question {questionIndex !== null ? questionIndex + 1 : ''}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {files.length} file{files.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground mr-4">
             Press ESC to close
-          </Badge>
+          </span>
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1.5 px-3 py-1 text-sm text-foreground hover:bg-accent rounded"
+          >
+            <X className="h-4 w-4" />
+            Close
+          </button>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onClose}
-          className="gap-2"
-        >
-          <X className="h-4 w-4" />
-          Close Editor
-        </Button>
       </div>
-      
-      {/* Modal Content */}
-      <div className="flex-1 p-6 overflow-auto">
-        <div className="max-w-7xl mx-auto h-screen">
-          <CodeEditor
-            key={`modal-code-editor-${questionIndex}`}
-            files={files}
-            onChange={onChange}
-            height="calc(100vh - 200px)"
-          />
-        </div>
+
+      {/* Full Screen Editor */}
+      <div className="flex-1 overflow-hidden">
+        <CodeEditor
+          key={`modal-code-editor-${questionIndex}`}
+          files={files}
+          onChange={onChange}
+          height="calc(100vh - 44px)"
+          fullscreen
+        />
       </div>
     </div>
   );

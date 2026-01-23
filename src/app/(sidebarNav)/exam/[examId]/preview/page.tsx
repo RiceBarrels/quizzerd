@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Label } from '@/components/ui/label';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Star, Heart, ThumbsUp, Loader2, ArrowLeft, Clock, Calendar, Upload, Heading, Eye, EyeOff, Code2, ChevronDown, ChevronUp, MapPin, Terminal, Languages, Monitor, Shield, FileText, AlertTriangle, Ban, Lock, CheckCircle2, XCircle } from 'lucide-react';
 import { ExamItem } from '@/types/exam';
 import { toast } from 'sonner';
@@ -514,7 +515,7 @@ export default function ExamPreviewPage({ params }: { params: Promise<PageParams
             case 'date':
                 return (
                     <div className="flex gap-4 items-center max-w-md">
-                        <Input type="date" className="flex-1" />
+                        <DatePicker className="flex-1" />
                         {item.include_time && <Input type="time" className="flex-1" />}
                     </div>
                 );

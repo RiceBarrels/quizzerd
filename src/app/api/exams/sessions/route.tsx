@@ -2,7 +2,15 @@ import { NextResponse } from 'next/server';
 import { createSupabaseClient } from '@/lib/supabase';
 import { auth } from '@clerk/nextjs/server';
 
+/**
+ * @deprecated This API is deprecated. Use /api/classes instead.
+ * Sessions have been migrated to the new Classes system.
+ * This endpoint is kept for backward compatibility only.
+ */
 export async function GET(request: Request) {
+  // Log deprecation warning
+  console.warn('[DEPRECATED] /api/exams/sessions endpoint is deprecated. Use /api/classes instead.');
+
   try {
     const { userId } = await auth();
 

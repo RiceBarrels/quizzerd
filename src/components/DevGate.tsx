@@ -6,9 +6,10 @@ import { Label } from '@/components/ui/label';
 
 interface DevGateProps {
   children: ReactNode;
+  isActive: boolean;
 }
 
-export default function DevGate({ children }: DevGateProps) {
+export default function DevGate({ children, isActive }: DevGateProps) {
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -65,7 +66,7 @@ export default function DevGate({ children }: DevGateProps) {
   }
 
   // Has access - show the app
-  if (hasAccess) {
+  if (hasAccess || !isActive) {
     return <>{children}</>;
   }
 

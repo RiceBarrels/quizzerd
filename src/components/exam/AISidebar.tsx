@@ -32,7 +32,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { ExamItem, QuestionType } from '@/types/exam';
 import { useSidebar } from '@/components/ui/sidebar';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface AISidebarProps {
     activeTab: string;

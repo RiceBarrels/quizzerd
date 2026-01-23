@@ -7,6 +7,38 @@ const MAX_HISTORY_SIZE = 50;
 const HISTORY_STORAGE_KEY = 'quizzerd_question_history';
 
 /**
+ * Deep equality check for items arrays (same logic as useAutoSave)
+ */
+function areItemsEqual(prev: ExamItem[], current: ExamItem[]): boolean {
+  if (prev.length !== current.length) return false;
+
+  try {
+    const prevStr = JSON.stringify(prev, (key, value) => {
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        return Object.keys(value).sort().reduce((acc: any, k) => {
+          acc[k] = value[k];
+          return acc;
+        }, {});
+      }
+      return value;
+    });
+    const currentStr = JSON.stringify(current, (key, value) => {
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        return Object.keys(value).sort().reduce((acc: any, k) => {
+          acc[k] = value[k];
+          return acc;
+        }, {});
+      }
+      return value;
+    });
+
+    return prevStr === currentStr;
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
  * Custom hook for managing question operations in an exam
  * @param {ExamItem[]} items - Array of exam items/questions
  * @param {React.Dispatch<React.SetStateAction<ExamItem[]>>} setItems - State setter function for updating the items array
@@ -22,30 +54,12 @@ export function useQuestionOperations(
   const historyRef = useRef<ExamItem[][]>([]);
   const historyIndexRef = useRef<number>(-1);
   const isUndoRedoRef = useRef<boolean>(false);
-  const initializedRef = useRef<boolean>(false);
+  const prevItemsRef = useRef<ExamItem[] | null>(null);
+  const isInitialMountRef = useRef<boolean>(true);
+  const storageInitializedRef = useRef<boolean>(false);
 
   // Generate storage key based on examId
   const storageKey = examId ? `${HISTORY_STORAGE_KEY}_${examId}` : HISTORY_STORAGE_KEY;
-
-  // Load history from sessionStorage on mount
-  useEffect(() => {
-    if (initializedRef.current) return;
-    initializedRef.current = true;
-
-    try {
-      const stored = sessionStorage.getItem(storageKey);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.history && Array.isArray(parsed.history)) {
-          historyRef.current = parsed.history;
-          historyIndexRef.current = parsed.index ?? parsed.history.length - 1;
-          console.log(`📜 [History] Loaded from sessionStorage | Index: ${historyIndexRef.current} | Total: ${historyRef.current.length}`);
-        }
-      }
-    } catch (error) {
-      console.error('📜 [History] Failed to load from sessionStorage:', error);
-    }
-  }, [storageKey]);
 
   // Save history to sessionStorage
   const saveHistoryToStorage = useCallback(() => {
@@ -62,40 +76,80 @@ export function useQuestionOperations(
     }
   }, [storageKey]);
 
-  /**
-   * Saves the current state to history (called before making changes)
-   * @param {ExamItem[]} currentItems - The current items state to save
-   */
-  const saveToHistory = useCallback((currentItems: ExamItem[]) => {
+  // Load history from sessionStorage on mount
+  useEffect(() => {
+    if (storageInitializedRef.current) return;
+    storageInitializedRef.current = true;
+
+    try {
+      const stored = sessionStorage.getItem(storageKey);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.history && Array.isArray(parsed.history)) {
+          historyRef.current = parsed.history;
+          historyIndexRef.current = parsed.index ?? parsed.history.length - 1;
+          console.log(`📜 [History] Loaded from sessionStorage | Index: ${historyIndexRef.current} | Total: ${historyRef.current.length}`);
+        }
+      }
+    } catch (error) {
+      console.error('📜 [History] Failed to load from sessionStorage:', error);
+    }
+  }, [storageKey]);
+
+  // Automatically detect changes and save to history (like useAutoSave)
+  useEffect(() => {
+    // Skip on initial mount
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      prevItemsRef.current = items;
+      return;
+    }
+
+    // Skip if undo/redo is in progress
     if (isUndoRedoRef.current) {
       isUndoRedoRef.current = false;
+      prevItemsRef.current = items;
       console.log('📜 [History] Skipping save (undo/redo in progress)');
       return;
     }
 
-    // If we're not at the end of history, truncate forward history
-    if (historyIndexRef.current < historyRef.current.length - 1) {
-      const truncated = historyRef.current.length - 1 - historyIndexRef.current;
-      historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
-      console.log(`📜 [History] Truncated ${truncated} future states`);
+    // Check if items actually changed
+    if (prevItemsRef.current !== null) {
+      if (areItemsEqual(prevItemsRef.current, items)) {
+        // No actual change
+        return;
+      }
     }
 
-    // Add current state to history
-    historyRef.current.push(JSON.parse(JSON.stringify(currentItems)));
-    historyIndexRef.current = historyRef.current.length - 1;
+    // Items changed, save previous state to history
+    if (prevItemsRef.current !== null) {
+      // If we're not at the end of history, truncate forward history
+      if (historyIndexRef.current < historyRef.current.length - 1) {
+        const truncated = historyRef.current.length - 1 - historyIndexRef.current;
+        historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+        console.log(`📜 [History] Truncated ${truncated} future states`);
+      }
 
-    // Limit history size
-    if (historyRef.current.length > MAX_HISTORY_SIZE) {
-      historyRef.current.shift();
-      historyIndexRef.current--;
-      console.log(`📜 [History] Exceeded max size, removed oldest state`);
+      // Add previous state to history (not current, so we can undo back to it)
+      historyRef.current.push(JSON.parse(JSON.stringify(prevItemsRef.current)));
+      historyIndexRef.current = historyRef.current.length - 1;
+
+      // Limit history size
+      if (historyRef.current.length > MAX_HISTORY_SIZE) {
+        historyRef.current.shift();
+        historyIndexRef.current--;
+        console.log(`📜 [History] Exceeded max size, removed oldest state`);
+      }
+
+      console.log(`📜 [History] Auto-saved state | Index: ${historyIndexRef.current} | Total: ${historyRef.current.length} | Questions: ${prevItemsRef.current.length}`);
+
+      // Persist to sessionStorage
+      saveHistoryToStorage();
     }
 
-    console.log(`📜 [History] Saved state | Index: ${historyIndexRef.current} | Total: ${historyRef.current.length} | Questions: ${currentItems.length}`);
-
-    // Persist to sessionStorage
-    saveHistoryToStorage();
-  }, [saveHistoryToStorage]);
+    // Update previous items ref
+    prevItemsRef.current = items;
+  }, [items, saveHistoryToStorage]);
 
   /**
    * Undoes the last operation
@@ -104,25 +158,34 @@ export function useQuestionOperations(
   const undo = useCallback(() => {
     console.log(`⏪ [Undo] Attempting | Current Index: ${historyIndexRef.current} | Total: ${historyRef.current.length}`);
 
-    if (historyIndexRef.current <= 0) {
+    if (historyIndexRef.current < 0 || historyRef.current.length === 0) {
       console.log('⏪ [Undo] Nothing to undo');
       toast.info('Nothing to undo');
       return false;
     }
 
-    // Save current state if this is the first undo
-    if (historyIndexRef.current === historyRef.current.length - 1) {
-      historyRef.current.push(JSON.parse(JSON.stringify(items)));
-      console.log('⏪ [Undo] Saved current state before undoing');
-    }
-
-    historyIndexRef.current--;
+    // Get the previous state from history
     const previousState = historyRef.current[historyIndexRef.current];
 
     if (previousState) {
+      // Save current state for potential redo (only if we haven't already)
+      if (historyIndexRef.current === historyRef.current.length - 1) {
+        // We're at the end, need to save current state for redo
+        historyRef.current.push(JSON.parse(JSON.stringify(items)));
+        console.log('⏪ [Undo] Saved current state for redo');
+      }
+
       isUndoRedoRef.current = true;
-      setItems(JSON.parse(JSON.stringify(previousState)));
-      console.log(`⏪ [Undo] Restored to Index: ${historyIndexRef.current} | Questions: ${previousState.length}`);
+      historyIndexRef.current--;
+
+      // If we've gone past the beginning, use the first state
+      const stateToRestore = historyIndexRef.current >= 0
+        ? historyRef.current[historyIndexRef.current]
+        : previousState;
+
+      setItems(JSON.parse(JSON.stringify(stateToRestore)));
+      prevItemsRef.current = JSON.parse(JSON.stringify(stateToRestore));
+      console.log(`⏪ [Undo] Restored to Index: ${historyIndexRef.current} | Questions: ${stateToRestore.length}`);
       saveHistoryToStorage();
       toast.success('Undone');
       return true;
@@ -149,6 +212,7 @@ export function useQuestionOperations(
     if (nextState) {
       isUndoRedoRef.current = true;
       setItems(JSON.parse(JSON.stringify(nextState)));
+      prevItemsRef.current = JSON.parse(JSON.stringify(nextState));
       console.log(`⏩ [Redo] Restored to Index: ${historyIndexRef.current} | Questions: ${nextState.length}`);
       saveHistoryToStorage();
       toast.success('Redone');
@@ -242,41 +306,39 @@ export function useQuestionOperations(
    * @param {number} index - The index of the question to remove
    */
   const removeQuestion = useCallback((index: number) => {
-    saveToHistory(items);
     setItems(prevItems => prevItems.filter((_, i) => i !== index));
-  }, [items, setItems, saveToHistory]);
+  }, [setItems]);
 
   /**
    * Creates a duplicate of a question and inserts it right after the original
    * @param {number} index - The index of the question to duplicate
    */
   const duplicateQuestion = useCallback((index: number) => {
-    saveToHistory(items);
     setItems(prevItems => {
       const questionToDuplicate = prevItems[index];
       if (!questionToDuplicate) return prevItems;
-      
+
       // Create a deep copy of the question with a new ID
       const duplicatedQuestion: ExamItem = {
         ...questionToDuplicate,
         question_id: `question-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         options: questionToDuplicate.options ? [...questionToDuplicate.options] : undefined,
-        correct_answer: Array.isArray(questionToDuplicate.correct_answer) 
+        correct_answer: Array.isArray(questionToDuplicate.correct_answer)
           ? ([...questionToDuplicate.correct_answer] as number[] | string[])
           : questionToDuplicate.correct_answer,
-        starter_files: questionToDuplicate.starter_files 
+        starter_files: questionToDuplicate.starter_files
           ? questionToDuplicate.starter_files.map(f => ({ ...f }))
           : undefined,
       };
-      
+
       // Insert the duplicated question right after the original
       const updatedItems = [...prevItems];
       updatedItems.splice(index + 1, 0, duplicatedQuestion);
-      
+
       toast.success('Question duplicated successfully');
       return updatedItems;
     });
-  }, [items, setItems, saveToHistory]);
+  }, [setItems]);
 
   /**
    * Copies one or more questions to the clipboard
@@ -314,7 +376,6 @@ export function useQuestionOperations(
    */
   const pasteQuestion = useCallback(async (afterIndex: number) => {
     try {
-      saveToHistory(items);
       const clipboardText = await navigator.clipboard.readText();
       const parsedData = JSON.parse(clipboardText);
       
@@ -358,7 +419,7 @@ export function useQuestionOperations(
       toast.error('Failed to paste question - invalid format');
       console.error('Paste error:', error);
     }
-  }, [items, setItems, saveToHistory]);
+  }, [setItems]);
 
   /**
    * Cuts one or more questions (copies to clipboard and removes from exam)
@@ -382,7 +443,6 @@ export function useQuestionOperations(
 
     navigator.clipboard.writeText(JSON.stringify(questionData, null, 2))
       .then(() => {
-        saveToHistory(items);
         // Remove the questions after copying (in reverse order to maintain correct indices)
         setItems(prevItems => {
           const sortedIndices = [...indices].sort((a, b) => b - a);
@@ -394,7 +454,7 @@ export function useQuestionOperations(
       .catch(() => {
         toast.error('Failed to cut question');
       });
-  }, [items, setItems, saveToHistory]);
+  }, [items, setItems]);
 
   /**
    * Moves a question up one position in the list
@@ -403,7 +463,6 @@ export function useQuestionOperations(
   const moveUp = useCallback((index: number) => {
     if (index <= 0) return;
 
-    saveToHistory(items);
     setItems(prevItems => {
       const newItems = [...prevItems];
       const temp = newItems[index];
@@ -413,17 +472,16 @@ export function useQuestionOperations(
     });
 
     toast.success('Question moved up');
-  }, [items, setItems, saveToHistory]);
+  }, [setItems]);
 
   /**
    * Moves a question down one position in the list
    * @param {number} index - The index of the question to move down
    */
   const moveDown = useCallback((index: number) => {
-    if (index >= items.length - 1) return;
-
-    saveToHistory(items);
     setItems(prevItems => {
+      if (index >= prevItems.length - 1) return prevItems;
+
       const newItems = [...prevItems];
       const temp = newItems[index];
       newItems[index] = newItems[index + 1];
@@ -432,7 +490,7 @@ export function useQuestionOperations(
     });
 
     toast.success('Question moved down');
-  }, [items, setItems, saveToHistory]);
+  }, [setItems]);
 
   /**
    * Inserts a new empty question above the specified index
@@ -447,7 +505,6 @@ export function useQuestionOperations(
       required: true,
     };
 
-    saveToHistory(items);
     setItems(prevItems => {
       const updatedItems = [...prevItems];
       updatedItems.splice(index, 0, newQuestion);
@@ -455,7 +512,7 @@ export function useQuestionOperations(
     });
 
     toast.success('New question inserted above');
-  }, [items, setItems, saveToHistory]);
+  }, [setItems]);
 
   /**
    * Inserts a new empty question below the specified index
@@ -470,7 +527,6 @@ export function useQuestionOperations(
       required: true,
     };
 
-    saveToHistory(items);
     setItems(prevItems => {
       const updatedItems = [...prevItems];
       updatedItems.splice(index + 1, 0, newQuestion);
@@ -478,51 +534,49 @@ export function useQuestionOperations(
     });
 
     toast.success('New question inserted below');
-  }, [items, setItems, saveToHistory]);
+  }, [setItems]);
 
   /**
    * Resets a question to an empty state, clearing text, options, and answers
    * @param {number} index - The index of the question to reset
    */
   const resetQuestion = useCallback((index: number) => {
-    const question = items[index];
-    if (!question) return;
-
-    const resetQ: ExamItem = {
-      ...question,
-      question_text: '',
-      options: question.options ? question.options.map(() => '') : undefined,
-      correct_answer: undefined,
-      explanation: '',
-    };
-
-    saveToHistory(items);
     setItems(prevItems => {
+      const question = prevItems[index];
+      if (!question) return prevItems;
+
+      const resetQ: ExamItem = {
+        ...question,
+        question_text: '',
+        options: question.options ? question.options.map(() => '') : undefined,
+        correct_answer: undefined,
+        explanation: '',
+      };
+
       const updatedItems = [...prevItems];
       updatedItems[index] = resetQ;
       return updatedItems;
     });
 
     toast.success('Question reset to empty state');
-  }, [items, setItems, saveToHistory]);
+  }, [setItems]);
 
   /**
    * Randomly shuffles the options of a question using Fisher-Yates algorithm
    * @param {number} index - The index of the question whose options to shuffle
    */
   const shuffleOptions = useCallback((index: number) => {
-    const question = items[index];
-    if (!question || !question.options) return;
-
-    // Fisher-Yates shuffle algorithm
-    const shuffled = [...question.options];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-
-    saveToHistory(items);
     setItems(prevItems => {
+      const question = prevItems[index];
+      if (!question || !question.options) return prevItems;
+
+      // Fisher-Yates shuffle algorithm
+      const shuffled = [...question.options];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+
       const updatedItems = [...prevItems];
       updatedItems[index] = {
         ...updatedItems[index],
@@ -532,18 +586,17 @@ export function useQuestionOperations(
     });
 
     toast.success('Options shuffled');
-  }, [items, setItems, saveToHistory]);
+  }, [setItems]);
 
   /**
    * Clears all options of a question, resetting to two empty options
    * @param {number} index - The index of the question whose options to clear
    */
   const clearOptions = useCallback((index: number) => {
-    const question = items[index];
-    if (!question || !question.options) return;
-
-    saveToHistory(items);
     setItems(prevItems => {
+      const question = prevItems[index];
+      if (!question || !question.options) return prevItems;
+
       const updatedItems = [...prevItems];
       updatedItems[index] = {
         ...updatedItems[index],
@@ -554,7 +607,7 @@ export function useQuestionOperations(
     });
 
     toast.success('All options cleared');
-  }, [items, setItems, saveToHistory]);
+  }, [setItems]);
 
   /**
    * Exports a question as a JSON file for download
@@ -589,9 +642,8 @@ export function useQuestionOperations(
    * @param {ExamItem[]} newItems - The new array of questions in the desired order
    */
   const reorderQuestions = useCallback((newItems: ExamItem[]) => {
-    saveToHistory(items);
     setItems(newItems);
-  }, [items, setItems, saveToHistory]);
+  }, [setItems]);
 
   return {
     updateQuestion,

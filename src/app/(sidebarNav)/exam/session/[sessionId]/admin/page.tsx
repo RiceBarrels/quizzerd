@@ -81,6 +81,7 @@ export default function SessionAdminPage({ params }: { params: Promise<PageParam
     const { sessionId } = use(params);
 
     const [loading, setLoading] = useState(true);
+    const [redirecting, setRedirecting] = useState(false);
     const [sessionData, setSessionData] = useState<SessionData | null>(null);
     const [examData, setExamData] = useState<ExamData | null>(null);
     const [attempts, setAttempts] = useState<Attempt[]>([]);
@@ -96,6 +97,27 @@ export default function SessionAdminPage({ params }: { params: Promise<PageParam
 
     // Per-question manual scores: { attemptId: { questionId: score } }
     const [manualScores, setManualScores] = useState<Record<string, Record<string, number>>>({});
+
+    // Check if this session is migrated to a class and redirect
+    useEffect(() => {
+        const checkRedirect = async () => {
+            try {
+                const response = await fetch(`/api/classes/lookup-session?sessionId=${sessionId}`);
+                const data = await response.json();
+
+                if (data.success && data.data?.class_id) {
+                    setRedirecting(true);
+                    // Redirect to class grades page
+                    router.replace(`/classes/${data.data.class_id}`);
+                }
+            } catch (error) {
+                // If lookup fails, continue showing the session page
+                console.log('No class redirect found for session');
+            }
+        };
+
+        checkRedirect();
+    }, [sessionId, router]);
 
     // AI grading state: { attemptId_questionId: { loading, feedback } }
     const [aiGrading, setAiGrading] = useState<Record<string, { loading: boolean; feedback?: string }>>({});
@@ -520,10 +542,13 @@ export default function SessionAdminPage({ params }: { params: Promise<PageParam
         toast.success('Session link copied to clipboard');
     };
 
-    if (loading || !isLoaded) {
+    if (loading || !isLoaded || redirecting) {
         return (
-            <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
                 <Loader2 className="h-8 w-8 animate-spin" />
+                {redirecting && (
+                    <p className="text-sm text-muted-foreground">Redirecting to class...</p>
+                )}
             </div>
         );
     }

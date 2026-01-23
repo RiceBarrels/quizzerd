@@ -13,13 +13,13 @@ import {
 } from "@/components/ui/sidebar"
 import { LogOut, Sparkles } from "lucide-react"
 import Link from "next/link"
-import { GeneralGroup } from "./app-sidebar-groups"
+import { GeneralGroup, ClassesGroup } from "./app-sidebar-groups"
 import { useClerk, useUser } from "@clerk/nextjs"
 import { Avatar, AvatarFallback, AvatarImage } from "./avatar"
 import { cn } from "@/lib/utils"
 import { Separator } from "./separator";
 import { useSidebar } from "./sidebar";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function AppSidebar({...prop}){
     const { signOut } = useClerk();
@@ -83,6 +83,7 @@ export default function AppSidebar({...prop}){
                 "group-data-[collapsible=icon]:pt-3 group-data-[collapsible=icon]:pb-2"
             )}>
                 <GeneralGroup />
+                <ClassesGroup />
             </SidebarContent>
 
             <SidebarFooter className={cn(

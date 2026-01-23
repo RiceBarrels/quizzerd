@@ -51,8 +51,10 @@ import {
   MoreHorizontal,
   Minus,
   Plus,
-  LucideIcon
+  LucideIcon,
+  Sigma
 } from 'lucide-react';
+import MathDialog from './math-dialog';
 import { motion, AnimatePresence } from 'framer-motion';
 import Quill from 'quill';
 
@@ -66,6 +68,7 @@ interface DockInstance {
   activeEditor: EditorInstance | null;
   updateFormats: (() => void) | null;
   hideTimeout?: NodeJS.Timeout;
+  isPopoverOpen?: boolean;
 }
 
 // Singleton instance to manage the dock globally
@@ -119,16 +122,28 @@ export function registerEditor(editorRef: RefObject<Quill>, editorId: string) {
   };
   
   const handleBlur = (e: { relatedTarget?: EventTarget | null }) => {
-    // Don't hide if clicking within the dock, its popovers, select dropdowns, or context menus
+    // Don't hide if a popover is open
+    if (dockInstance?.isPopoverOpen) {
+      return;
+    }
+
+    // Don't hide if clicking within the dock, its popovers, select dropdowns, context menus, or math dialog
     const relatedTarget = e?.relatedTarget as Element | null;
     if (!relatedTarget?.closest('.floating-format-dock') &&
         !relatedTarget?.closest('[role="dialog"]') &&
         !relatedTarget?.closest('[data-radix-select-content]') &&
         !relatedTarget?.closest('[data-radix-popover-content]') &&
         !relatedTarget?.closest('[data-radix-context-menu-content]') &&
-        !relatedTarget?.closest('[data-slot="context-menu"]')) {
+        !relatedTarget?.closest('[data-slot="context-menu"]') &&
+        !relatedTarget?.closest('[data-math-dialog]') &&
+        !relatedTarget?.closest('[data-radix-popper-content-wrapper]')) {
       const timeoutId = setTimeout(() => {
-        // Double check that focus hasn't returned to dock, editor, select, popover, or context menu
+        // Don't hide if a popover is open
+        if (dockInstance?.isPopoverOpen) {
+          return;
+        }
+
+        // Double check that focus hasn't returned to dock, editor, select, popover, context menu, or math dialog
         const activeEl = document.activeElement;
         const isInDock = activeEl?.closest('.floating-format-dock');
         const isInPopover = activeEl?.closest('[role="dialog"]');
@@ -137,9 +152,12 @@ export function registerEditor(editorRef: RefObject<Quill>, editorId: string) {
         const isInRadixPopover = activeEl?.closest('[data-radix-popover-content]');
         const isInContextMenu = activeEl?.closest('[data-radix-context-menu-content]');
         const isInTextEditor = activeEl?.closest('.text-editor-wrapper');
-        
-        if (!isInDock && !isInPopover && !isInEditor && !isInSelect && 
-            !isInRadixPopover && !isInContextMenu && !isInTextEditor) {
+        const isInMathDialog = activeEl?.closest('[data-math-dialog]');
+        const isInPopperWrapper = activeEl?.closest('[data-radix-popper-content-wrapper]');
+
+        if (!isInDock && !isInPopover && !isInEditor && !isInSelect &&
+            !isInRadixPopover && !isInContextMenu && !isInTextEditor &&
+            !isInMathDialog && !isInPopperWrapper) {
           if (dockInstance?.activeEditor?.id === editorId) {
             dockInstance.activeEditor = null;
             dockInstance.setActiveEditor?.(null);
@@ -181,6 +199,9 @@ export default function FloatingFormatDock() {
   const [showImageDialog, setShowImageDialog] = useState<boolean>(false);
   const [showColorDialog, setShowColorDialog] = useState<boolean>(false);
   const [showBgColorDialog, setShowBgColorDialog] = useState<boolean>(false);
+  const [showMathDialog, setShowMathDialog] = useState<boolean>(false);
+  const [showAlignPopover, setShowAlignPopover] = useState<boolean>(false);
+  const [showMorePopover, setShowMorePopover] = useState<boolean>(false);
   const dockRef = useRef<HTMLDivElement | null>(null);
   const [mounted, setMounted] = useState(false);
   const updateFormatsTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -198,7 +219,8 @@ export default function FloatingFormatDock() {
   }, []);
 
   useEffect(() => {
-    setIsVisible(!!activeEditor);
+    // Always show the dock, update formats when editor changes
+    setIsVisible(true);
     if (activeEditor?.ref?.current) {
       updateActiveFormats();
     }
@@ -349,6 +371,11 @@ export default function FloatingFormatDock() {
       // Small delay to ensure Quill has applied the format
       // Skip size update when we just changed the size
       updateActiveFormats(format === 'size');
+
+      // Refocus the editor after applying format
+      setTimeout(() => {
+        quill.focus();
+      }, 10);
     }
   }, [activeEditor, activeFormats, updateActiveFormats]);
 
@@ -359,6 +386,8 @@ export default function FloatingFormatDock() {
       setLinkUrl('');
       setShowLinkDialog(false);
       updateActiveFormats();
+      // Refocus the editor
+      setTimeout(() => quill.focus(), 10);
     }
   };
 
@@ -370,7 +399,38 @@ export default function FloatingFormatDock() {
         quill.insertEmbed(range.index, 'image', imageUrl);
         setImageUrl('');
         setShowImageDialog(false);
+        // Refocus the editor
+        setTimeout(() => quill.focus(), 10);
       }
+    }
+  };
+
+  const insertFormula = (formula: string, displayMode: boolean) => {
+    if (activeEditor?.ref?.current && formula) {
+      const quill = activeEditor.ref.current;
+      const range = quill.getSelection();
+      if (range) {
+        const blotName = displayMode ? 'display-formula' : 'formula';
+        quill.insertEmbed(range.index, blotName, formula);
+        quill.setSelection(range.index + 1);
+        setShowMathDialog(false);
+        // Refocus the editor
+        setTimeout(() => quill.focus(), 10);
+      }
+    }
+  };
+
+  // Prevent mousedown from stealing focus from the editor for non-interactive elements
+  const preventFocusLoss = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    const isInteractive = target.closest('input, textarea, button, [role="button"], [role="tab"], [role="checkbox"], [type="color"]');
+    if (!isInteractive) {
+      e.preventDefault();
+    }
+    // Cancel any pending hide timeout
+    if (dockInstance?.hideTimeout) {
+      clearTimeout(dockInstance.hideTimeout);
+      dockInstance.hideTimeout = undefined;
     }
   };
 
@@ -458,10 +518,33 @@ export default function FloatingFormatDock() {
 
           <Separator orientation="vertical" className="h-6" />
 
-          {/* Quote and Code buttons */}
+          {/* Quote, Code, and Math buttons */}
           <div className="flex items-center gap-0.5">
             <FormatButton format="blockquote" icon={Quote} title="Quote" />
             <FormatButton format="code" icon={Code} title="Inline Code" />
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0"
+                    onClick={() => setShowMathDialog(true)}
+                    aria-label="Insert Math Formula"
+                  >
+                    <Sigma className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  <p>Math Formula</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <MathDialog
+              open={showMathDialog}
+              onOpenChange={setShowMathDialog}
+              onInsert={insertFormula}
+            />
           </div>
 
           <Separator orientation="vertical" className="h-6" />
@@ -548,7 +631,7 @@ export default function FloatingFormatDock() {
           <Separator orientation="vertical" className="h-6" />
 
           {/* Alignment popup */}
-          <Popover modal={false}>
+          <Popover open={showAlignPopover} onOpenChange={setShowAlignPopover} modal={false}>
             <PopoverTrigger asChild>
               <Button
                 size="sm"
@@ -560,7 +643,12 @@ export default function FloatingFormatDock() {
                 <ChevronDown className="h-3 w-3" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-36 p-1">
+            <PopoverContent
+              className="w-36 p-1"
+              onMouseDown={preventFocusLoss}
+              onInteractOutside={(e) => e.preventDefault()}
+              onPointerDownOutside={(e) => e.preventDefault()}
+            >
               <div className="flex flex-col gap-1">
                 <Button
                   size="sm"
@@ -596,7 +684,7 @@ export default function FloatingFormatDock() {
           <Separator orientation="vertical" className="h-6" />
 
           {/* More options popup */}
-          <Popover modal={false}>
+          <Popover open={showMorePopover} onOpenChange={setShowMorePopover} modal={false}>
             <PopoverTrigger asChild>
               <Button
                 size="sm"
@@ -607,7 +695,12 @@ export default function FloatingFormatDock() {
                 <MoreHorizontal className="h-3.5 w-3.5" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-44 p-1">
+            <PopoverContent
+              className="w-44 p-1"
+              onMouseDown={preventFocusLoss}
+              onInteractOutside={(e) => e.preventDefault()}
+              onPointerDownOutside={(e) => e.preventDefault()}
+            >
               <div className="flex flex-col gap-1">
                 {/* Link Dialog */}
                 <Popover open={showLinkDialog} onOpenChange={setShowLinkDialog} modal={false}>
@@ -615,14 +708,24 @@ export default function FloatingFormatDock() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => setShowLinkDialog(true)}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowLinkDialog(true);
+                      }}
                       className="justify-start h-8 px-2"
                     >
                       <Link className="h-3.5 w-3.5 mr-2" />
                       Insert Link
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-80" side="left">
+                  <PopoverContent
+                    className="w-80"
+                    side="left"
+                    onMouseDown={preventFocusLoss}
+                    onInteractOutside={(e) => e.preventDefault()}
+                    onPointerDownOutside={(e) => e.preventDefault()}
+                  >
                     <div className="space-y-2">
                       <Label className="text-xs">URL</Label>
                       <Input
@@ -652,14 +755,24 @@ export default function FloatingFormatDock() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => setShowImageDialog(true)}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowImageDialog(true);
+                      }}
                       className="justify-start h-8 px-2"
                     >
                       <Image className="h-3.5 w-3.5 mr-2" />
                       Insert Image
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-80" side="left">
+                  <PopoverContent
+                    className="w-80"
+                    side="left"
+                    onMouseDown={preventFocusLoss}
+                    onInteractOutside={(e) => e.preventDefault()}
+                    onPointerDownOutside={(e) => e.preventDefault()}
+                  >
                     <div className="space-y-2">
                       <Label className="text-xs">Image URL</Label>
                       <Input
@@ -691,14 +804,24 @@ export default function FloatingFormatDock() {
                     <Button
                       size="sm"
                       variant={activeFormats.background ? "secondary" : "ghost"}
-                      onClick={() => setShowBgColorDialog(true)}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowBgColorDialog(true);
+                      }}
                       className="justify-start h-8 px-2"
                     >
                       <Highlighter className="h-3.5 w-3.5 mr-2" />
                       Highlight
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-64" side="left">
+                  <PopoverContent
+                    className="w-64"
+                    side="left"
+                    onMouseDown={preventFocusLoss}
+                    onInteractOutside={(e) => e.preventDefault()}
+                    onPointerDownOutside={(e) => e.preventDefault()}
+                  >
                     <div className="space-y-2">
                       <Label className="text-xs">Background Color</Label>
                       <div className="flex gap-2">
@@ -751,14 +874,24 @@ export default function FloatingFormatDock() {
                     <Button
                       size="sm"
                       variant={activeFormats.color ? "secondary" : "ghost"}
-                      onClick={() => setShowColorDialog(true)}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowColorDialog(true);
+                      }}
                       className="justify-start h-8 px-2"
                     >
                       <Palette className="h-3.5 w-3.5 mr-2" />
                       Text Color
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-64" side="left">
+                  <PopoverContent
+                    className="w-64"
+                    side="left"
+                    onMouseDown={preventFocusLoss}
+                    onInteractOutside={(e) => e.preventDefault()}
+                    onPointerDownOutside={(e) => e.preventDefault()}
+                  >
                     <div className="space-y-2">
                       <Label className="text-xs">Text Color</Label>
                       <div className="flex gap-2">

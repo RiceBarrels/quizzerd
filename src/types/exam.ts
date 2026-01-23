@@ -43,6 +43,7 @@ export interface ExamItem {
   // Coding type fields
   starter_files?: Array<{ name: string; content: string }>;
   test_cases?: string;
+  coding_language?: 'python' | 'java' | 'c' | 'cpp' | 'html';
   // Section header fields
   description?: string;
   // Internal tracking

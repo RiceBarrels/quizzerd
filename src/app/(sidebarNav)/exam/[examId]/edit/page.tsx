@@ -245,16 +245,32 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     triggerAutoSaveRef.current();
   }, [questionOperations]);
 
+  const getDefaultStarterFiles = useCallback((language?: string) => {
+    switch (language) {
+      case 'python':
+        return [{ name: 'main.py', content: '# Write your Python code here\n\ndef main():\n    pass\n\nif __name__ == "__main__":\n    main()\n' }];
+      case 'java':
+        return [{ name: 'Main.java', content: '// Write your Java code here\n\npublic class Main {\n    public static void main(String[] args) {\n        \n    }\n}\n' }];
+      case 'c':
+        return [{ name: 'main.c', content: '// Write your C code here\n\n#include <stdio.h>\n\nint main() {\n    \n    return 0;\n}\n' }];
+      case 'cpp':
+        return [{ name: 'main.cpp', content: '// Write your C++ code here\n\n#include <iostream>\nusing namespace std;\n\nint main() {\n    \n    return 0;\n}\n' }];
+      case 'html':
+      default:
+        return [{ name: 'index.html', content: '<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>Document</title>\n</head>\n<body>\n    \n</body>\n</html>\n' }];
+    }
+  }, []);
+
   const openCodeEditor = useCallback((questionIndex: number) => {
     const question = itemsRef.current[questionIndex];
     if (question && question.question_type === 'coding') {
       setCodeEditorModal({
         isOpen: true,
         questionIndex,
-        files: question.starter_files || [{ name: 'index.html', content: '<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>Document</title>\n</head>\n<body>\n    \n</body>\n</html>\n' }]
+        files: question.starter_files || getDefaultStarterFiles(question.coding_language)
       });
     }
-  }, []);
+  }, [getDefaultStarterFiles]);
 
   const closeCodeEditor = useCallback(() => {
     setCodeEditorModal({
@@ -689,6 +705,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
       <div className="w-full py-8 flex-1 flex flex-col">
       <ExamHeader
         examId={examId}
+        examName={examName}
         isPublished={isPublished}
         saving={saving || publishSaving}
         onSave={() => saveExam(false)}

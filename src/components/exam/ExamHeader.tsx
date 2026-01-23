@@ -1,11 +1,15 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Loader2, Eye, Save, CheckCircle2, PenBoxIcon, GlobeIcon } from 'lucide-react';
+import { Loader2, Eye, Save, CheckCircle2, PenBoxIcon, GlobeIcon, Users } from 'lucide-react';
 import { useEffect, useState, useCallback } from 'react';
+import { CollaboratorManager, PresenceIndicators } from '@/components/collaboration';
+import { useCollaboration } from '@/hooks/useCollaboration';
+import { useUser } from '@clerk/nextjs';
 
 interface ExamHeaderProps {
   examId: string;
+  examName?: string;
   isPublished: boolean;
   saving: boolean;
   onSave: () => void;
@@ -31,6 +35,7 @@ interface ExamHeaderProps {
  */
 export default function ExamHeader({
   examId,
+  examName,
   isPublished,
   saving,
   onSave,
@@ -40,6 +45,18 @@ export default function ExamHeader({
   lastSaved
 }: ExamHeaderProps) {
   const [savedText, setSavedText] = useState<string>('');
+  const { user } = useUser();
+  const { activeUsers, updatePresence } = useCollaboration({
+    examId,
+    enabled: true
+  });
+
+  // Update presence when user is active on the page
+  useEffect(() => {
+    if (examId) {
+      updatePresence({});
+    }
+  }, [examId, updatePresence]);
 
   /**
    * Updates the saved text display based on the time since lastSaved
@@ -97,7 +114,29 @@ export default function ExamHeader({
             )}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          {/* Presence Indicators */}
+          {user?.id && activeUsers.length > 0 && (
+            <PresenceIndicators
+              activeUsers={activeUsers}
+              currentUserId={user.id}
+              maxVisible={3}
+              size="sm"
+            />
+          )}
+
+          {/* Collaborate Button */}
+          <CollaboratorManager
+            examId={examId}
+            examName={examName}
+            trigger={
+              <Button variant="outline" size="sm">
+                <Users className="w-4 h-4 mr-2" />
+                Collaborate
+              </Button>
+            }
+          />
+
           <Button
             variant="outline"
             onClick={onPreview}

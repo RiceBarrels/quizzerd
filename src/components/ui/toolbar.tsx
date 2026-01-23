@@ -7,7 +7,7 @@ import BackNav from "@/app/(sidebarNav)/back-nav"
 import { HomeIcon, PanelTopDashedIcon, PanelTopCloseIcon } from "lucide-react"
 import { Link } from "next-view-transitions"
 import { Separator } from "./separator"
-import { motion } from "motion/react"
+import { motion } from "framer-motion"
 import { useState, useEffect, useRef } from "react"
 
 export default function Toolbar(){

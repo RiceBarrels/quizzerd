@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { CircleX, Plus } from "lucide-react"
-import { AnimatePresence, motion } from "motion/react"
+import { AnimatePresence, motion } from "framer-motion"
 
 export interface AnimatedTagsProps {
   initialTags?: string[]

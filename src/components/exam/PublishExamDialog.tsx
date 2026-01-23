@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { DateTimePicker } from '@/components/ui/date-time-picker';
 import { Loader2, X, Globe, Lock, CheckIcon, Copy, Link2, FileText, Calendar, Clock, GraduationCap, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -351,11 +352,9 @@ export default function PublishExamDialog({
                         <Calendar className="h-4 w-4" />
                         Due Date (Optional)
                       </Label>
-                      <Input
-                        id="due-date"
-                        type="datetime-local"
+                      <DateTimePicker
                         value={dueDate}
-                        onChange={(e) => setDueDate(e.target.value)}
+                        onChange={setDueDate}
                       />
                     </div>
                     <div className="space-y-2">
@@ -363,11 +362,9 @@ export default function PublishExamDialog({
                         <Clock className="h-4 w-4" />
                         Schedule Publish (Optional)
                       </Label>
-                      <Input
-                        id="scheduled-time"
-                        type="datetime-local"
+                      <DateTimePicker
                         value={scheduledTime}
-                        onChange={(e) => setScheduledTime(e.target.value)}
+                        onChange={setScheduledTime}
                       />
                     </div>
                   </div>

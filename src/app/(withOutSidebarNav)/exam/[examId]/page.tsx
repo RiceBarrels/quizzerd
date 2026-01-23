@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
     Star, Heart, ThumbsUp, Loader2, Clock, Upload, Heading,
     Code2, ChevronUp, MapPin, Terminal, Languages, Monitor,
@@ -615,11 +616,10 @@ export default function StudentExamPage({ params }: { params: Promise<PageParams
             case 'date':
                 return (
                     <div className="flex gap-4 items-center max-w-md">
-                        <Input
-                            type="date"
+                        <DatePicker
                             className="flex-1"
                             value={(value as string) || ''}
-                            onChange={(e) => updateResponse(item.question_id, e.target.value)}
+                            onChange={(newValue) => updateResponse(item.question_id, newValue)}
                         />
                         {item.include_time && (
                             <Input

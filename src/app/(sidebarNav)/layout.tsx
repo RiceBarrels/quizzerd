@@ -13,7 +13,7 @@ export default function navLayout({children}: {children: React.ReactNode}){
                 <div className="w-full h-screen flex flex-col p-2 overflow-hidden ml-2">
                     <Toolbar />
                     <div id="main-content" className="flex-1 bg-background rounded-4xl border overflow-y-auto flex flex-col">
-                        <div style={{ viewTransitionName: 'main-content' }} className="flex-1">
+                        <div style={{ viewTransitionName: 'main-content' }} className="flex-1 min-h-screen">
                             {children}
                         </div>
                         <Footer className="rounded-b-4xl border-t-0" />

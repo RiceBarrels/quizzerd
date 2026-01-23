@@ -1,11 +1,183 @@
 "use client"
 
-import { Calendar1Icon, HomeIcon, ListTodoIcon, LayoutDashboardIcon, UsersIcon } from "lucide-react"
-import { SidebarGroup, SidebarMenuButton, useSidebar } from "./sidebar"
+import { Calendar1Icon, HomeIcon, ListTodoIcon, LayoutDashboardIcon, GraduationCap, SettingsIcon, ChevronDown, ChevronRight, Plus, Loader2 } from "lucide-react"
+import { SidebarGroup, SidebarMenuButton, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton, useSidebar } from "./sidebar"
 import { Link } from 'next-view-transitions'
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { motion, AnimatePresence } from "motion/react"
+import { motion, AnimatePresence } from "framer-motion"
+import { useState, useEffect } from "react"
+import { useUser } from "@clerk/nextjs"
+
+interface ClassItem {
+    class_id: string;
+    class_name: string;
+    banner_color: string;
+    role: string;
+}
+
+export function ClassesGroup() {
+    const pathname = usePathname()
+    const { state } = useSidebar()
+    const isCollapsed = state === "collapsed"
+    const { isLoaded } = useUser()
+
+    const [isOpen, setIsOpen] = useState(true)
+    const [classes, setClasses] = useState<ClassItem[]>([])
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        if (isLoaded) {
+            fetchClasses()
+        }
+    }, [isLoaded])
+
+    const fetchClasses = async () => {
+        try {
+            const response = await fetch('/api/classes')
+            const data = await response.json()
+            if (data.success) {
+                // Combine teaching and enrolled classes
+                const allClasses = [
+                    ...(data.data.teaching || []).map((c: any) => ({ ...c, role: 'teacher' })),
+                    ...(data.data.enrolled || []).map((c: any) => ({ ...c, role: 'student' }))
+                ]
+                setClasses(allClasses.slice(0, 10)) // Limit to 10 for sidebar
+            }
+        } catch (error) {
+            console.error('Failed to fetch classes:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const isClassActive = (classId: string) => pathname.startsWith(`/classes/${classId}`)
+
+    if (isCollapsed) {
+        return null // Don't show classes section when collapsed
+    }
+
+    return (
+        <SidebarGroup className={cn(
+            "gap-2 px-2 transition-all duration-300",
+            "group-data-[collapsible=icon]:hidden"
+        )}>
+            <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                    opacity: { duration: 0.15 },
+                    y: { type: "spring", stiffness: 250, damping: 28 }
+                }}
+            >
+                <button
+                    onClick={() => setIsOpen(!isOpen)}
+                    className="flex items-center justify-between w-full text-[11px] px-3 pt-2 pb-0 font-bold tracking-wider text-muted-foreground uppercase hover:text-foreground transition-colors"
+                >
+                    <span>My Classes</span>
+                    <motion.div
+                        animate={{ rotate: isOpen ? 0 : -90 }}
+                        transition={{ duration: 0.2 }}
+                    >
+                        <ChevronDown className="h-3 w-3" />
+                    </motion.div>
+                </button>
+            </motion.div>
+
+            <AnimatePresence initial={false}>
+                {isOpen && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2, ease: "easeInOut" }}
+                        className="overflow-hidden"
+                    >
+                        <div className="space-y-1 pt-1">
+                            {loading ? (
+                                <div className="flex items-center justify-center py-3">
+                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : classes.length === 0 ? (
+                                <div className="px-3 py-2 text-xs text-muted-foreground">
+                                    No classes yet
+                                </div>
+                            ) : (
+                                classes.map((classItem) => {
+                                    const isActive = isClassActive(classItem.class_id)
+                                    return (
+                                        <motion.div
+                                            key={classItem.class_id}
+                                            whileHover={{ scale: 1.02 }}
+                                            whileTap={{ scale: 0.98 }}
+                                            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                                        >
+                                            <SidebarMenuButton
+                                                isActive={isActive}
+                                                asChild
+                                                className={cn(
+                                                    "sidebar-menu-button relative rounded-xl",
+                                                    "h-9 px-3"
+                                                )}
+                                            >
+                                                <Link
+                                                    href={`/classes/${classItem.class_id}`}
+                                                    className="flex items-center gap-2.5 font-medium relative"
+                                                >
+                                                    <AnimatePresence mode="wait">
+                                                        {isActive && (
+                                                            <motion.div
+                                                                className="absolute left-0 bg-primary rounded-r-full h-5 w-1"
+                                                                initial={{ scaleY: 0 }}
+                                                                animate={{ scaleY: 1 }}
+                                                                exit={{ scaleY: 0 }}
+                                                                transition={{ type: "spring", stiffness: 250, damping: 28 }}
+                                                            />
+                                                        )}
+                                                    </AnimatePresence>
+                                                    <div
+                                                        className="h-5 w-5 rounded-md flex-shrink-0"
+                                                        style={{ backgroundColor: classItem.banner_color || '#4285f4' }}
+                                                    />
+                                                    <span className="truncate text-sm relative z-10">
+                                                        {classItem.class_name}
+                                                    </span>
+                                                </Link>
+                                            </SidebarMenuButton>
+                                        </motion.div>
+                                    )
+                                })
+                            )}
+
+                            {/* View All / Create Class Link */}
+                            <motion.div
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                            >
+                                <SidebarMenuButton
+                                    asChild
+                                    className={cn(
+                                        "sidebar-menu-button relative rounded-xl",
+                                        "h-9 px-3 text-muted-foreground hover:text-foreground"
+                                    )}
+                                >
+                                    <Link
+                                        href="/classes"
+                                        className="flex items-center gap-2.5 font-medium"
+                                    >
+                                        <Plus className="h-4 w-4" />
+                                        <span className="text-sm">View All Classes</span>
+                                    </Link>
+                                </SidebarMenuButton>
+                            </motion.div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </SidebarGroup>
+    )
+}
 
 export function GeneralGroup(){
     const pathname = usePathname()
@@ -28,14 +200,19 @@ export function GeneralGroup(){
             icon: ListTodoIcon
         },
         {
-            link:"/sessions",
-            label: "Sessions",
-            icon: UsersIcon
+            link:"/classes",
+            label: "Classes",
+            icon: GraduationCap
         },
         {
             link:"/calender",
             label: "Calendar",
             icon: Calendar1Icon
+        },
+        {
+            link:"/settings",
+            label: "Settings",
+            icon: SettingsIcon
         }
     ]
     return (

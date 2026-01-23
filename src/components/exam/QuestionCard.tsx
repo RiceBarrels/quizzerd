@@ -601,22 +601,75 @@ const QuestionCard = memo(function QuestionCard({
         )}
 
         {item.question_type === 'coding' && (
-          <div className="space-y-2">
-            <Label>Starter Code</Label>
-            <Button
-              variant="outline"
-              className="w-full h-32 flex flex-col items-center justify-center gap-3 border-2 border-dashed hover:border-primary hover:bg-accent/50 transition-all"
-              onClick={() => onOpenCodeEditor?.(index)}
-            >
-              <Code className="h-12 w-12 text-muted-foreground" />
-              <div className="text-center">
-                <div className="text-base font-medium">Open Fullscreen Code Editor</div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {item.starter_files?.length || 1} file(s) • Click to edit code
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Programming Language</Label>
+              <Select
+                value={item.coding_language || 'python'}
+                onValueChange={(value) => onUpdateQuestion(index, 'coding_language', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select language" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="python">
+                    <div className="flex items-center gap-2">
+                      <span className="text-green-500 font-mono text-xs font-bold">PY</span>
+                      Python
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="java">
+                    <div className="flex items-center gap-2">
+                      <span className="text-orange-500 font-mono text-xs font-bold">JV</span>
+                      Java
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="c">
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500 font-mono text-xs font-bold">C</span>
+                      C
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="cpp">
+                    <div className="flex items-center gap-2">
+                      <span className="text-purple-500 font-mono text-xs font-bold">C++</span>
+                      C++
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="html">
+                    <div className="flex items-center gap-2">
+                      <span className="text-red-500 font-mono text-xs font-bold">HTML</span>
+                      HTML/CSS/JS
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {item.coding_language === 'python' && 'Python 3.12 runs in-browser using Pyodide'}
+                {item.coding_language === 'java' && 'Java syntax highlighting only (no execution)'}
+                {item.coding_language === 'c' && 'C syntax highlighting only (no execution)'}
+                {item.coding_language === 'cpp' && 'C++ syntax highlighting only (no execution)'}
+                {item.coding_language === 'html' && 'HTML with CSS and JavaScript runs in preview iframe'}
+                {!item.coding_language && 'Python 3.12 runs in-browser using Pyodide'}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Starter Code</Label>
+              <Button
+                variant="outline"
+                className="w-full h-32 flex flex-col items-center justify-center gap-3 border-2 border-dashed hover:border-primary hover:bg-accent/50 transition-all"
+                onClick={() => onOpenCodeEditor?.(index)}
+              >
+                <Code className="h-12 w-12 text-muted-foreground" />
+                <div className="text-center">
+                  <div className="text-base font-medium">Open Fullscreen Code Editor</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {item.starter_files?.length || 1} file(s) • Click to edit code
+                  </div>
                 </div>
-              </div>
-            </Button>
-            <div className="space-y-2 mt-4">
+              </Button>
+            </div>
+            <div className="space-y-2">
               <Label>Test Cases (Optional)</Label>
               <TextEditor
                 id={`question-${item.question_id}-test-cases`}

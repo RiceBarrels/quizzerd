@@ -13,7 +13,7 @@ export default function navLayout({children}:{
                 <div className="w-full h-screen flex flex-col p-2 overflow-hidden">
                     <Toolbar />
                     <div id="main-content" className="flex-1 bg-background rounded-4xl border overflow-y-auto flex flex-col" style={{ viewTransitionName: 'main-content' }}>
-                        <div className="flex-1">
+                        <div className="flex-1 min-h-screen">
                             {children}
                         </div>
                         <Footer className="rounded-b-4xl border-t-0" />

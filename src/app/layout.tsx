@@ -10,9 +10,11 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ViewTransitions } from 'next-view-transitions';
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider"
+import { CompactModeProvider } from "@/components/compact-mode-provider"
 import { shadcn } from '@clerk/themes';
 import { ReactNode } from 'react';
 import DevGate from '@/components/DevGate';
+import { NavigationProgress } from '@/components/navigation-progress';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -144,9 +146,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               enableSystem
               disableTransitionOnChange
             >
-              <DevGate>
-                {children}
-              </DevGate>
+              <NavigationProgress />
+              <CompactModeProvider>
+                <DevGate isActive={false}>
+                  {children}
+                </DevGate>
+              </CompactModeProvider>
             </ThemeProvider>
           </body>
         </html>

@@ -11,7 +11,7 @@
  */
 
 import * as React from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 

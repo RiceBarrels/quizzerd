@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
     Star, Heart, ThumbsUp, Loader2, Clock, Upload, Heading,
     Code2, ChevronUp, MapPin, Terminal, Languages, Monitor,
@@ -125,6 +126,7 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
 
     // State
     const [loading, setLoading] = useState(true);
+    const [redirecting, setRedirecting] = useState(false);
     const [sessionData, setSessionData] = useState<SessionData | null>(null);
     const [examData, setExamData] = useState<ExamData | null>(null);
     const [currentPage, setCurrentPage] = useState(0);
@@ -179,6 +181,27 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
             if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
         };
     }, []);
+
+    // Check if this session is migrated to a class and redirect
+    useEffect(() => {
+        const checkRedirect = async () => {
+            try {
+                const response = await fetch(`/api/classes/lookup-session?sessionId=${sessionId}`);
+                const data = await response.json();
+
+                if (data.success && data.data?.class_id) {
+                    setRedirecting(true);
+                    // Redirect to class page (student can take exam from there)
+                    router.replace(`/classes/${data.data.class_id}`);
+                }
+            } catch (error) {
+                // If lookup fails, continue showing the session page
+                console.log('No class redirect found for session');
+            }
+        };
+
+        checkRedirect();
+    }, [sessionId, router]);
 
     useEffect(() => {
         if (isLoaded) {
@@ -825,11 +848,10 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
             case 'date':
                 return (
                     <div className="flex gap-4 items-center max-w-md">
-                        <Input
-                            type="date"
+                        <DatePicker
                             className="flex-1"
                             value={(value as string) || ''}
-                            onChange={(e) => updateResponse(item.question_id, e.target.value)}
+                            onChange={(newValue) => updateResponse(item.question_id, newValue)}
                         />
                         {item.include_time && (
                             <Input
@@ -976,10 +998,13 @@ export default function SessionExamPage({ params }: { params: Promise<PageParams
     const answeredQuestions = Object.keys(responses).filter(key => responses[key] !== null && responses[key] !== '').length;
     const progressPercent = totalQuestions > 0 ? (answeredQuestions / totalQuestions) * 100 : 0;
 
-    if (loading || !isLoaded) {
+    if (loading || !isLoaded || redirecting) {
         return (
-            <div className="flex items-center justify-center min-h-screen">
+            <div className="flex flex-col items-center justify-center min-h-screen gap-3">
                 <Loader2 className="h-8 w-8 animate-spin" />
+                {redirecting && (
+                    <p className="text-sm text-muted-foreground">Redirecting to class...</p>
+                )}
             </div>
         );
     }

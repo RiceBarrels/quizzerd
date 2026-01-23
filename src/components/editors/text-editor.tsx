@@ -2,9 +2,14 @@
 
 import { useEffect, useRef, useCallback, RefObject } from 'react';
 import { registerEditor } from './floating-format-dock';
+import { registerMathBlots } from './math-blot';
 import { cn } from '@/lib/utils';
 import './text-editor.css';
+import 'katex/dist/katex.min.css';
 import Quill from 'quill';
+
+// Register math blots globally
+let mathBlotsRegistered = false;
 
 interface TextEditorProps {
   value: string;
@@ -114,6 +119,12 @@ export default function TextEditor({
       if (typeof window !== 'undefined' && containerRef.current && !isInitialized.current) {
         isInitialized.current = true;
 
+        // Register math blots once
+        if (!mathBlotsRegistered) {
+          registerMathBlots();
+          mathBlotsRegistered = true;
+        }
+
         const QuillModule = (await import('quill')).default;
         
         const editorContainer = document.createElement('div');
@@ -122,7 +133,7 @@ export default function TextEditor({
 
         quillRef.current = new QuillModule(editorContainer, {
           theme: 'snow',
-          formats: ['bold', 'italic', 'underline', 'strike', 'code', 'link', 'blockquote', 'header', 'list', 'script', 'indent', 'direction', 'size', 'color', 'background', 'font', 'align'],
+          formats: ['bold', 'italic', 'underline', 'strike', 'code', 'link', 'blockquote', 'header', 'list', 'script', 'indent', 'direction', 'size', 'color', 'background', 'font', 'align', 'formula', 'display-formula'],
           modules: {
             toolbar: false,
             keyboard: {
@@ -273,12 +284,23 @@ export default function TextEditor({
             debounceTimerRef.current = null;
             triggerChangeRef.current();
           }
-          
+
           setTimeout(() => {
-            if (!el.contains(document.activeElement)) {
+            const activeEl = document.activeElement;
+            // Don't trigger blur if focus moved to the format dock or its popups
+            const isInDock = activeEl?.closest('.floating-format-dock');
+            const isInMathDialog = activeEl?.closest('[data-math-dialog]');
+            const isInPopperWrapper = activeEl?.closest('[data-radix-popper-content-wrapper]');
+            const isInRadixPopover = activeEl?.closest('[data-radix-popover-content]');
+            const isInSelect = activeEl?.closest('[data-radix-select-content]');
+
+            // Also check if there's any open radix popover in the document
+            const hasOpenPopover = document.querySelector('[data-radix-popper-content-wrapper]');
+
+            if (!el.contains(activeEl) && !isInDock && !isInMathDialog && !isInPopperWrapper && !isInRadixPopover && !isInSelect && !hasOpenPopover) {
               handleBlur({ relatedTarget: (e as FocusEvent).relatedTarget });
             }
-          }, 100);
+          }, 150);
         };
 
         // Minimal event handlers - Quill's text-change covers most typing

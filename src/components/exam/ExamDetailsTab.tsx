@@ -3,6 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { DateTimePicker } from '@/components/ui/date-time-picker';
 import TextEditor from '@/components/editors/text-editor';
 import { Calendar } from 'lucide-react';
 
@@ -77,11 +78,9 @@ export default function ExamDetailsTab({
               <Calendar className="w-4 h-4 inline mr-1" />
               Start Date
             </Label>
-            <Input
-              id="start-date"
-              type="datetime-local"
+            <DateTimePicker
               value={startDate}
-              onChange={(e) => onStartDateChange(e.target.value)}
+              onChange={onStartDateChange}
             />
           </div>
 
@@ -90,11 +89,9 @@ export default function ExamDetailsTab({
               <Calendar className="w-4 h-4 inline mr-1" />
               End Date
             </Label>
-            <Input
-              id="end-date"
-              type="datetime-local"
+            <DateTimePicker
               value={endDate}
-              onChange={(e) => onEndDateChange(e.target.value)}
+              onChange={onEndDateChange}
             />
           </div>
         </div>
