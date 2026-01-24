@@ -3,9 +3,8 @@
 import { Button } from '@/components/ui/button';
 import { Loader2, Eye, Save, CheckCircle2, PenBoxIcon, GlobeIcon, Users } from 'lucide-react';
 import { useEffect, useState, useCallback } from 'react';
-import { CollaboratorManager, PresenceIndicators } from '@/components/collaboration';
-import { useCollaboration } from '@/hooks/useCollaboration';
-import { useUser } from '@clerk/nextjs';
+import { CollaboratorManager, OnlineCollaborators } from '@/components/collaboration';
+import { PresenceUser } from '@/hooks/useRealtimePresence';
 
 interface ExamHeaderProps {
   examId: string;
@@ -17,6 +16,9 @@ interface ExamHeaderProps {
   onPreview: () => void;
   canPublish: boolean;
   lastSaved: Date | null;
+  // Realtime presence props
+  onlineUsers?: PresenceUser[];
+  currentUserId?: string;
 }
 
 /**
@@ -42,21 +44,11 @@ export default function ExamHeader({
   onPublish,
   onPreview,
   canPublish,
-  lastSaved
+  lastSaved,
+  onlineUsers = [],
+  currentUserId
 }: ExamHeaderProps) {
   const [savedText, setSavedText] = useState<string>('');
-  const { user } = useUser();
-  const { activeUsers, updatePresence } = useCollaboration({
-    examId,
-    enabled: true
-  });
-
-  // Update presence when user is active on the page
-  useEffect(() => {
-    if (examId) {
-      updatePresence({});
-    }
-  }, [examId, updatePresence]);
 
   /**
    * Updates the saved text display based on the time since lastSaved
@@ -95,18 +87,19 @@ export default function ExamHeader({
   }, [lastSaved, updateSavedText]);
   return (
     <>
-      <div className="flex justify-between items-center mb-6 mx-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 mx-4 sm:mx-8">
         <div>
-          <div className="flex items-center gap-4">
-            <PenBoxIcon className="w-6 h-6" />
-            <h1 className="text-3xl font-bold">Edit Exam</h1>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <PenBoxIcon className="w-5 h-5 sm:w-6 sm:h-6" />
+            <h1 className="text-xl sm:text-3xl font-bold">Edit Exam</h1>
           </div>
-          <p className="text-muted-foreground flex items-center gap-2">
-            Modify exam details and questions
+          <p className="text-muted-foreground flex items-center gap-2 text-sm">
+            <span className="hidden sm:inline">Modify exam details and questions</span>
+            <span className="sm:hidden">Edit exam</span>
             {savedText && (
               <>
                 <span className="text-muted-foreground">•</span>
-                <span className="flex items-center gap-1 text-primary text-sm">
+                <span className="flex items-center gap-1 text-primary text-xs sm:text-sm">
                   <CheckCircle2 className="w-3 h-3" />
                   {savedText}
                 </span>
@@ -114,48 +107,52 @@ export default function ExamHeader({
             )}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {/* Presence Indicators */}
-          {user?.id && activeUsers.length > 0 && (
-            <PresenceIndicators
-              activeUsers={activeUsers}
-              currentUserId={user.id}
-              maxVisible={3}
-              size="sm"
-            />
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          {/* Online Collaborators - hidden on mobile */}
+          {onlineUsers.length > 0 && (
+            <div className="hidden sm:block">
+              <OnlineCollaborators
+                onlineUsers={onlineUsers}
+                currentUserId={currentUserId}
+              />
+            </div>
           )}
 
-          {/* Collaborate Button */}
+          {/* Collaborate Button - icon only on mobile */}
           <CollaboratorManager
             examId={examId}
             examName={examName}
             trigger={
               <Button variant="outline" size="sm">
-                <Users className="w-4 h-4 mr-2" />
-                Collaborate
+                <Users className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Collaborate</span>
               </Button>
             }
           />
 
           <Button
             variant="outline"
+            size="sm"
             onClick={onPreview}
           >
-            <Eye className="w-4 h-4 mr-2" />
-            Preview
+            <Eye className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Preview</span>
           </Button>
           <Button
+            size="sm"
             onClick={onSave}
             disabled={saving}
           >
             {saving ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <Save className="w-4 h-4" />
+              <Save className="w-4 h-4 sm:mr-1" />
             )}
-            Save Draft
+            <span className="hidden sm:inline">Save Draft</span>
+            <span className="sm:hidden">Save</span>
           </Button>
           <Button
+            size="sm"
             onClick={onPublish}
             disabled={saving || !canPublish}
             variant={isPublished ? "secondary" : "default"}
@@ -163,15 +160,16 @@ export default function ExamHeader({
             {saving ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : null}
-            <GlobeIcon className="w-4 h-4" />
-            {isPublished ? 'Update Published' : 'Publish'}
+            <GlobeIcon className="w-4 h-4 sm:mr-1" />
+            <span className="hidden sm:inline">{isPublished ? 'Update Published' : 'Publish'}</span>
+            <span className="sm:hidden">{isPublished ? 'Update' : 'Publish'}</span>
           </Button>
         </div>
       </div>
 
       {isPublished && (
-        <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-          <p className="text-sm text-green-800 dark:text-green-200">
+        <div className="mb-4 mx-4 sm:mx-8 p-3 sm:p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+          <p className="text-xs sm:text-sm text-green-800 dark:text-green-200">
              This exam is published and available to students.
           </p>
         </div>

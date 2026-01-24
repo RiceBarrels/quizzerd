@@ -11,7 +11,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import TextEditor from '@/components/editors/text-editor';
+import TextEditor, { CollaboratorSelection } from '@/components/editors/text-editor';
 import VariableContent from '@/components/ui/variable-content';
 import StableCodeEditor from './StableCodeEditor';
 import { Trash2, Plus, ListTodoIcon, ListChecksIcon, TextAlignStartIcon, NotepadTextIcon, CircleSlashIcon, Eye, EyeOff, ChevronDown, SlidersHorizontal, Calendar, Clock, Upload, Star, Heading, Minus, ChevronsUpDown, Check, Heart, ThumbsUp, Code, GripVertical } from 'lucide-react';
@@ -22,6 +22,54 @@ import { CSS } from '@dnd-kit/utilities';
 import { UniqueIdentifier } from '@dnd-kit/core';
 import QuestionContextMenu from './QuestionContextMenu';
 import { TagSelector } from '@/components/tags/tag-selector';
+import { PresenceUser } from '@/hooks/useRealtimePresence';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+// Field highlight component - defined outside to prevent re-creation on each render
+interface FieldHighlightProps {
+  user: PresenceUser | null;
+  children: React.ReactNode;
+}
+
+function FieldHighlight({ user, children }: FieldHighlightProps) {
+  if (!user) {
+    return <>{children}</>;
+  }
+
+  return (
+    <div
+      className="relative rounded-md transition-all"
+      style={{
+        boxShadow: `0 0 0 2px ${user.color}`,
+      }}
+    >
+      {/* User indicator badge - tooltip only on badge, not the whole field */}
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div
+              className="absolute -top-2 -right-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium text-white shadow-sm cursor-default"
+              style={{ backgroundColor: user.color }}
+            >
+              <Avatar className="h-3.5 w-3.5 border border-white/30">
+                <AvatarImage src={user.imageUrl} alt={user.name} />
+                <AvatarFallback className="text-[8px] bg-transparent">
+                  {user.name.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <span className="max-w-[60px] truncate">{user.name.split(' ')[0]}</span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            <p>{user.name} is editing this field</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      {children}
+    </div>
+  );
+}
 
 const questionTypes: QuestionTypeOption[] = [
   { value: 'multiple_choice', label: 'Multiple Choice', icon: ListTodoIcon },
@@ -71,6 +119,11 @@ interface QuestionCardProps {
   isClickHighlighted?: boolean; // Click-based highlight (border only)
   isSelected?: boolean; // Selection state (for multi-select)
   selectedIndices?: number[]; // All selected question indices (for multi-select operations)
+  onFocusField?: (questionId: string, fieldType: 'question' | 'option' | 'explanation' | 'settings', optionIndex?: number) => void;
+  // Realtime collaboration props
+  onlineUsers?: PresenceUser[];
+  currentUserId?: string;
+  onSelectionChange?: (editorId: string, index: number, length: number) => void;
 }
 
 /**
@@ -135,9 +188,43 @@ const QuestionCard = memo(function QuestionCard({
   isScrollHighlighted = false,
   isClickHighlighted = false,
   isSelected = false,
-  selectedIndices = [index]
+  selectedIndices = [index],
+  onFocusField,
+  onlineUsers = [],
+  currentUserId,
+  onSelectionChange
 }: QuestionCardProps) {
   const [open, setOpen] = useState(false);
+
+  // Helper to get the first user editing a specific field (or null if none)
+  const getUserOnField = (fieldType: 'question' | 'option' | 'explanation' | 'settings', optionIndex?: number): PresenceUser | null => {
+    const user = onlineUsers.find((u) => {
+      if (u.id === currentUserId) return false;
+      if (u.cursor.questionId !== item.question_id) return false;
+      if (u.cursor.fieldType !== fieldType) return false;
+      if (fieldType === 'option' && u.cursor.optionIndex !== optionIndex) return false;
+      return true;
+    });
+    return user || null;
+  };
+
+  // Helper to get collaborator selections for a specific editor
+  const getCollaboratorSelections = (editorId: string): CollaboratorSelection[] => {
+    return onlineUsers
+      .filter((u) => {
+        if (u.id === currentUserId) return false;
+        if (u.cursor.editorId !== editorId) return false;
+        if (!u.cursor.selectionLength || u.cursor.selectionLength <= 0) return false;
+        return true;
+      })
+      .map((u) => ({
+        oditorId: u.cursor.editorId!,
+        index: u.cursor.selectionIndex || 0,
+        length: u.cursor.selectionLength || 0,
+        userName: u.name,
+        color: u.color,
+      }));
+  };
 
   const selectedType = questionTypes.find(type => type.value === item.question_type);
   const SelectedIcon = selectedType?.icon;
@@ -266,6 +353,19 @@ const QuestionCard = memo(function QuestionCard({
         </div>
 
         {item.question_type !== 'section_header' && item.question_type !== 'page_break' && (
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id={`required-${item.question_id}`}
+              checked={item.required ?? true}
+              onCheckedChange={(checked) => onUpdateQuestion(index, 'required', checked)}
+            />
+            <Label htmlFor={`required-${item.question_id}`} className="text-sm font-normal cursor-pointer">
+              Required question
+            </Label>
+          </div>
+        )}
+
+        {item.question_type !== 'section_header' && item.question_type !== 'page_break' && (
           <div className="space-y-2">
             <Label>Tags</Label>
             <TagSelector
@@ -277,13 +377,18 @@ const QuestionCard = memo(function QuestionCard({
 
         <div className="space-y-2">
           <Label>Question Text</Label>
-          <TextEditor
-            id={`question-${item.question_id}`}
-            value={item.question_text}
-            onChange={(value) => onUpdateQuestion(index, 'question_text', value)}
-            placeholder="Enter your question"
-            minHeight={80}
-          />
+          <FieldHighlight user={getUserOnField('question')}>
+            <TextEditor
+              id={`question-${item.question_id}`}
+              value={item.question_text}
+              onChange={(value) => onUpdateQuestion(index, 'question_text', value)}
+              onFocus={() => onFocusField?.(item.question_id, 'question')}
+              onSelectionChange={onSelectionChange}
+              collaboratorSelections={getCollaboratorSelections(`question-${item.question_id}`)}
+              placeholder="Enter your question"
+              minHeight={80}
+            />
+          </FieldHighlight>
         </div>
 
         {(item.question_type === 'multiple_choice' || item.question_type === 'multiple_select') && (
@@ -309,13 +414,18 @@ const QuestionCard = memo(function QuestionCard({
                   />
                 )}
                 <div className="flex-1">
-                  <TextEditor
-                    id={`question-${item.question_id}-option-${optionIndex}`}
-                    value={option}
-                    onChange={(value) => onUpdateOption(index, optionIndex, value)}
-                    placeholder={`Option ${optionIndex + 1}`}
-                    minHeight={50}
-                  />
+                  <FieldHighlight user={getUserOnField('option', optionIndex)}>
+                    <TextEditor
+                      id={`question-${item.question_id}-option-${optionIndex}`}
+                      value={option}
+                      onChange={(value) => onUpdateOption(index, optionIndex, value)}
+                      onFocus={() => onFocusField?.(item.question_id, 'option', optionIndex)}
+                      onSelectionChange={onSelectionChange}
+                      collaboratorSelections={getCollaboratorSelections(`question-${item.question_id}-option-${optionIndex}`)}
+                      placeholder={`Option ${optionIndex + 1}`}
+                      minHeight={50}
+                    />
+                  </FieldHighlight>
                 </div>
                 {(item.options?.length ?? 0) > 2 && (
                   <Button
@@ -671,13 +781,18 @@ const QuestionCard = memo(function QuestionCard({
             </div>
             <div className="space-y-2">
               <Label>Test Cases (Optional)</Label>
-              <TextEditor
-                id={`question-${item.question_id}-test-cases`}
-                value={item.test_cases || ''}
-                onChange={(value) => onUpdateQuestion(index, 'test_cases', value)}
-                placeholder="Describe the test cases or expected output"
-                minHeight={80}
-              />
+              <FieldHighlight user={getUserOnField('settings')}>
+                <TextEditor
+                  id={`question-${item.question_id}-test-cases`}
+                  value={item.test_cases || ''}
+                  onChange={(value) => onUpdateQuestion(index, 'test_cases', value)}
+                  onFocus={() => onFocusField?.(item.question_id, 'settings')}
+                  onSelectionChange={onSelectionChange}
+                  collaboratorSelections={getCollaboratorSelections(`question-${item.question_id}-test-cases`)}
+                  placeholder="Describe the test cases or expected output"
+                  minHeight={80}
+                />
+              </FieldHighlight>
             </div>
           </div>
         )}
@@ -685,13 +800,18 @@ const QuestionCard = memo(function QuestionCard({
         {item.question_type === 'section_header' && (
           <div className="space-y-2">
             <Label>Description</Label>
-            <TextEditor
-              id={`question-${item.question_id}-description`}
-              value={item.description || ''}
-              onChange={(value) => onUpdateQuestion(index, 'description', value)}
-              placeholder="Section description"
-              minHeight={80}
-            />
+            <FieldHighlight user={getUserOnField('question')}>
+              <TextEditor
+                id={`question-${item.question_id}-description`}
+                value={item.description || ''}
+                onChange={(value) => onUpdateQuestion(index, 'description', value)}
+                onFocus={() => onFocusField?.(item.question_id, 'question')}
+                onSelectionChange={onSelectionChange}
+                collaboratorSelections={getCollaboratorSelections(`question-${item.question_id}-description`)}
+                placeholder="Section description"
+                minHeight={80}
+              />
+            </FieldHighlight>
           </div>
         )}
 
@@ -704,13 +824,18 @@ const QuestionCard = memo(function QuestionCard({
         {item.question_type !== 'section_header' && item.question_type !== 'page_break' && (
           <div className="space-y-2">
             <Label>Explanation (Optional)</Label>
-            <TextEditor
-              id={`question-${item.question_id}-explanation`}
-              value={item.explanation || ''}
-              onChange={(value) => onUpdateQuestion(index, 'explanation', value)}
-              placeholder="Provide an explanation for the answer"
-              minHeight={80}
-            />
+            <FieldHighlight user={getUserOnField('explanation')}>
+              <TextEditor
+                id={`question-${item.question_id}-explanation`}
+                value={item.explanation || ''}
+                onChange={(value) => onUpdateQuestion(index, 'explanation', value)}
+                onFocus={() => onFocusField?.(item.question_id, 'explanation')}
+                onSelectionChange={onSelectionChange}
+                collaboratorSelections={getCollaboratorSelections(`question-${item.question_id}-explanation`)}
+                placeholder="Provide an explanation for the answer"
+                minHeight={80}
+              />
+            </FieldHighlight>
           </div>
         )}
       </CardContent>

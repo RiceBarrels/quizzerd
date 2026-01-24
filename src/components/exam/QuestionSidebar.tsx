@@ -22,8 +22,11 @@ import { CSS } from '@dnd-kit/utilities';
 import { FileText, Minus, GripVertical, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { ExamItem } from '@/types/exam';
 import { QuestionTypeOption } from '@/types/exam';
+import { PresenceUser } from '@/hooks/useRealtimePresence';
 import QuestionContextMenu from './QuestionContextMenu';
 import { useSidebar } from '../ui/sidebar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface QuestionSidebarProps {
   items: ExamItem[];
@@ -55,6 +58,9 @@ interface QuestionSidebarProps {
   canRedo?: () => boolean;
   selectedQuestions?: Set<string>;
   onQuestionSelect?: (questionId: string, event: React.MouseEvent) => void;
+  // Realtime presence props
+  onlineUsers?: PresenceUser[];
+  currentUserId?: string;
 }
 
 /**
@@ -118,6 +124,8 @@ export default function QuestionSidebar({
   canRedo,
   selectedQuestions = new Set(),
   onQuestionSelect,
+  onlineUsers = [],
+  currentUserId,
 }: QuestionSidebarProps) {
   const [sidebarPosition, setSidebarPosition] = useState({ top: 64, maxHeight: 'calc(100vh - 312px)' });
   const [collapsed, setCollapsed] = useState(false);
@@ -244,8 +252,16 @@ export default function QuestionSidebar({
     });
   }, [activeQuestionId, activeTab]);
 
+  // Get users editing a specific question
+  const getUsersOnQuestion = useCallback((questionId: string) => {
+    return onlineUsers.filter(
+      (u) => u.id !== currentUserId && u.cursor.questionId === questionId
+    );
+  }, [onlineUsers, currentUserId]);
+
   // Sortable Sidebar Button Component
   const SortableSidebarButton = ({ item, questionNumber }: { item: ExamItem; questionNumber: number }) => {
+    const usersOnThisQuestion = getUsersOnQuestion(item.question_id);
     const {
       attributes,
       listeners,
@@ -398,6 +414,77 @@ export default function QuestionSidebar({
                 <div className="text-xs font-medium text-muted-foreground whitespace-nowrap">
                   {item.question_type === 'section_header' ? 'Section' : `Q${questionNumber}`}
                 </div>
+                {/* Presence indicators for users editing this question */}
+                {usersOnThisQuestion.length > 0 && (
+                  <TooltipProvider>
+                    <div className="flex items-center gap-1 ml-1">
+                      {usersOnThisQuestion.slice(0, 2).map((user) => (
+                        <Tooltip key={user.id}>
+                          <TooltipTrigger asChild>
+                            <div
+                              className="flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[9px] font-medium"
+                              style={{
+                                backgroundColor: `${user.color}20`,
+                                color: user.color,
+                                border: `1px solid ${user.color}40`
+                              }}
+                            >
+                              <Avatar className="h-3 w-3">
+                                <AvatarImage src={user.imageUrl} alt={user.name} />
+                                <AvatarFallback
+                                  style={{ backgroundColor: user.color, color: 'white' }}
+                                  className="text-[7px] font-medium"
+                                >
+                                  {user.name.charAt(0).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="max-w-[40px] truncate">
+                                {user.cursor.fieldType === 'option'
+                                  ? `opt${(user.cursor.optionIndex ?? 0) + 1}`
+                                  : user.cursor.fieldType === 'explanation'
+                                  ? 'expl'
+                                  : user.cursor.fieldType === 'settings'
+                                  ? 'settings'
+                                  : 'text'}
+                              </span>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">
+                            <p className="font-medium">{user.name}</p>
+                            <p className="text-muted-foreground">
+                              Editing {user.cursor.fieldType === 'option'
+                                ? `Option ${(user.cursor.optionIndex ?? 0) + 1}`
+                                : user.cursor.fieldType === 'explanation'
+                                ? 'Explanation'
+                                : user.cursor.fieldType === 'settings'
+                                ? 'Settings'
+                                : 'Question text'}
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      ))}
+                      {usersOnThisQuestion.length > 2 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="h-4 px-1 rounded-full bg-muted flex items-center justify-center text-[8px] font-medium">
+                              +{usersOnThisQuestion.length - 2}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">
+                            {usersOnThisQuestion.slice(2).map((user) => (
+                              <p key={user.id}>
+                                <span className="font-medium">{user.name}</span>
+                                <span className="text-muted-foreground ml-1">
+                                  ({user.cursor.fieldType || 'text'})
+                                </span>
+                              </p>
+                            ))}
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                  </TooltipProvider>
+                )}
               </div>
               <div className="text-xs font-medium truncate leading-relaxed overflow-hidden text-ellipsis whitespace-nowrap">
                 {getQuestionTitle(item)}
@@ -469,9 +556,10 @@ export default function QuestionSidebar({
 
   return (
     <AnimatePresence initial={false} mode="wait">
+      {/* Hidden on mobile (< lg breakpoint) */}
       <motion.div
         key="questions-sidebar"
-        className="z-50 fixed left-8"
+        className="z-50 fixed left-4 lg:left-8 hidden lg:block"
         style={{ top: `${sidebarPosition.top}px` }}
         initial={{ opacity: 0, x: "-32rem", filter: "blur(8px)" }}
         animate={{

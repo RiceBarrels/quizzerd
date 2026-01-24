@@ -233,9 +233,10 @@ export default function AISidebar({ activeTab, onAddQuestions }: AISidebarProps)
 
     return (
         <AnimatePresence initial={false} mode="wait">
+            {/* Hidden on mobile (< lg breakpoint) */}
             <motion.div
                 key="ai-sidebar"
-                className="z-50 fixed right-8"
+                className="z-50 fixed right-4 lg:right-8 hidden lg:block"
                 style={{ top: '120px' }}
                 initial={{ opacity: 0, x: "32rem", filter: "blur(8px)" }}
                 animate={{

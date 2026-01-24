@@ -11,9 +11,20 @@ import Quill from 'quill';
 // Register math blots globally
 let mathBlotsRegistered = false;
 
+export interface CollaboratorSelection {
+  oditorId: string;
+  index: number;
+  length: number;
+  userName: string;
+  color: string;
+}
+
 interface TextEditorProps {
   value: string;
   onChange?: (value: string) => void;
+  onFocus?: () => void;
+  onSelectionChange?: (editorId: string, index: number, length: number) => void;
+  collaboratorSelections?: CollaboratorSelection[];
   placeholder?: string;
   id?: string;
   className?: string;
@@ -44,6 +55,9 @@ interface EventHandler {
 export default function TextEditor({
   value,
   onChange,
+  onFocus,
+  onSelectionChange,
+  collaboratorSelections = [],
   placeholder = 'Start typing...',
   id,
   className,
@@ -57,8 +71,10 @@ export default function TextEditor({
   const prevValueRef = useRef<string>(value);
   const observerRef = useRef<MutationObserver | null>(null);
   const onChangeRef = useRef(onChange);
+  const onSelectionChangeRef = useRef(onSelectionChange);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const formatUpdateTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const selectionHighlightsRef = useRef<HTMLDivElement[]>([]);
 
   // Internal function to actually trigger onChange
   const triggerChange = useCallback(() => {
@@ -105,6 +121,10 @@ export default function TextEditor({
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  }, [onSelectionChange]);
 
   // Expose triggerChange for use in event handlers
   const triggerChangeRef = useRef(triggerChange);
@@ -260,8 +280,20 @@ export default function TextEditor({
           if (range) {
             handleFocus();
             debouncedUpdateFormats();
+            // Call onFocus callback when editor gains focus
+            if (onFocus) {
+              onFocus();
+            }
+            // Report selection change for collaboration
+            if (onSelectionChangeRef.current) {
+              onSelectionChangeRef.current(editorId.current, range.index, range.length);
+            }
           } else {
             handleBlur({ relatedTarget: document.activeElement });
+            // Clear selection when losing focus
+            if (onSelectionChangeRef.current) {
+              onSelectionChangeRef.current(editorId.current, 0, 0);
+            }
           }
         });
         
@@ -414,6 +446,74 @@ export default function TextEditor({
   useEffect(() => {
     containerRef.current?.querySelector('.text-editor-container')?.classList.toggle('error', error);
   }, [error]);
+
+  // Render collaborator selection highlights
+  useEffect(() => {
+    if (!quillRef.current || !isInitialized.current) return;
+
+    // Clear existing highlights
+    selectionHighlightsRef.current.forEach(el => el.remove());
+    selectionHighlightsRef.current = [];
+
+    const quill = quillRef.current;
+    const editorRoot = quill.root;
+
+    collaboratorSelections.forEach((selection) => {
+      if (selection.length <= 0) return;
+
+      try {
+        // Get the bounds for the selection range
+        const bounds = quill.getBounds(selection.index, selection.length);
+        if (!bounds) return;
+
+        // Create highlight element
+        const highlight = document.createElement('div');
+        highlight.className = 'collaborator-selection-highlight';
+        highlight.style.cssText = `
+          position: absolute;
+          background-color: ${selection.color}30;
+          border-left: 2px solid ${selection.color};
+          pointer-events: none;
+          z-index: 1;
+          top: ${bounds.top}px;
+          left: ${bounds.left}px;
+          width: ${bounds.width}px;
+          height: ${bounds.height}px;
+          border-radius: 2px;
+        `;
+
+        // Add name label for longer selections
+        if (selection.length > 5) {
+          const label = document.createElement('div');
+          label.className = 'collaborator-selection-label';
+          label.textContent = selection.userName.split(' ')[0];
+          label.style.cssText = `
+            position: absolute;
+            top: -16px;
+            left: 0;
+            font-size: 10px;
+            padding: 1px 4px;
+            border-radius: 3px;
+            background-color: ${selection.color};
+            color: white;
+            white-space: nowrap;
+            font-weight: 500;
+          `;
+          highlight.appendChild(label);
+        }
+
+        editorRoot.appendChild(highlight);
+        selectionHighlightsRef.current.push(highlight);
+      } catch (e) {
+        // Ignore bounds errors for invalid ranges
+      }
+    });
+
+    return () => {
+      selectionHighlightsRef.current.forEach(el => el.remove());
+      selectionHighlightsRef.current = [];
+    };
+  }, [collaboratorSelections]);
 
   return (
     <div 

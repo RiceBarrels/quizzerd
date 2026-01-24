@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { useUser } from '@clerk/nextjs';
 import FloatingFormatDock from '@/components/editors/floating-format-dock';
 import { Tabs, TabsList, TabsTrigger, TabsContents, TabsContent } from '@/components/ui/shadcn-io/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +21,8 @@ import AISidebar from '@/components/exam/AISidebar';
 import { useQuestionOperations } from '@/hooks/useQuestionOperations';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { useExamPublish } from '@/hooks/useExamPublish';
+import { useRealtimePresence, ExamDataChange } from '@/hooks/useRealtimePresence';
+import { OnlineCollaborators, CollaboratorCursors } from '@/components/collaboration';
 import { ExamItem } from '@/types/exam';
 import { PageParams } from '@/app/layout';
 import { ScrollPosition } from '../layout';
@@ -28,6 +31,7 @@ import { Separator } from '@/components/ui/separator';
 export default function EditExamPage({ params }: { params: Promise<PageParams> }) {
   const router = useRouter();
   const { examId } = use(params);
+  const { user } = useUser();
 
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
@@ -77,6 +81,119 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
 
   // Items (questions)
   const [items, setItems] = useState<ExamItem[]>([]);
+
+  // Flag to prevent broadcast loops when receiving remote changes
+  const isRemoteUpdateRef = useRef(false);
+
+  // Handle incoming data changes from collaborators
+  const handleDataChange = useCallback((change: ExamDataChange) => {
+    console.log('Handling remote data change:', change);
+    isRemoteUpdateRef.current = true;
+
+    switch (change.type) {
+      case 'question_update':
+        if (change.questionIndex !== undefined && change.field && change.value !== undefined) {
+          setItems(prevItems => {
+            const newItems = [...prevItems];
+            if (newItems[change.questionIndex!]) {
+              newItems[change.questionIndex!] = {
+                ...newItems[change.questionIndex!],
+                [change.field!]: change.value,
+              };
+            }
+            return newItems;
+          });
+        }
+        break;
+      case 'question_add':
+        if (change.value) {
+          setItems(prevItems => [...prevItems, change.value]);
+        }
+        break;
+      case 'question_delete':
+        if (change.questionIndex !== undefined) {
+          setItems(prevItems => prevItems.filter((_, idx) => idx !== change.questionIndex));
+        }
+        break;
+      case 'question_reorder':
+        if (change.items) {
+          setItems(change.items);
+        }
+        break;
+      case 'exam_update':
+        // Full sync - reload exam data
+        if (change.examData) {
+          if (change.examData.exam_name) setExamName(change.examData.exam_name);
+          if (change.examData.exam_description !== undefined) setExamDescription(change.examData.exam_description);
+          if (change.examData.items) setItems(change.examData.items);
+        }
+        break;
+    }
+
+    // Reset flag after state update
+    setTimeout(() => {
+      isRemoteUpdateRef.current = false;
+    }, 100);
+
+    toast.info('Changes synced from collaborator', { duration: 2000 });
+  }, []);
+
+  // Realtime presence for collaboration
+  const { onlineUsers, updateCursor, broadcastChange, isConnected } = useRealtimePresence({
+    examId,
+    enabled: !!user,
+    onDataChange: handleDataChange,
+  });
+
+  // Store last known cursor state for selection updates
+  const lastCursorStateRef = useRef<{
+    questionId: string | null;
+    fieldType: 'question' | 'option' | 'explanation' | 'settings' | null;
+    optionIndex?: number;
+  }>({ questionId: null, fieldType: null });
+
+  // Track cursor position for realtime presence (must be after useRealtimePresence)
+  const handleCursorUpdate = useCallback((questionId: string | null, fieldType?: 'question' | 'option' | 'explanation' | 'settings', optionIndex?: number, editorId?: string, selectionIndex?: number, selectionLength?: number) => {
+    lastCursorStateRef.current = { questionId, fieldType: fieldType || null, optionIndex };
+    updateCursor({
+      questionId,
+      fieldType: fieldType || null,
+      optionIndex,
+      editorId,
+      selectionIndex,
+      selectionLength,
+    });
+  }, [updateCursor]);
+
+  // Handle field focus for presence tracking
+  const handleFocusField = useCallback((questionId: string, fieldType: 'question' | 'option' | 'explanation' | 'settings', optionIndex?: number) => {
+    if (isConnected) {
+      handleCursorUpdate(questionId, fieldType, optionIndex);
+    }
+  }, [isConnected, handleCursorUpdate]);
+
+  // Handle selection change for presence tracking
+  const handleSelectionChange = useCallback((editorId: string, selectionIndex: number, selectionLength: number) => {
+    if (isConnected) {
+      const { questionId, fieldType, optionIndex } = lastCursorStateRef.current;
+      updateCursor({
+        questionId,
+        fieldType,
+        optionIndex,
+        editorId,
+        selectionIndex,
+        selectionLength,
+      });
+    }
+  }, [isConnected, updateCursor]);
+
+  // Update cursor when active question changes
+  useEffect(() => {
+    if (activeQuestionId && isConnected) {
+      handleCursorUpdate(activeQuestionId, 'question');
+    }
+  }, [activeQuestionId, isConnected, handleCursorUpdate]);
+
   const [codeEditorModal, setCodeEditorModal] = useState<{
     isOpen: boolean;
     questionIndex: number | null;
@@ -182,6 +299,14 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     };
     setItems(prevItems => [...prevItems, newQuestion]);
     setActiveTab('questions');
+
+    // Broadcast to collaborators
+    if (broadcastChangeRef.current) {
+      broadcastChangeRef.current({
+        type: 'question_add',
+        value: newQuestion,
+      });
+    }
   }, []);
 
   const addPageBreak = useCallback(() => {
@@ -195,11 +320,29 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     };
     setItems(prevItems => [...prevItems, pageBreak]);
     setActiveTab('questions');
+
+    // Broadcast to collaborators
+    if (broadcastChangeRef.current) {
+      broadcastChangeRef.current({
+        type: 'question_add',
+        value: pageBreak,
+      });
+    }
   }, []);
 
   const addAIQuestions = useCallback((questions: ExamItem[]) => {
     setItems(prevItems => [...prevItems, ...questions]);
     setActiveTab('questions');
+
+    // Broadcast each question to collaborators
+    if (broadcastChangeRef.current) {
+      questions.forEach(q => {
+        broadcastChangeRef.current!({
+          type: 'question_add',
+          value: q,
+        });
+      });
+    }
   }, []);
 
   // Use auto-save hook (must be before updateQuestion that uses triggerSave)
@@ -229,8 +372,13 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     itemsRef.current = items;
   }, [items]);
   
-  // Wrapper for updateQuestion to trigger auto-save
-  // Removed items from dependencies to prevent unnecessary recreations
+  // Store broadcastChange in ref to avoid dependency issues
+  const broadcastChangeRef = useRef(broadcastChange);
+  useEffect(() => {
+    broadcastChangeRef.current = broadcastChange;
+  }, [broadcastChange]);
+
+  // Wrapper for updateQuestion to trigger auto-save and broadcast to collaborators
   const updateQuestion = useCallback((index: number, field: keyof ExamItem, value: any) => {
     // Log only in development
     if (process.env.NODE_ENV === 'development') {
@@ -243,6 +391,65 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     questionOperations.updateQuestion(index, field, value);
     // Trigger auto-save immediately when a question is updated
     triggerAutoSaveRef.current();
+
+    // Broadcast change to collaborators (only if not a remote update)
+    if (!isRemoteUpdateRef.current && broadcastChangeRef.current) {
+      broadcastChangeRef.current({
+        type: 'question_update',
+        questionIndex: index,
+        field: field as string,
+        value,
+      });
+    }
+  }, [questionOperations]);
+
+  // Wrapper for removeQuestion to broadcast changes
+  const removeQuestion = useCallback((index: number) => {
+    const questionId = itemsRef.current[index]?.question_id;
+    questionOperations.removeQuestion(index);
+
+    // Broadcast change to collaborators
+    if (!isRemoteUpdateRef.current && broadcastChangeRef.current) {
+      broadcastChangeRef.current({
+        type: 'question_delete',
+        questionIndex: index,
+        questionId,
+      });
+    }
+  }, [questionOperations]);
+
+  // Wrapper for reorderQuestions to broadcast changes
+  const reorderQuestions = useCallback((newItems: ExamItem[]) => {
+    questionOperations.reorderQuestions(newItems);
+
+    // Broadcast change to collaborators
+    if (!isRemoteUpdateRef.current && broadcastChangeRef.current) {
+      broadcastChangeRef.current({
+        type: 'question_reorder',
+        items: newItems,
+      });
+    }
+  }, [questionOperations]);
+
+  // Wrapper for updateOption to broadcast changes
+  const updateOption = useCallback((questionIndex: number, optionIndex: number, value: string) => {
+    questionOperations.updateOption(questionIndex, optionIndex, value);
+    // Trigger auto-save
+    triggerAutoSaveRef.current();
+
+    // Broadcast the entire options array after the update
+    if (!isRemoteUpdateRef.current && broadcastChangeRef.current) {
+      // Get current options and update the specific one
+      const currentOptions = [...(itemsRef.current[questionIndex]?.options || [])];
+      currentOptions[optionIndex] = value;
+
+      broadcastChangeRef.current({
+        type: 'question_update',
+        questionIndex,
+        field: 'options',
+        value: currentOptions,
+      });
+    }
   }, [questionOperations]);
 
   const getDefaultStarterFiles = useCallback((language?: string) => {
@@ -297,6 +504,20 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
   // Memoize total points calculation to avoid recalculating on every render
   const totalPoints = useMemo(() => {
     return items.reduce((sum, item) => sum + (item.points || 0), 0);
+  }, [items]);
+
+  // Memoize question numbers map for cursor display (maps question_id to 1-indexed number)
+  const questionNumbers = useMemo(() => {
+    const map = new Map<string, number>();
+    let questionNum = 1;
+    items.forEach((item) => {
+      // Only count actual questions, not page breaks or section headers
+      if (item.question_type !== 'page_break' && item.question_type !== 'section_header') {
+        map.set(item.question_id, questionNum);
+        questionNum++;
+      }
+    });
+    return map;
   }, [items]);
 
   // Sidebar helper functions
@@ -648,14 +869,14 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
             .map((item, index) => selectedQuestions.has(item.question_id) ? index : -1)
             .filter(index => index !== -1)
             .sort((a, b) => b - a); // Sort descending to delete from end first
-          selectedIndices.forEach(index => questionOperations.removeQuestion(index));
+          selectedIndices.forEach(index => removeQuestion(index));
           setSelectedQuestions(new Set());
           setHighlightedCard(null);
           toast.success(`Deleted ${selectedIndices.length} question${selectedIndices.length > 1 ? 's' : ''}`);
         } else if (highlightedCard) {
           const index = items.findIndex(item => item.question_id === highlightedCard);
           if (index !== -1) {
-            questionOperations.removeQuestion(index);
+            removeQuestion(index);
             setHighlightedCard(null);
             toast.success('Deleted question');
           }
@@ -692,7 +913,16 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
   return (
     <>
       <FloatingFormatDock />
-      
+
+      {/* Real-time collaborator cursors */}
+      <CollaboratorCursors
+        onlineUsers={onlineUsers}
+        currentUserId={user?.id}
+        updateCursor={updateCursor}
+        isConnected={isConnected}
+        questionNumbers={questionNumbers}
+      />
+
       {/* Fullscreen Code Editor Modal */}
       <CodeEditorModal
         isOpen={codeEditorModal.isOpen}
@@ -713,6 +943,8 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
         onPreview={() => router.push(`/exam/${examId}/preview`)}
         canPublish={!!(examName && items.length > 0)}
         lastSaved={lastSaved}
+        onlineUsers={onlineUsers}
+        currentUserId={user?.id}
       />
 
       {/* Questions Sidebar */}
@@ -723,11 +955,11 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
         highlightedCard={highlightedCard}
         questionTypes={questionTypes}
         onQuestionClick={handleSidebarQuestionClick}
-        onReorder={questionOperations.reorderQuestions}
+        onReorder={reorderQuestions}
         getQuestionTitle={getQuestionTitle}
         onUpdateQuestion={updateQuestion}
         onAddOption={questionOperations.addOption}
-        onRemoveQuestion={questionOperations.removeQuestion}
+        onRemoveQuestion={removeQuestion}
         onDuplicateQuestion={questionOperations.duplicateQuestion}
         onCopyQuestion={questionOperations.copyQuestion}
         onCutQuestion={questionOperations.cutQuestion}
@@ -746,6 +978,8 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
         canRedo={questionOperations.canRedo}
         selectedQuestions={selectedQuestions}
         onQuestionSelect={handleQuestionSelect}
+        onlineUsers={onlineUsers}
+        currentUserId={user?.id}
       />
 
       {/* AI Sidebar */}
@@ -778,7 +1012,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
         }
       }} className="flex-1">
         <TabsList id="tabs-list" className="ml-8 sticky top-8 z-10">
-          <TabsTrigger value="details" className="flex items-center gap-2"><BookOpenIcon className="w-4 h-4" /> Exam Details</TabsTrigger>
+          <TabsTrigger value="details" className="flex items-center gap-2"><BookOpenIcon className="w-4 h-4" /> <span className="">Exam Details</span></TabsTrigger>
           <div className="flex items-center h-5 m-2"><Separator orientation="vertical"/></div>
           <TabsTrigger value="questions" className="flex items-center gap-2">
             <ListTodoIcon className="w-4 h-4" />
@@ -809,9 +1043,9 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
               items={items}
               onUpdateQuestion={updateQuestion}
               onAddOption={questionOperations.addOption}
-              onUpdateOption={questionOperations.updateOption}
+              onUpdateOption={updateOption}
               onRemoveOption={questionOperations.removeOption}
-              onRemoveQuestion={questionOperations.removeQuestion}
+              onRemoveQuestion={removeQuestion}
               onDuplicateQuestion={questionOperations.duplicateQuestion}
               onCopyQuestion={questionOperations.copyQuestion}
               onCutQuestion={questionOperations.cutQuestion}
@@ -831,7 +1065,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
               onAddNewQuestion={addNewQuestion}
               onAddPageBreak={addPageBreak}
               onAddAIQuestions={addAIQuestions}
-              onReorderQuestions={questionOperations.reorderQuestions}
+              onReorderQuestions={reorderQuestions}
               onOpenCodeEditor={openCodeEditor}
               onScrollToQuestionRef={(scrollFn) => {
                 scrollToQuestionRef.current = scrollFn;
@@ -842,6 +1076,10 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
               onHighlightedCardChange={setHighlightedCard}
               selectedQuestions={selectedQuestions}
               onQuestionSelect={handleQuestionSelect}
+              onlineUsers={onlineUsers}
+              currentUserId={user?.id}
+              onFocusField={handleFocusField}
+              onSelectionChange={handleSelectionChange}
             />
           </TabsContent>
 

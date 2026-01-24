@@ -16,15 +16,20 @@ export async function GET(
     const { examId } = await params;
     const supabase = await createSupabaseClient();
 
-    // Verify exam ownership
+    // Verify exam access (owner or collaborator)
     const { data: exam } = await supabase
       .from('exams')
-      .select('created_by')
+      .select('creator_id, collaborator_ids')
       .eq('exam_id', examId)
       .single();
 
-    if (!exam || exam.created_by !== userId) {
+    if (!exam) {
       return NextResponse.json({ error: 'Exam not found' }, { status: 404 });
+    }
+
+    const hasAccess = exam.creator_id === userId || exam.collaborator_ids?.includes(userId);
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
     // Fetch versions
@@ -77,7 +82,9 @@ export async function POST(
       return NextResponse.json({ error: 'Exam not found' }, { status: 404 });
     }
 
-    if (exam.created_by !== userId) {
+    // Check if user is owner or collaborator
+    const hasAccess = exam.creator_id === userId || exam.collaborator_ids?.includes(userId);
+    if (!hasAccess) {
       return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 

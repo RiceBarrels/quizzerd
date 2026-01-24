@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseClient } from '@/lib/supabase';
+import { createSupabaseClient, createSupabaseAdminClient } from '@/lib/supabase';
 import { auth } from '@clerk/nextjs/server';
 
 export async function PUT(request: Request) {
@@ -26,7 +26,7 @@ export async function PUT(request: Request) {
       shuffle_items,
       show_results_immediately,
       passing_score,
-      collaborator_ids = [],
+      collaborator_ids,
       items = [],
       total_points,
       status,
@@ -85,14 +85,14 @@ export async function PUT(request: Request) {
       );
     }
 
-    // Prepare update data
-    const updateData = {
+    // Prepare update data - only include collaborator_ids if explicitly provided
+    // to prevent accidentally removing collaborators
+    const updateData: Record<string, any> = {
       exam_name,
       exam_description: exam_description || null,
       subject: subjects || [],
       is_public: is_public || false,
       is_published: is_published || false,
-      collaborator_ids: collaborator_ids || [],
       duration_minutes: duration_minutes || 60,
       attempts_allowed: attempts_allowed || 1,
       shuffle_items: shuffle_items || false,
@@ -114,8 +114,15 @@ export async function PUT(request: Request) {
       updated_at: new Date().toISOString()
     };
 
-    // Update the exam
-    const { data, error } = await supabase
+    // Only update collaborator_ids if explicitly provided in the request
+    if (collaborator_ids !== undefined) {
+      updateData.collaborator_ids = collaborator_ids;
+    }
+
+    // Update the exam using admin client (RLS verified via SELECT above,
+    // permission check done in application code)
+    const adminSupabase = createSupabaseAdminClient();
+    const { data, error } = await adminSupabase
       .from('exams')
       .update(updateData)
       .eq('exam_id', exam_id)

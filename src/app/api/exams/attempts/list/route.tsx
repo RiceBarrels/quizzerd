@@ -24,10 +24,10 @@ export async function GET(request: Request) {
             );
         }
 
-        // Verify user is the exam creator
+        // Verify user is the exam creator or collaborator
         const { data: exam, error: examError } = await supabase
             .from('exams')
-            .select('exam_id, creator_id')
+            .select('exam_id, creator_id, collaborator_ids')
             .eq('exam_id', examId)
             .single();
 
@@ -38,9 +38,10 @@ export async function GET(request: Request) {
             );
         }
 
-        if (exam.creator_id !== userId) {
+        const hasAccess = exam.creator_id === userId || exam.collaborator_ids?.includes(userId);
+        if (!hasAccess) {
             return NextResponse.json(
-                { success: false, error: 'Unauthorized - only exam creator can view attempts' },
+                { success: false, error: 'Unauthorized - only exam creator or collaborators can view attempts' },
                 { status: 403 }
             );
         }

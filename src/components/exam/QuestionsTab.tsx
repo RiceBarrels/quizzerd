@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Plus, FilePlus } from 'lucide-react';
 import QuestionCard from './QuestionCard';
 import { ExamItem } from '@/types/exam';
+import { PresenceUser } from '@/hooks/useRealtimePresence';
+import { QuestionPresenceIndicator } from '@/components/collaboration';
 import { useRef, useEffect, useCallback, useState } from 'react';
 import {
   DndContext,
@@ -57,6 +59,11 @@ interface QuestionsTabProps {
   onHighlightedCardChange?: (id: string | null) => void;
   selectedQuestions?: Set<string>;
   onQuestionSelect?: (questionId: string, event: React.MouseEvent) => void;
+  // Realtime presence props
+  onlineUsers?: PresenceUser[];
+  currentUserId?: string;
+  onFocusField?: (questionId: string, fieldType: 'question' | 'option' | 'explanation' | 'settings', optionIndex?: number) => void;
+  onSelectionChange?: (editorId: string, index: number, length: number) => void;
 }
 
 /**
@@ -128,7 +135,11 @@ export default function QuestionsTab({
   highlightedCard,
   onHighlightedCardChange,
   selectedQuestions = new Set(),
-  onQuestionSelect
+  onQuestionSelect,
+  onlineUsers = [],
+  currentUserId,
+  onFocusField,
+  onSelectionChange
 }: QuestionsTabProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -344,16 +355,16 @@ export default function QuestionsTab({
   const itemIds: UniqueIdentifier[] = items.map(item => item.question_id);
 
   return (
-    <div className="flex gap-6 min-h-full py-4">
-      {/* Spacer for fixed sidebar (from parent) */}
-      <div className="w-72 shrink-0"></div>
+    <div className="flex gap-4 lg:gap-6 min-h-full py-4">
+      {/* Spacer for fixed sidebar (from parent) - hidden on mobile */}
+      <div className="hidden lg:block w-72 shrink-0"></div>
 
       {/* Main Content */}
-      <div className="flex-1 space-y-6">
+      <div className="flex-1 space-y-4 sm:space-y-6 px-4 sm:px-0">
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-2xl font-bold">Exam Questions</h2>
-            <p className="text-sm text-muted-foreground mt-1">
+            <h2 className="text-xl sm:text-2xl font-bold">Exam Questions</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
               Add and manage exam questions.
             </p>
           </div>
@@ -411,8 +422,16 @@ export default function QuestionsTab({
                         onHighlightedCardChange(item.question_id);
                       }
                     }}
-                    className={`transition-all`}
+                    className={`transition-all relative`}
                   >
+                    {/* Collaborator presence indicator */}
+                    {onlineUsers.length > 0 && (
+                      <QuestionPresenceIndicator
+                        questionId={item.question_id}
+                        onlineUsers={onlineUsers}
+                        currentUserId={currentUserId}
+                      />
+                    )}
                     <QuestionCard
                       id={item.question_id}
                       item={item}
@@ -445,6 +464,10 @@ export default function QuestionsTab({
                       isClickHighlighted={isClickHighlighted}
                       isSelected={isSelected}
                       selectedIndices={selectedIndices}
+                      onFocusField={onFocusField}
+                      onlineUsers={onlineUsers}
+                      currentUserId={currentUserId}
+                      onSelectionChange={onSelectionChange}
                     />
                   </div>
                 );
@@ -472,8 +495,8 @@ export default function QuestionsTab({
         </div>
       </div>
 
-      {/* Spacer for AI Sidebar */}
-      {onAddAIQuestions && <div className="w-72 shrink-0" />}
+      {/* Spacer for AI Sidebar - hidden on mobile */}
+      {onAddAIQuestions && <div className="hidden lg:block w-72 shrink-0" />}
     </div>
   );
 }
