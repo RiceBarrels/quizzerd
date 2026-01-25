@@ -18,6 +18,9 @@ export interface CursorPosition {
   editorId?: string;
   selectionIndex?: number;
   selectionLength?: number;
+  // Chat message (Figma-style "/" chat)
+  message?: string;
+  messageTimestamp?: number;
 }
 
 export interface PresenceUser {

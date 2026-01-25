@@ -7,6 +7,7 @@ import {
   CursorPointer,
   CursorBody,
   CursorName,
+  CursorMessage,
 } from '@/components/kibo-ui/cursor';
 
 interface CollaboratorCursorsProps {
@@ -17,6 +18,9 @@ interface CollaboratorCursorsProps {
   /** Map of question IDs to their display numbers (1-indexed) */
   questionNumbers?: Map<string, number>;
 }
+
+// How long to show a message before it fades (in ms)
+const MESSAGE_DISPLAY_DURATION = 5000;
 
 /**
  * Displays real-time cursor positions of collaborators and tracks local mouse position
@@ -32,6 +36,12 @@ export function CollaboratorCursors({
   const lastPositionRef = useRef<{ x: number; y: number } | null>(null);
   const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [documentHeight, setDocumentHeight] = useState(0);
+
+  // Chat input state
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatMessage, setChatMessage] = useState('');
+  const [chatPosition, setChatPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const chatInputRef = useRef<HTMLInputElement>(null);
 
   // Track document height for the absolute container
   useEffect(() => {
@@ -101,18 +111,162 @@ export function CollaboratorCursors({
     };
   }, [handleMouseMove]);
 
+  // Handle "/" key to open chat
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    // Only open chat on "/" if not already typing in an input/textarea
+    const target = e.target as HTMLElement;
+    const isInputElement = target.tagName === 'INPUT' ||
+                          target.tagName === 'TEXTAREA' ||
+                          target.isContentEditable ||
+                          target.closest('.ql-editor');
+
+    if (e.key === '/' && !isChatOpen && !isInputElement && isConnected) {
+      e.preventDefault();
+      // Use the last known position or center of viewport
+      const x = lastPositionRef.current?.x ?? window.innerWidth / 2 + window.scrollX;
+      const y = lastPositionRef.current?.y ?? window.innerHeight / 2 + window.scrollY;
+      setChatPosition({ x, y });
+      setIsChatOpen(true);
+      setChatMessage('');
+    }
+
+    // Close chat on Escape
+    if (e.key === 'Escape' && isChatOpen) {
+      setIsChatOpen(false);
+      setChatMessage('');
+    }
+  }, [isChatOpen, isConnected]);
+
+  // Set up "/" key listener
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleKeyDown]);
+
+  // Focus input when chat opens
+  useEffect(() => {
+    if (isChatOpen && chatInputRef.current) {
+      chatInputRef.current.focus();
+    }
+  }, [isChatOpen]);
+
+  // Send chat message
+  const handleSendMessage = useCallback(() => {
+    if (!chatMessage.trim() || !isConnected) return;
+
+    updateCursor({
+      questionId: null,
+      fieldType: null,
+      x: chatPosition.x,
+      y: chatPosition.y,
+      message: chatMessage.trim(),
+      messageTimestamp: Date.now(),
+    });
+
+    setIsChatOpen(false);
+    setChatMessage('');
+  }, [chatMessage, chatPosition, isConnected, updateCursor]);
+
+  // Handle input key events
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && chatMessage.trim()) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+    if (e.key === 'Escape') {
+      setIsChatOpen(false);
+      setChatMessage('');
+    }
+  };
+
+  // Force re-render to expire messages after MESSAGE_DISPLAY_DURATION
+  const [, forceUpdate] = useState(0);
+  useEffect(() => {
+    const usersWithMessages = onlineUsers.filter(
+      (u) => u.cursor.message && u.cursor.messageTimestamp
+    );
+
+    if (usersWithMessages.length === 0) return;
+
+    // Find the earliest expiring message
+    const now = Date.now();
+    const expirationTimes = usersWithMessages.map(
+      (u) => (u.cursor.messageTimestamp || 0) + MESSAGE_DISPLAY_DURATION - now
+    );
+    const nextExpiration = Math.max(100, Math.min(...expirationTimes));
+
+    const timer = setTimeout(() => {
+      forceUpdate((n) => n + 1);
+    }, nextExpiration);
+
+    return () => clearTimeout(timer);
+  }, [onlineUsers]);
+
   // Filter out current user and users without cursor position
   const usersWithCursors = onlineUsers.filter(
     (u) => u.id !== currentUserId && u.cursor.x !== undefined && u.cursor.y !== undefined
   );
 
-  if (usersWithCursors.length === 0) return null;
+  // Check if a user's message is still visible (within display duration)
+  const isMessageVisible = (user: PresenceUser) => {
+    if (!user.cursor.message || !user.cursor.messageTimestamp) return false;
+    return Date.now() - user.cursor.messageTimestamp < MESSAGE_DISPLAY_DURATION;
+  };
+
+  // Show chat input even if no other users have cursors
+  if (usersWithCursors.length === 0 && !isChatOpen) return null;
 
   return (
     <div
       className="pointer-events-none absolute left-0 top-0 z-[9999] w-full overflow-visible"
       style={{ height: documentHeight || '100%' }}
     >
+      {/* Chat input for current user */}
+      {isChatOpen && (
+        <div
+          className="pointer-events-auto absolute"
+          style={{
+            left: chatPosition.x,
+            top: chatPosition.y,
+            transform: 'translate(10px, 10px)',
+          }}
+        >
+          <div className="flex items-center gap-2 rounded-lg bg-white shadow-lg border border-gray-200 p-2">
+            <input
+              ref={chatInputRef}
+              type="text"
+              value={chatMessage}
+              onChange={(e) => setChatMessage(e.target.value)}
+              onKeyDown={handleInputKeyDown}
+              onBlur={() => {
+                // Small delay to allow clicking send button
+                setTimeout(() => {
+                  if (!chatMessage.trim()) {
+                    setIsChatOpen(false);
+                  }
+                }, 150);
+              }}
+              placeholder="Type a message..."
+              className="w-48 px-2 py-1 text-sm outline-none"
+              maxLength={100}
+            />
+            <button
+              onClick={handleSendMessage}
+              disabled={!chatMessage.trim()}
+              className="px-2 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Send
+            </button>
+          </div>
+          <div className="text-xs text-gray-500 mt-1 ml-1">
+            Press Enter to send, Esc to cancel
+          </div>
+        </div>
+      )}
+
+      {/* Collaborator cursors with messages */}
       {usersWithCursors.map((user) => (
         <div
           key={user.id}
@@ -144,6 +298,12 @@ export function CollaboratorCursors({
                   </span>
                 )}
               </CursorName>
+              {/* Show message if visible */}
+              {isMessageVisible(user) && (
+                <CursorMessage className="mt-1 font-normal opacity-100">
+                  {user.cursor.message}
+                </CursorMessage>
+              )}
             </CursorBody>
           </Cursor>
         </div>
