@@ -11,6 +11,15 @@ if (!supabaseUrl || !supabaseKey) {
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
 /**
+ * Creates a Supabase client without authentication (for public routes)
+ * Uses the anon key which respects Row Level Security
+ * @returns {ReturnType<typeof createClient>} Public Supabase client instance
+ */
+export function createPublicSupabaseClient() {
+  return createClient(supabaseUrl!, supabaseKey!)
+}
+
+/**
  * Creates a Supabase client with authentication token from Clerk
  * Attempts to get Supabase JWT template token, falls back to regular session token or service role key
  * @returns {Promise<ReturnType<typeof createClient>>} Authenticated Supabase client instance

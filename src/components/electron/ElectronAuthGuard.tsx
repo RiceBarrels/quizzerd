@@ -8,6 +8,26 @@ interface ElectronAuthGuardProps {
   children: ReactNode
 }
 
+// Public routes that don't require authentication (for SEO and public access)
+const PUBLIC_ROUTES = [
+  "/welcome",
+  "/exam",
+  "/about",
+  "/help",
+  "/features",
+  "/contact",
+  "/privacy",
+  "/terms",
+  "/cookie-policy",
+  "/site-map",
+]
+
+function isPublicRoute(pathname: string): boolean {
+  return PUBLIC_ROUTES.some(route =>
+    pathname === route || pathname.startsWith(`${route}/`)
+  )
+}
+
 export function ElectronAuthGuard({ children }: ElectronAuthGuardProps) {
   const { isSignedIn, isLoaded } = useUser()
   const router = useRouter()
@@ -29,8 +49,8 @@ export function ElectronAuthGuard({ children }: ElectronAuthGuardProps) {
     // 2. Auth is loaded
     // 3. User is in Electron
     // 4. User is not signed in
-    // 5. User is not already on the welcome page
-    if (!isChecking && isLoaded && isElectron && !isSignedIn && pathname !== "/welcome") {
+    // 5. User is not on a public route
+    if (!isChecking && isLoaded && isElectron && !isSignedIn && !isPublicRoute(pathname)) {
       router.push("/welcome")
     }
   }, [isChecking, isLoaded, isElectron, isSignedIn, pathname, router])
@@ -40,8 +60,8 @@ export function ElectronAuthGuard({ children }: ElectronAuthGuardProps) {
     return null
   }
 
-  // If in Electron and not signed in, show nothing (redirect is happening)
-  if (isElectron && !isSignedIn && pathname !== "/welcome") {
+  // If in Electron and not signed in and not on public route, show nothing (redirect is happening)
+  if (isElectron && !isSignedIn && !isPublicRoute(pathname)) {
     return null
   }
 

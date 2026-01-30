@@ -11,7 +11,8 @@ import {
   SidebarMenu,
   SidebarSeparator,
 } from "@/components/ui/sidebar"
-import { LogOut, Sparkles } from "lucide-react"
+import { LogOut } from "lucide-react"
+import Image from "next/image"
 import Link from "next/link"
 import { GeneralGroup, ClassesGroup } from "./app-sidebar-groups"
 import { useClerk, useUser } from "@clerk/nextjs"
@@ -24,36 +25,42 @@ import { motion, AnimatePresence } from "framer-motion";
 export default function AppSidebar({...prop}){
     const { signOut } = useClerk();
     const { user } = useUser();
-    const { open, state } = useSidebar();
+    const { open, state, isHidden, showSidebar } = useSidebar();
     const isCollapsed = state === "collapsed";
+  
+    const sidebarVisible = !isHidden || showSidebar
 
     return (
         <>
-        <Sidebar collapsible="icon" className={"m-1.5 bg-background mt-11 rounded-4xl rounded-r-2xl border shadow-none overflow-hidden translate-x-1 h-[calc(100vh-3rem)] z-40 transition-all duration-300 ease-in-out"} {...prop}>
+        <Sidebar 
+            collapsible="icon" 
+            className={cn("m-1.5 bg-background mt-11 rounded-4xl rounded-r-2xl border shadow-none overflow-hidden translate-x-1 z-40 transition-all duration-300 ease-in-out", open ? "h-[calc(100vh-3rem)]" : "h-[calc(100vh-0.5rem)] mt-1")} 
+            placeholderClassName={cn("transition-all duration-500 ease-in-out" ,sidebarVisible ? "" : "data-[collapsible=icon]:w-0")}
+            {...prop}
+        >
             <SidebarHeader className={cn(
                 "border-b",
                 "px-6 py-5 group-data-[collapsible=icon]:px-1.75 group-data-[collapsible=icon]:py-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center bg-background"
             )}>
                 <Link href="/" className="flex items-center gap-3 group">
-                    <motion.div 
+                    <motion.div
                         className={cn(
-                            "flex items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm",
+                            "flex items-center justify-center rounded-2xl overflow-hidden",
                             "h-10 w-10 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8"
                         )}
                         whileHover={{ scale: 1.05 }}
                         transition={{ type: "spring", stiffness: 250, damping: 30 }}
                     >
-                        <motion.div
-                            animate={{
-                                scale: isCollapsed ? 0.8 : 1,
-                            }}
-                            transition={{ type: "spring", stiffness: 250, damping: 30 }}
-                        >
-                            <Sparkles className={cn(
-                                "h-5 w-5",
-                                "group-data-[collapsible=icon]:h-4 group-data-[collapsible=icon]:w-4"
-                            )} />
-                        </motion.div>
+                        <Image
+                            src="/logo.svg"
+                            alt="QuizZerd Logo"
+                            width={40}
+                            height={40}
+                            className={cn(
+                                "h-10 w-10",
+                                "group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8"
+                            )}
+                        />
                     </motion.div>
                     <AnimatePresence mode="popLayout">
                         {!isCollapsed && (

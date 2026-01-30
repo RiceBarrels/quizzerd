@@ -1,11 +1,9 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseClient } from '@/lib/supabase';
+import { createSupabaseClient, createPublicSupabaseClient } from '@/lib/supabase';
 import { auth } from '@clerk/nextjs/server';
 
 export async function GET(request: Request) {
   try {
-    const { userId } = await auth();
-
     const { searchParams } = new URL(request.url);
     const examId = searchParams.get('examId');
     const type = searchParams.get('type') || 'my-exams';
@@ -14,8 +12,61 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '12');
     const offset = (page - 1) * limit;
 
+    // For public routes, we don't need authentication
+    if (type === 'public') {
+      // Use public client for unauthenticated access
+      const supabase = createPublicSupabaseClient();
+
+      let query = supabase
+        .from('exams')
+        .select('*', { count: 'exact' })
+        .eq('is_public', true);
+
+      // Add search filter if provided
+      if (search) {
+        query = query.or(`exam_name.ilike.%${search}%,exam_description.ilike.%${search}%`);
+      }
+
+      // Add ordering and pagination
+      query = query
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      const { data, error, count } = await query;
+
+      if (error) {
+        console.error('Supabase error:', error);
+        return NextResponse.json(
+          { error: 'Failed to fetch public exams', details: error.message },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: data || [],
+        pagination: {
+          page,
+          limit,
+          total: count || 0,
+          totalPages: Math.ceil((count || 0) / limit),
+          hasMore: offset + limit < (count || 0)
+        }
+      });
+    }
+
+    // For non-public routes, require authentication
+    let userId: string | null = null;
+    try {
+      const authResult = await auth();
+      userId = authResult.userId;
+    } catch (authError) {
+      // Auth failed
+      console.log('Auth check failed');
+    }
+
     // Require authentication for private content
-    if (!userId && type !== 'public') {
+    if (!userId) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -90,48 +141,22 @@ export async function GET(request: Request) {
       .from('exams')
       .select('*', { count: 'exact' });
 
-    // Apply filters based on type
+    // Apply filters based on type (public is handled above)
     switch (type) {
       case 'my-exams':
-        if (!userId) {
-          return NextResponse.json(
-            { error: 'Unauthorized' },
-            { status: 401 }
-          );
-        }
         query = query.eq('creator_id', userId);
         break;
       
-      case 'public':
-        // Show all public exams - accessible to everyone
-        // Filter by published status to show only ready exams
-        query = query
-          .eq('is_public', true)
-          .eq('status', 'published');
-        break;
-      
       case 'shared':
-        if (!userId) {
-          return NextResponse.json(
-            { error: 'Unauthorized' },
-            { status: 401 }
-          );
-        }
         // Use cs (contains) operator - collaborator_ids must contain userId
         // Also filter out nulls to prevent errors
         query = query
           .not('collaborator_ids', 'is', null)
           .contains('collaborator_ids', [userId]);
         break;
-      
+
       default:
         // Default to user's own exams
-        if (!userId) {
-          return NextResponse.json(
-            { error: 'Unauthorized' },
-            { status: 401 }
-          );
-        }
         query = query.eq('creator_id', userId);
     }
 

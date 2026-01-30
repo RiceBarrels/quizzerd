@@ -89,7 +89,8 @@ export default function ExamPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState(isSignedIn ? "my-exams" : "public");
+  // Default to "public" until auth is loaded, then switch to "my-exams" if signed in
+  const [activeTab, setActiveTab] = useState("public");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importFormUrl, setImportFormUrl] = useState("");
@@ -118,11 +119,27 @@ export default function ExamPage() {
   const [previewExam, setPreviewExam] = useState<any>(null);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
 
+  // Set default tab to "my-exams" when user signs in
   useEffect(() => {
+    if (isLoaded && isSignedIn && activeTab === "public") {
+      setActiveTab("my-exams");
+    }
+  }, [isLoaded, isSignedIn]);
+
+  useEffect(() => {
+    // Always fetch - public exams don't require auth
+    // For my-exams/shared, the API will handle auth check
     fetchExams();
-  }, [page, search, activeTab]);
+  }, [page, search, activeTab, isLoaded]);
 
   const fetchExams = async () => {
+    // Skip fetching non-public exams if not signed in
+    if (activeTab !== "public" && !isSignedIn) {
+      setExams([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -141,12 +158,26 @@ export default function ExamPage() {
       } else if (data.message && data.message.includes('table does not exist')) {
         toast.error("Database not configured. Please create the exams table.");
         console.error("Database setup required:", data.message);
+      } else if (data.error === 'Unauthorized') {
+        // Don't show error for expected auth issues - just clear exams
+        setExams([]);
+        setPagination(null);
       } else {
-        toast.error(data.error || "Failed to load exams");
+        // Only show error toast if user is signed in (not for public browse)
+        if (isSignedIn) {
+          toast.error(data.error || "Failed to load exams");
+        }
+        setExams([]);
+        setPagination(null);
       }
     } catch (error) {
       console.error("Failed to fetch exams:", error);
-      toast.error("Failed to load exams");
+      // Only show error toast if user is signed in
+      if (isSignedIn) {
+        toast.error("Failed to load exams");
+      }
+      setExams([]);
+      setPagination(null);
     } finally {
       setLoading(false);
     }

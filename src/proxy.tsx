@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server';
 import { rateLimit, getClientIdentifier, getRateLimitConfig, rateLimitHeaders } from './lib/rate-limit';
 
 const isProtectedRoute = createRouteMatcher([
-  '/exam(.*)',
   '/profile(.*)',
   '/todos(.*)',
   '/calender(.*)',
