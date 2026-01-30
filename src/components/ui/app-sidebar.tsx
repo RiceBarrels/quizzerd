@@ -29,10 +29,10 @@ export default function AppSidebar({...prop}){
 
     return (
         <>
-        <Sidebar collapsible="icon" className={"m-1.5 rounded-4xl border shadow-lg overflow-hidden translate-x-1 h-[calc(100vh-1rem)]  transition-all duration-300 ease-in-out"} {...prop}>
+        <Sidebar collapsible="icon" className={"m-1.5 bg-background mt-11 rounded-4xl rounded-r-2xl border shadow-none overflow-hidden translate-x-1 h-[calc(100vh-3rem)] z-40 transition-all duration-300 ease-in-out"} {...prop}>
             <SidebarHeader className={cn(
                 "border-b",
-                "px-6 py-5 group-data-[collapsible=icon]:px-1.75 group-data-[collapsible=icon]:py-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center"
+                "px-6 py-5 group-data-[collapsible=icon]:px-1.75 group-data-[collapsible=icon]:py-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center bg-background"
             )}>
                 <Link href="/" className="flex items-center gap-3 group">
                     <motion.div 
@@ -80,7 +80,7 @@ export default function AppSidebar({...prop}){
 
             <SidebarContent className={cn(
                 "pt-2 pb-3",
-                "group-data-[collapsible=icon]:pt-3 group-data-[collapsible=icon]:pb-2"
+                "group-data-[collapsible=icon]:pt-3 group-data-[collapsible=icon]:pb-2 bg-background"
             )}>
                 <GeneralGroup />
                 <ClassesGroup />
@@ -88,10 +88,10 @@ export default function AppSidebar({...prop}){
 
             <SidebarFooter className={cn(
                 "border-t rounded-b-3xl",
-                "p-4 space-y-3 group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:space-y-2"
+                "p-4 space-y-3 group-data-[collapsible=icon]:p-2 group-data-[collapsible=icon]:space-y-2 bg-background"
             )}>
                 {user && (
-                    <SidebarMenu>
+                    <SidebarMenu className="mt-2">
                         <SidebarMenuItem>
                             <motion.div 
                                 className={cn(

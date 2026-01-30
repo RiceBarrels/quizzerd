@@ -82,25 +82,52 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
   // Items (questions)
   const [items, setItems] = useState<ExamItem[]>([]);
 
-  // Flag to prevent broadcast loops when receiving remote changes
-  const isRemoteUpdateRef = useRef(false);
+  // Track remote updates per question+field to prevent bounce-back
+  // Key format: `${questionId}:${field}` -> timestamp
+  const remoteUpdatesRef = useRef<Map<string, number>>(new Map());
+
+  // Check if an update should be considered remote (within 500ms of receiving)
+  const isRecentRemoteUpdate = useCallback((questionId: string, field: string): boolean => {
+    const key = `${questionId}:${field}`;
+    const timestamp = remoteUpdatesRef.current.get(key);
+    if (!timestamp) return false;
+    const isRecent = Date.now() - timestamp < 500; // 500ms window
+    if (!isRecent) {
+      remoteUpdatesRef.current.delete(key); // Clean up old entries
+    }
+    return isRecent;
+  }, []);
+
+  // Mark a field as remotely updated
+  const markRemoteUpdate = useCallback((questionId: string, field: string) => {
+    const key = `${questionId}:${field}`;
+    remoteUpdatesRef.current.set(key, Date.now());
+    // Auto-cleanup after 1 second
+    setTimeout(() => {
+      remoteUpdatesRef.current.delete(key);
+    }, 1000);
+  }, []);
 
   // Handle incoming data changes from collaborators
   const handleDataChange = useCallback((change: ExamDataChange) => {
     console.log('Handling remote data change:', change);
-    isRemoteUpdateRef.current = true;
 
     switch (change.type) {
       case 'question_update':
-        if (change.questionIndex !== undefined && change.field && change.value !== undefined) {
+        // Use questionId for reliable identification
+        if (change.questionId && change.field && change.value !== undefined) {
+          // Mark this field as remotely updated to prevent bounce-back
+          markRemoteUpdate(change.questionId, change.field);
+
           setItems(prevItems => {
+            const index = prevItems.findIndex(q => q.question_id === change.questionId);
+            if (index === -1) return prevItems;
+
             const newItems = [...prevItems];
-            if (newItems[change.questionIndex!]) {
-              newItems[change.questionIndex!] = {
-                ...newItems[change.questionIndex!],
-                [change.field!]: change.value,
-              };
-            }
+            newItems[index] = {
+              ...newItems[index],
+              [change.field!]: change.value,
+            };
             return newItems;
           });
         }
@@ -111,13 +138,39 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
         }
         break;
       case 'question_delete':
-        if (change.questionIndex !== undefined) {
-          setItems(prevItems => prevItems.filter((_, idx) => idx !== change.questionIndex));
+        // Use questionId for reliable deletion
+        if (change.questionId) {
+          setItems(prevItems => prevItems.filter(q => q.question_id !== change.questionId));
         }
         break;
       case 'question_reorder':
         if (change.items) {
           setItems(change.items);
+        }
+        break;
+      case 'exam_field_update':
+        // Handle individual exam field updates
+        if (change.field && change.value !== undefined) {
+          markRemoteUpdate('exam', change.field);
+          switch (change.field) {
+            case 'exam_name': setExamName(change.value); break;
+            case 'exam_description': setExamDescription(change.value); break;
+            case 'duration_minutes': setDurationMinutes(change.value); break;
+            case 'attempts_allowed': setAttemptsAllowed(change.value); break;
+            case 'passing_score': setPassingScore(change.value); break;
+            case 'shuffle_items': setShuffleItems(change.value); break;
+            case 'show_results_immediately': setShowResultsImmediately(change.value); break;
+            case 'is_public': setIsPublic(change.value); break;
+            case 'start_date': setStartDate(change.value); break;
+            case 'end_date': setEndDate(change.value); break;
+            case 'console_detection': setConsoleDetection(change.value); break;
+            case 'translation_detection': setTranslationDetection(change.value); break;
+            case 'allow_word_by_word_translation': setAllowWordByWordTranslation(change.value); break;
+            case 'allow_word_by_word_definition': setAllowWordByWordDefinition(change.value); break;
+            case 'visibility_change_detection': setVisibilityChangeDetection(change.value); break;
+            case 'location_detection': setLocationDetection(change.value); break;
+            case 'location': setLocation(change.value); break;
+          }
         }
         break;
       case 'exam_update':
@@ -130,13 +183,8 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
         break;
     }
 
-    // Reset flag after state update
-    setTimeout(() => {
-      isRemoteUpdateRef.current = false;
-    }, 100);
-
     toast.info('Changes synced from collaborator', { duration: 2000 });
-  }, []);
+  }, [markRemoteUpdate]);
 
   // Realtime presence for collaboration
   const { onlineUsers, updateCursor, broadcastChange, isConnected } = useRealtimePresence({
@@ -144,6 +192,112 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     enabled: !!user,
     onDataChange: handleDataChange,
   });
+
+  // Store broadcastChange in ref to use in callbacks without causing re-renders
+  const broadcastChangeRef = useRef(broadcastChange);
+  useEffect(() => {
+    broadcastChangeRef.current = broadcastChange;
+  }, [broadcastChange]);
+
+  // Helper to broadcast exam field changes
+  const broadcastExamField = useCallback((field: string, value: any) => {
+    if (broadcastChangeRef.current && !isRecentRemoteUpdate('exam', field)) {
+      broadcastChangeRef.current({
+        type: 'exam_field_update',
+        field,
+        value,
+      });
+    }
+  }, [isRecentRemoteUpdate]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SYNCED EXAM FIELD SETTERS - These broadcast changes to collaborators
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const updateExamName = useCallback((value: string) => {
+    setExamName(value);
+    broadcastExamField('exam_name', value);
+  }, [broadcastExamField]);
+
+  const updateExamDescription = useCallback((value: string) => {
+    setExamDescription(value);
+    broadcastExamField('exam_description', value);
+  }, [broadcastExamField]);
+
+  const updateDurationMinutes = useCallback((value: number) => {
+    setDurationMinutes(value);
+    broadcastExamField('duration_minutes', value);
+  }, [broadcastExamField]);
+
+  const updateAttemptsAllowed = useCallback((value: number) => {
+    setAttemptsAllowed(value);
+    broadcastExamField('attempts_allowed', value);
+  }, [broadcastExamField]);
+
+  const updatePassingScore = useCallback((value: number) => {
+    setPassingScore(value);
+    broadcastExamField('passing_score', value);
+  }, [broadcastExamField]);
+
+  const updateShuffleItems = useCallback((value: boolean) => {
+    setShuffleItems(value);
+    broadcastExamField('shuffle_items', value);
+  }, [broadcastExamField]);
+
+  const updateShowResultsImmediately = useCallback((value: boolean) => {
+    setShowResultsImmediately(value);
+    broadcastExamField('show_results_immediately', value);
+  }, [broadcastExamField]);
+
+  const updateIsPublic = useCallback((value: boolean) => {
+    setIsPublic(value);
+    broadcastExamField('is_public', value);
+  }, [broadcastExamField]);
+
+  const updateStartDate = useCallback((value: string) => {
+    setStartDate(value);
+    broadcastExamField('start_date', value);
+  }, [broadcastExamField]);
+
+  const updateEndDate = useCallback((value: string) => {
+    setEndDate(value);
+    broadcastExamField('end_date', value);
+  }, [broadcastExamField]);
+
+  const updateConsoleDetection = useCallback((value: boolean) => {
+    setConsoleDetection(value);
+    broadcastExamField('console_detection', value);
+  }, [broadcastExamField]);
+
+  const updateTranslationDetection = useCallback((value: boolean) => {
+    setTranslationDetection(value);
+    broadcastExamField('translation_detection', value);
+  }, [broadcastExamField]);
+
+  const updateAllowWordByWordTranslation = useCallback((value: boolean) => {
+    setAllowWordByWordTranslation(value);
+    broadcastExamField('allow_word_by_word_translation', value);
+  }, [broadcastExamField]);
+
+  const updateAllowWordByWordDefinition = useCallback((value: boolean) => {
+    setAllowWordByWordDefinition(value);
+    broadcastExamField('allow_word_by_word_definition', value);
+  }, [broadcastExamField]);
+
+  const updateVisibilityChangeDetection = useCallback((value: boolean) => {
+    setVisibilityChangeDetection(value);
+    broadcastExamField('visibility_change_detection', value);
+  }, [broadcastExamField]);
+
+  const updateLocationDetection = useCallback((value: boolean) => {
+    setLocationDetection(value);
+    broadcastExamField('location_detection', value);
+  }, [broadcastExamField]);
+
+  const updateLocation = useCallback((value: { coordinates: string; rangeInMeters: string }) => {
+    setLocation(value);
+    broadcastExamField('location', value);
+  }, [broadcastExamField]);
 
   // Store last known cursor state for selection updates
   const lastCursorStateRef = useRef<{
@@ -183,6 +337,21 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
         editorId,
         selectionIndex,
         selectionLength,
+      });
+    }
+  }, [isConnected, updateCursor]);
+
+  // Handle typing activity for presence tracking
+  const handleActivity = useCallback((editorId: string, isTyping: boolean) => {
+    if (isConnected) {
+      const { questionId, fieldType, optionIndex } = lastCursorStateRef.current;
+      updateCursor({
+        questionId,
+        fieldType,
+        optionIndex,
+        editorId,
+        isTyping,
+        lastActivityTimestamp: isTyping ? Date.now() : undefined,
       });
     }
   }, [isConnected, updateCursor]);
@@ -371,19 +540,16 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
-  
-  // Store broadcastChange in ref to avoid dependency issues
-  const broadcastChangeRef = useRef(broadcastChange);
-  useEffect(() => {
-    broadcastChangeRef.current = broadcastChange;
-  }, [broadcastChange]);
 
   // Wrapper for updateQuestion to trigger auto-save and broadcast to collaborators
   const updateQuestion = useCallback((index: number, field: keyof ExamItem, value: any) => {
+    const questionId = itemsRef.current[index]?.question_id;
+
     // Log only in development
     if (process.env.NODE_ENV === 'development') {
       console.log(`📝 updateQuestion called:`, {
         index,
+        questionId,
         field,
         value: field === 'question_text' ? value.substring(0, 100) + '...' : value,
       });
@@ -392,16 +558,18 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     // Trigger auto-save immediately when a question is updated
     triggerAutoSaveRef.current();
 
-    // Broadcast change to collaborators (only if not a remote update)
-    if (!isRemoteUpdateRef.current && broadcastChangeRef.current) {
+    // Broadcast change to collaborators (only if not a recent remote update for this field)
+    if (questionId && broadcastChangeRef.current && !isRecentRemoteUpdate(questionId, field as string)) {
+      console.log('📡 Broadcasting change:', { questionId, field });
       broadcastChangeRef.current({
         type: 'question_update',
+        questionId,
         questionIndex: index,
         field: field as string,
         value,
       });
     }
-  }, [questionOperations]);
+  }, [questionOperations, isRecentRemoteUpdate]);
 
   // Wrapper for removeQuestion to broadcast changes
   const removeQuestion = useCallback((index: number) => {
@@ -409,11 +577,11 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     questionOperations.removeQuestion(index);
 
     // Broadcast change to collaborators
-    if (!isRemoteUpdateRef.current && broadcastChangeRef.current) {
+    if (questionId && broadcastChangeRef.current) {
       broadcastChangeRef.current({
         type: 'question_delete',
-        questionIndex: index,
         questionId,
+        questionIndex: index,
       });
     }
   }, [questionOperations]);
@@ -423,7 +591,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
     questionOperations.reorderQuestions(newItems);
 
     // Broadcast change to collaborators
-    if (!isRemoteUpdateRef.current && broadcastChangeRef.current) {
+    if (broadcastChangeRef.current) {
       broadcastChangeRef.current({
         type: 'question_reorder',
         items: newItems,
@@ -433,24 +601,26 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
 
   // Wrapper for updateOption to broadcast changes
   const updateOption = useCallback((questionIndex: number, optionIndex: number, value: string) => {
+    const questionId = itemsRef.current[questionIndex]?.question_id;
     questionOperations.updateOption(questionIndex, optionIndex, value);
     // Trigger auto-save
     triggerAutoSaveRef.current();
 
     // Broadcast the entire options array after the update
-    if (!isRemoteUpdateRef.current && broadcastChangeRef.current) {
+    if (questionId && broadcastChangeRef.current && !isRecentRemoteUpdate(questionId, 'options')) {
       // Get current options and update the specific one
       const currentOptions = [...(itemsRef.current[questionIndex]?.options || [])];
       currentOptions[optionIndex] = value;
 
       broadcastChangeRef.current({
         type: 'question_update',
+        questionId,
         questionIndex,
         field: 'options',
         value: currentOptions,
       });
     }
-  }, [questionOperations]);
+  }, [questionOperations, isRecentRemoteUpdate]);
 
   const getDefaultStarterFiles = useCallback((language?: string) => {
     switch (language) {
@@ -861,7 +1031,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
           if (index !== -1) pasteAfterIndex = index;
         }
         questionOperations.pasteQuestion(pasteAfterIndex);
-      } else if ((isCmdOrCtrl && (e.key === 'Backspace' || e.key === 'Delete')) || (e.key === 'Backspace' && !isCmdOrCtrl)) {
+      } else if ((isCmdOrCtrl && (e.key === 'Backspace' || e.key === 'Delete'))) {
         // Delete selected questions (Cmd/Ctrl + Backspace/Delete, or just Backspace when not editing)
         e.preventDefault();
         if (selectedQuestions.size > 0) {
@@ -1012,16 +1182,16 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
         }
       }} className="flex-1">
         <TabsList id="tabs-list" className="ml-8 sticky top-8 z-10">
-          <TabsTrigger value="details" className="flex items-center gap-2"><BookOpenIcon className="w-4 h-4" /> <span className="">Exam Details</span></TabsTrigger>
+          <TabsTrigger value="details" className="flex items-center gap-2"><BookOpenIcon className="w-4 h-4" /> <span className="sm:block hidden">Exam Details</span></TabsTrigger>
           <div className="flex items-center h-5 m-2"><Separator orientation="vertical"/></div>
           <TabsTrigger value="questions" className="flex items-center gap-2">
             <ListTodoIcon className="w-4 h-4" />
-            <span className="flex items-center gap-2 flex-1">
+            <span className="flex items-center gap-2 flex-1 sm:block hidden">
               Questions ({items.length})
             </span>
           </TabsTrigger>
           <div className="flex items-center h-5 m-2"><Separator orientation="vertical"/></div>
-          <TabsTrigger value="settings" className="flex items-center gap-2"><SettingsIcon className="w-4 h-4" /> Settings</TabsTrigger>
+          <TabsTrigger value="settings" className="flex items-center gap-2"><SettingsIcon className="w-4 h-4" /> <span className="sm:block hidden">Settings</span></TabsTrigger>
         </TabsList>
 
         <TabsContents className="mt-4 overflow-x-hidden">
@@ -1031,10 +1201,10 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
               examDescription={examDescription}
               startDate={startDate}
               endDate={endDate}
-              onExamNameChange={setExamName}
-              onDescriptionChange={setExamDescription}
-              onStartDateChange={setStartDate}
-              onEndDateChange={setEndDate}
+              onExamNameChange={updateExamName}
+              onDescriptionChange={updateExamDescription}
+              onStartDateChange={updateStartDate}
+              onEndDateChange={updateEndDate}
             />
           </TabsContent>
 
@@ -1080,6 +1250,7 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
               currentUserId={user?.id}
               onFocusField={handleFocusField}
               onSelectionChange={handleSelectionChange}
+              onActivity={handleActivity}
             />
           </TabsContent>
 
@@ -1097,20 +1268,20 @@ export default function EditExamPage({ params }: { params: Promise<PageParams> }
               allowWordByWordDefinition={allowWordByWordDefinition}
               visibilityChangeDetection={visibilityChangeDetection}
               locationDetection={locationDetection}
-              onDurationChange={setDurationMinutes}
-              onAttemptsChange={setAttemptsAllowed}
-              onPassingScoreChange={setPassingScore}
-              onShuffleChange={setShuffleItems}
-              onShowResultsChange={setShowResultsImmediately}
-              onPublicChange={setIsPublic}
-              onConsoleDetectionChange={setConsoleDetection}
-              onTranslationDetectionChange={setTranslationDetection}
-              onAllowWordByWordTranslationChange={setAllowWordByWordTranslation}
-              onAllowWordByWordDefinitionChange={setAllowWordByWordDefinition}
-              onVisibilityChangeDetectionChange={setVisibilityChangeDetection}
-              onLocationDetectionChange={setLocationDetection}
+              onDurationChange={updateDurationMinutes}
+              onAttemptsChange={updateAttemptsAllowed}
+              onPassingScoreChange={updatePassingScore}
+              onShuffleChange={updateShuffleItems}
+              onShowResultsChange={updateShowResultsImmediately}
+              onPublicChange={updateIsPublic}
+              onConsoleDetectionChange={updateConsoleDetection}
+              onTranslationDetectionChange={updateTranslationDetection}
+              onAllowWordByWordTranslationChange={updateAllowWordByWordTranslation}
+              onAllowWordByWordDefinitionChange={updateAllowWordByWordDefinition}
+              onVisibilityChangeDetectionChange={updateVisibilityChangeDetection}
+              onLocationDetectionChange={updateLocationDetection}
               location={location}
-              onLocationChange={setLocation}
+              onLocationChange={updateLocation}
               onDeleteExam={deleteExam}
             />
           </TabsContent>

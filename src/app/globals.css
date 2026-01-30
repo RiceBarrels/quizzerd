@@ -699,3 +699,74 @@ button {
 .code-editor-container .monaco-editor .codicon {
   cursor: var(--cursor-pointer);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ELECTRON APP STYLES
+   Styles for the native desktop app built with Electron
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Electron title bar - draggable region */
+.electron-title-bar {
+  -webkit-app-region: drag;
+  app-region: drag;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Elements inside title bar that should be clickable */
+.electron-title-bar button,
+.electron-title-bar a,
+.electron-title-bar input,
+.electron-title-bar [data-no-drag] {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* When running in Electron, make the app header draggable */
+body.electron-app .app-header,
+body.electron-app [data-electron-drag="true"] {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+/* Ensure interactive elements in header are still clickable */
+body.electron-app .app-header button,
+body.electron-app .app-header a,
+body.electron-app .app-header input,
+body.electron-app .app-header [role="button"],
+body.electron-app .app-header .cl-userButtonTrigger {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* Prevent text selection in title bar area */
+body.electron-app .electron-title-bar * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* macOS specific: Add safe area for traffic lights */
+@supports (-webkit-app-region: drag) {
+  body.electron-app {
+    /* Ensure content doesn't overlap with native controls */
+  }
+}
+
+/* Windows/Linux: Custom scrollbar in Electron for consistency */
+body.electron-app::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+body.electron-app::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+body.electron-app::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+  border-radius: 5px;
+}
+
+body.electron-app::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground);
+}

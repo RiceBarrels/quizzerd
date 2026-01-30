@@ -117,7 +117,11 @@ export async function GET(request: Request) {
             { status: 401 }
           );
         }
-        query = query.contains('collaborator_ids', [userId]);
+        // Use cs (contains) operator - collaborator_ids must contain userId
+        // Also filter out nulls to prevent errors
+        query = query
+          .not('collaborator_ids', 'is', null)
+          .contains('collaborator_ids', [userId]);
         break;
       
       default:
@@ -185,7 +189,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error('Error fetching exams:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

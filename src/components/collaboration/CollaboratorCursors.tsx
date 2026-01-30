@@ -267,10 +267,12 @@ export function CollaboratorCursors({
       )}
 
       {/* Collaborator cursors with messages */}
-      {usersWithCursors.map((user) => (
+      {usersWithCursors.map((user) => {
+        const isTyping = user.cursor.isTyping || (user.cursor.lastActivityTimestamp && Date.now() - user.cursor.lastActivityTimestamp < 3000);
+        return (
         <div
           key={user.id}
-          className="absolute transition-all duration-100 ease-out"
+          className={`absolute transition-all duration-100 ease-out ${isTyping ? 'scale-110' : ''}`}
           style={{
             left: user.cursor.x,
             top: user.cursor.y,
@@ -297,6 +299,14 @@ export function CollaboratorCursors({
                     )}
                   </span>
                 )}
+                {/* Typing indicator */}
+                {(user.cursor.isTyping || (user.cursor.lastActivityTimestamp && Date.now() - user.cursor.lastActivityTimestamp < 3000)) && (
+                  <span className="ml-1 flex items-center gap-0.5">
+                    <span className="w-1 h-1 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1 h-1 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-1 h-1 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </span>
+                )}
               </CursorName>
               {/* Show message if visible */}
               {isMessageVisible(user) && (
@@ -307,7 +317,8 @@ export function CollaboratorCursors({
             </CursorBody>
           </Cursor>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

@@ -1,22 +1,27 @@
 'use client';
 
-import { useEffect, useRef, useCallback, RefObject } from 'react';
+import { useEffect, useRef, useCallback, RefObject, useState } from 'react';
 import { registerEditor } from './floating-format-dock';
 import { registerMathBlots } from './math-blot';
 import { cn } from '@/lib/utils';
 import './text-editor.css';
 import 'katex/dist/katex.min.css';
 import Quill from 'quill';
+import QuillCursors from 'quill-cursors';
 
-// Register math blots globally
+// Register modules globally
 let mathBlotsRegistered = false;
+let cursorsRegistered = false;
 
 export interface CollaboratorSelection {
-  oditorId: string;
+  editorId: string;
   index: number;
   length: number;
   userName: string;
   color: string;
+  isTyping?: boolean;
+  message?: string;
+  messageTimestamp?: number;
 }
 
 interface TextEditorProps {
@@ -24,6 +29,7 @@ interface TextEditorProps {
   onChange?: (value: string) => void;
   onFocus?: () => void;
   onSelectionChange?: (editorId: string, index: number, length: number) => void;
+  onActivity?: (editorId: string, isTyping: boolean) => void;
   collaboratorSelections?: CollaboratorSelection[];
   placeholder?: string;
   id?: string;
@@ -57,6 +63,7 @@ export default function TextEditor({
   onChange,
   onFocus,
   onSelectionChange,
+  onActivity,
   collaboratorSelections = [],
   placeholder = 'Start typing...',
   id,
@@ -66,15 +73,44 @@ export default function TextEditor({
 }: TextEditorProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const quillRef = useRef<Quill | null>(null);
+  const cursorsRef = useRef<QuillCursors | null>(null);
   const isInitialized = useRef<boolean>(false);
   const editorId = useRef<string>(id || `editor-${Date.now()}`);
   const prevValueRef = useRef<string>(value);
   const observerRef = useRef<MutationObserver | null>(null);
   const onChangeRef = useRef(onChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
+  const onActivityRef = useRef(onActivity);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const formatUpdateTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const selectionHighlightsRef = useRef<HTMLDivElement[]>([]);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isTypingRef = useRef(false);
+  const activeCursorsRef = useRef<Set<string>>(new Set());
+  // Counter to force cursor refresh after external content updates
+  const [cursorRefreshCounter, setCursorRefreshCounter] = useState(0);
+  // Flag to suppress onChange when applying external value updates (e.g., from collaborators)
+  const isApplyingExternalUpdateRef = useRef(false);
+
+  // Helper to normalize HTML for comparison (handles Quill's variations)
+  const normalizeHtml = useCallback((html: string): string => {
+    if (!html) return '';
+    // Normalize common Quill HTML variations
+    return html
+      .replace(/\s+/g, ' ')  // Normalize whitespace
+      .replace(/<p><br><\/p>/g, '<p><br></p>')  // Normalize self-closing br
+      .replace(/<br\s*\/?>/g, '<br>')  // Normalize br tags
+      .trim();
+  }, []);
+
+  // Check if content is truly empty (not just whitespace/newlines)
+  const isContentEmpty = useCallback((html: string, text: string): boolean => {
+    // Only these specific patterns are "empty"
+    const emptyPatterns = ['<p><br></p>', '<p></p>', ''];
+    if (emptyPatterns.includes(html)) return true;
+    // Check if text is only the trailing newline Quill adds
+    if (text === '\n') return true;
+    return false;
+  }, []);
 
   // Internal function to actually trigger onChange
   const triggerChange = useCallback(() => {
@@ -83,13 +119,22 @@ export default function TextEditor({
 
     if (!quill || !onChangeFn) return;
 
+    // Skip if we're applying an external update (from collaborator)
+    if (isApplyingExternalUpdateRef.current) {
+      return;
+    }
+
     const html = quill.root.innerHTML;
     const text = quill.getText();
-    const isEmpty = ['<p><br></p>', '<p></p>', ''].includes(html) || !text.trim();
+    const isEmpty = isContentEmpty(html, text);
     const newValue = isEmpty ? '' : html;
-    
+
+    // Compare normalized versions to avoid false positives from HTML variations
+    const normalizedNew = normalizeHtml(newValue);
+    const normalizedPrev = normalizeHtml(prevValueRef.current);
+
     // Only call onChange if value actually changed
-    if (newValue !== prevValueRef.current) {
+    if (normalizedNew !== normalizedPrev) {
       // Log only in development
       if (process.env.NODE_ENV === 'development') {
         console.log('TextEditor handleChange:', {
@@ -99,24 +144,11 @@ export default function TextEditor({
           newValue: newValue?.substring(0, 100)
         });
       }
-      
+
       prevValueRef.current = newValue;
       onChangeFn(newValue);
     }
-  }, []);
-
-  // Debounced change handler to prevent excessive updates
-  const handleChange = useCallback(() => {
-    // Clear existing timer
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-
-    // Debounce the onChange call
-    debounceTimerRef.current = setTimeout(() => {
-      triggerChange();
-    }, 300); // Debounce by 300ms to batch rapid changes while still being responsive
-  }, [triggerChange]);
+  }, [normalizeHtml, isContentEmpty]);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -125,6 +157,65 @@ export default function TextEditor({
   useEffect(() => {
     onSelectionChangeRef.current = onSelectionChange;
   }, [onSelectionChange]);
+
+  useEffect(() => {
+    onActivityRef.current = onActivity;
+  }, [onActivity]);
+
+  // Report typing activity with cursor position
+  const reportTypingActivity = useCallback((isTyping: boolean) => {
+    if (isTypingRef.current !== isTyping) {
+      isTypingRef.current = isTyping;
+
+      // Get current selection to send cursor position along with typing status
+      const selection = quillRef.current?.getSelection();
+
+      if (onActivityRef.current) {
+        onActivityRef.current(editorId.current, isTyping);
+      }
+
+      // Also send selection position when typing so cursor shows on other devices
+      if (isTyping && selection && onSelectionChangeRef.current) {
+        onSelectionChangeRef.current(editorId.current, selection.index, selection.length);
+      }
+    }
+  }, []);
+
+  // Debounced change handler to prevent excessive updates
+  const handleChange = useCallback(() => {
+    // Skip if this is from an external update (collaborator sync)
+    if (isApplyingExternalUpdateRef.current) {
+      return;
+    }
+
+    // Clear existing timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Report that user is typing
+    reportTypingActivity(true);
+
+    // Send cursor position update so other users can see where we're typing
+    const selection = quillRef.current?.getSelection();
+    if (selection && onSelectionChangeRef.current) {
+      onSelectionChangeRef.current(editorId.current, selection.index, selection.length);
+    }
+
+    // Clear existing typing timeout and set a new one
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    // Stop typing indicator after 2 seconds of no activity
+    typingTimeoutRef.current = setTimeout(() => {
+      reportTypingActivity(false);
+    }, 2000);
+
+    // Debounce the onChange call (shorter for real-time collaboration)
+    debounceTimerRef.current = setTimeout(() => {
+      triggerChange();
+    }, 100); // Reduced from 300ms to 100ms for faster collaboration sync
+  }, [triggerChange, reportTypingActivity]);
 
   // Expose triggerChange for use in event handlers
   const triggerChangeRef = useRef(triggerChange);
@@ -146,7 +237,13 @@ export default function TextEditor({
         }
 
         const QuillModule = (await import('quill')).default;
-        
+
+        // Register cursors module once
+        if (!cursorsRegistered) {
+          QuillModule.register('modules/cursors', QuillCursors);
+          cursorsRegistered = true;
+        }
+
         const editorContainer = document.createElement('div');
         editorContainer.className = cn('text-editor-container', disabled && 'disabled', error && 'error');
         containerRef.current.appendChild(editorContainer);
@@ -156,6 +253,22 @@ export default function TextEditor({
           formats: ['bold', 'italic', 'underline', 'strike', 'code', 'link', 'blockquote', 'header', 'list', 'script', 'indent', 'direction', 'size', 'color', 'background', 'font', 'align', 'formula', 'display-formula'],
           modules: {
             toolbar: false,
+            cursors: {
+              template: `
+                <span class="ql-cursor-selections"></span>
+                <span class="ql-cursor-caret-container">
+                  <span class="ql-cursor-caret"></span>
+                </span>
+                <span class="ql-cursor-flag">
+                  <span class="ql-cursor-name"></span>
+                  <span class="ql-cursor-typing-indicator"></span>
+                </span>
+              `,
+              hideDelayMs: 0, // Never auto-hide the flag
+              hideSpeedMs: 0,
+              selectionChangeSource: null,
+              transformOnTextChange: true,
+            },
             keyboard: {
               bindings: {
                 enter: {
@@ -255,9 +368,12 @@ export default function TextEditor({
         });
         
         const el = quillRef.current.root;
-        
+
         if (!quillRef.current) return;
-        
+
+        // Get the cursors module for managing collaborator cursors
+        cursorsRef.current = quillRef.current.getModule('cursors') as QuillCursors;
+
         const { handleFocus, handleBlur, updateFormats } = registerEditor(quillRef as RefObject<Quill>, editorId.current);
         
         // Debounce updateFormats to prevent excessive calls (use separate timer)
@@ -273,6 +389,12 @@ export default function TextEditor({
         quillRef.current.on('text-change', () => {
           handleChange();
           debouncedUpdateFormats();
+          // Update collaborator cursors positions after text changes (with delay to let DOM settle)
+          requestAnimationFrame(() => {
+            if (cursorsRef.current) {
+              cursorsRef.current.update();
+            }
+          });
         });
         
         // Only listen to selection changes and focus/blur for format updates
@@ -317,6 +439,18 @@ export default function TextEditor({
             triggerChangeRef.current();
           }
 
+          // Clear typing timeout and report not typing on blur
+          if (typingTimeoutRef.current) {
+            clearTimeout(typingTimeoutRef.current);
+            typingTimeoutRef.current = null;
+          }
+          if (isTypingRef.current) {
+            isTypingRef.current = false;
+            if (onActivityRef.current) {
+              onActivityRef.current(editorId.current, false);
+            }
+          }
+
           setTimeout(() => {
             const activeEl = document.activeElement;
             // Don't trigger blur if focus moved to the format dock or its popups
@@ -357,7 +491,9 @@ export default function TextEditor({
           }
           const delta = quillRef.current.clipboard.convert({ html: value });
           quillRef.current.setContents(delta, 'silent');
-          prevValueRef.current = value;
+          // Store what Quill actually rendered, not the incoming value
+          // This ensures proper change detection for newlines and HTML variations
+          prevValueRef.current = quillRef.current.root.innerHTML;
         }
       }
     };
@@ -373,6 +509,14 @@ export default function TextEditor({
       if (formatUpdateTimerRef.current) {
         clearTimeout(formatUpdateTimerRef.current);
         formatUpdateTimerRef.current = null;
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      // Report not typing on unmount
+      if (onActivityRef.current && isTypingRef.current) {
+        onActivityRef.current(editorId.current, false);
       }
       if (quillRef.current) {
         quillRef.current.off('text-change');
@@ -391,30 +535,70 @@ export default function TextEditor({
   useEffect(() => {
     if (quillRef.current && isInitialized.current && value !== prevValueRef.current) {
       const currentHtml = quillRef.current.root.innerHTML;
+      const currentText = quillRef.current.getText();
       const isEmpty = !value;
-      const currentIsEmpty = ['<p><br></p>', '<p></p>', ''].includes(currentHtml) || !quillRef.current.getText().trim();
-      
+      // Use the isContentEmpty helper to properly handle newlines
+      const currentIsEmpty = isContentEmpty(currentHtml, currentText);
+
+      // Also compare normalized versions to catch HTML variations
+      const normalizedValue = normalizeHtml(value || '');
+      const normalizedCurrent = normalizeHtml(currentHtml);
+
+      // Skip update if normalized values are the same (just HTML variation)
+      if (normalizedValue === normalizedCurrent) {
+        prevValueRef.current = value;
+        return;
+      }
+
       // Log only in development
       if (process.env.NODE_ENV === 'development') {
-        console.log('TextEditor value update:', {
+        console.log('TextEditor value update (external):', {
           value: value?.substring(0, 100),
           currentHtml: currentHtml?.substring(0, 100),
           isEmpty,
-          currentIsEmpty
+          currentIsEmpty,
+          normalizedMatch: normalizedValue === normalizedCurrent
         });
       }
-      
+
+      // Mark as external update to prevent bounce-back
+      isApplyingExternalUpdateRef.current = true;
+
+      // Clear any pending debounce to avoid stale onChange calls
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+
       if (isEmpty && !currentIsEmpty) {
-        quillRef.current.setText('');
-      } else if (!isEmpty && value !== currentHtml) {
+        quillRef.current.setText('', 'silent');
+        prevValueRef.current = '';
+        // Force cursor refresh after external content change
+        requestAnimationFrame(() => {
+          if (cursorsRef.current) {
+            cursorsRef.current.update();
+          }
+          // Trigger cursor effect to re-run
+          setCursorRefreshCounter(c => c + 1);
+        });
+      } else if (!isEmpty) {
         const selection = quillRef.current.getSelection();
         // Temporarily disconnect observer to prevent loops
         if (observerRef.current) observerRef.current.disconnect();
-        
+
         // Use Quill's clipboard to properly parse HTML
         const delta = quillRef.current.clipboard.convert({ html: value });
         quillRef.current.setContents(delta, 'silent');
-        
+
+        // Force cursor refresh after external content change
+        requestAnimationFrame(() => {
+          if (cursorsRef.current) {
+            cursorsRef.current.update();
+          }
+          // Trigger cursor effect to re-run
+          setCursorRefreshCounter(c => c + 1);
+        });
+
         // Reconnect observer
         if (observerRef.current && quillRef.current.root) {
           observerRef.current.observe(quillRef.current.root, {
@@ -423,18 +607,28 @@ export default function TextEditor({
             characterData: true
           });
         }
-        
+
+        // IMPORTANT: Store what Quill actually rendered, not the incoming value
+        // This prevents false change detection due to HTML normalization differences
+        prevValueRef.current = quillRef.current.root.innerHTML;
+
         if (selection) {
           setTimeout(() => {
             try { quillRef.current?.setSelection(selection); } catch (e) {}
           }, 0);
         }
+      } else {
+        prevValueRef.current = value;
       }
-      prevValueRef.current = value;
+
+      // Reset external update flag after a short delay
+      setTimeout(() => {
+        isApplyingExternalUpdateRef.current = false;
+      }, 50);
     } else if (!isInitialized.current) {
       prevValueRef.current = value;
     }
-  }, [value]);
+  }, [value, isContentEmpty, normalizeHtml]);
 
   useEffect(() => {
     if (quillRef.current) {
@@ -447,73 +641,84 @@ export default function TextEditor({
     containerRef.current?.querySelector('.text-editor-container')?.classList.toggle('error', error);
   }, [error]);
 
-  // Render collaborator selection highlights
+  // Manage collaborator cursors using quill-cursors module
   useEffect(() => {
-    if (!quillRef.current || !isInitialized.current) return;
+    if (!cursorsRef.current || !isInitialized.current) return;
 
-    // Clear existing highlights
-    selectionHighlightsRef.current.forEach(el => el.remove());
-    selectionHighlightsRef.current = [];
+    const cursorsModule = cursorsRef.current;
+    const currentCursorIds = new Set<string>();
 
-    const quill = quillRef.current;
-    const editorRoot = quill.root;
-
+    // Update or create cursors for each collaborator
     collaboratorSelections.forEach((selection) => {
-      if (selection.length <= 0) return;
+      const cursorId = `${selection.editorId}-${selection.userName}`;
+      currentCursorIds.add(cursorId);
 
       try {
-        // Get the bounds for the selection range
-        const bounds = quill.getBounds(selection.index, selection.length);
-        if (!bounds) return;
-
-        // Create highlight element
-        const highlight = document.createElement('div');
-        highlight.className = 'collaborator-selection-highlight';
-        highlight.style.cssText = `
-          position: absolute;
-          background-color: ${selection.color}30;
-          border-left: 2px solid ${selection.color};
-          pointer-events: none;
-          z-index: 1;
-          top: ${bounds.top}px;
-          left: ${bounds.left}px;
-          width: ${bounds.width}px;
-          height: ${bounds.height}px;
-          border-radius: 2px;
-        `;
-
-        // Add name label for longer selections
-        if (selection.length > 5) {
-          const label = document.createElement('div');
-          label.className = 'collaborator-selection-label';
-          label.textContent = selection.userName.split(' ')[0];
-          label.style.cssText = `
-            position: absolute;
-            top: -16px;
-            left: 0;
-            font-size: 10px;
-            padding: 1px 4px;
-            border-radius: 3px;
-            background-color: ${selection.color};
-            color: white;
-            white-space: nowrap;
-            font-weight: 500;
-          `;
-          highlight.appendChild(label);
+        // Create cursor if it doesn't exist
+        if (!activeCursorsRef.current.has(cursorId)) {
+          cursorsModule.createCursor(cursorId, selection.userName, selection.color);
+          activeCursorsRef.current.add(cursorId);
         }
 
-        editorRoot.appendChild(highlight);
-        selectionHighlightsRef.current.push(highlight);
+        // Move cursor to the current position
+        cursorsModule.moveCursor(cursorId, { index: selection.index, length: selection.length });
+
+        // Keep the flag visible (don't auto-hide)
+        cursorsModule.toggleFlag(cursorId, true);
+
+        // Access cursor element via quill-cursors API
+        // Use type assertion to access private _el property for DOM manipulation
+        const allCursors = cursorsModule.cursors();
+        const cursorObj = allCursors.find((c) => c.id === cursorId);
+        const cursorEl = cursorObj ? (cursorObj as unknown as { _el?: HTMLElement })._el : undefined;
+
+        if (cursorEl) {
+          // Remove hidden class if present
+          cursorEl.classList.remove('hidden');
+
+          // Add data attribute for potential CSS targeting
+          cursorEl.setAttribute('data-cursor-id', cursorId);
+
+          // Add/remove typing class
+          cursorEl.classList.toggle('is-typing', !!selection.isTyping);
+
+          // Handle message bubble
+          const MESSAGE_DISPLAY_DURATION = 5000;
+          const hasRecentMessage = selection.message &&
+            selection.messageTimestamp &&
+            (Date.now() - selection.messageTimestamp < MESSAGE_DISPLAY_DURATION);
+
+          let messageBubble = cursorEl.querySelector('.ql-cursor-message') as HTMLElement;
+
+          if (hasRecentMessage) {
+            if (!messageBubble) {
+              messageBubble = document.createElement('div');
+              messageBubble.className = 'ql-cursor-message';
+              cursorEl.appendChild(messageBubble);
+            }
+            messageBubble.textContent = selection.message!;
+            messageBubble.style.backgroundColor = selection.color;
+          } else if (messageBubble) {
+            messageBubble.remove();
+          }
+        }
       } catch (e) {
-        // Ignore bounds errors for invalid ranges
+        // Ignore cursor errors for invalid positions
       }
     });
 
-    return () => {
-      selectionHighlightsRef.current.forEach(el => el.remove());
-      selectionHighlightsRef.current = [];
-    };
-  }, [collaboratorSelections]);
+    // Remove cursors that are no longer present
+    activeCursorsRef.current.forEach((cursorId) => {
+      if (!currentCursorIds.has(cursorId)) {
+        try {
+          cursorsModule.removeCursor(cursorId);
+        } catch (e) {
+          // Ignore removal errors
+        }
+        activeCursorsRef.current.delete(cursorId);
+      }
+    });
+  }, [collaboratorSelections, cursorRefreshCounter]);
 
   return (
     <div 

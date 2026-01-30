@@ -1,6 +1,6 @@
 "use client"
 
-import { Calendar1Icon, HomeIcon, ListTodoIcon, LayoutDashboardIcon, GraduationCap, SettingsIcon, ChevronDown, ChevronRight, Plus, Loader2 } from "lucide-react"
+import { Calendar1Icon, HomeIcon, ListTodoIcon, GraduationCap, SettingsIcon, ChevronDown, ChevronRight, Plus, Loader2 } from "lucide-react"
 import { SidebarGroup, SidebarMenuButton, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton, useSidebar } from "./sidebar"
 import { Link } from 'next-view-transitions'
 import { usePathname } from "next/navigation"
@@ -188,11 +188,6 @@ export function GeneralGroup(){
             link:"/",
             label: "Home",
             icon: HomeIcon
-        },
-        {
-            link:"/dashboard",
-            label: "Dashboard",
-            icon: LayoutDashboardIcon
         },
         {
             link:"/exam",

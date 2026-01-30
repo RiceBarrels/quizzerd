@@ -530,3 +530,466 @@
   width: 1px;
   overflow: hidden;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   COLLABORATOR CARET & SELECTION STYLES
+   Custom cursor design for real-time collaboration
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Caret blink animation */
+@keyframes collaborator-caret-blink {
+  0%, 100% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scaleY(0.97);
+  }
+}
+
+/* Caret glow pulse animation */
+@keyframes collaborator-caret-glow {
+  0%, 100% {
+    box-shadow: 0 0 4px 1px var(--caret-color, currentColor);
+  }
+  50% {
+    box-shadow: 0 0 8px 2px var(--caret-color, currentColor);
+  }
+}
+
+/* Flag slide-in animation */
+@keyframes collaborator-flag-appear {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Flag subtle bounce animation */
+@keyframes collaborator-flag-bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1px);
+  }
+}
+
+/* Main Caret Container */
+.collaborator-caret {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10;
+  transition: top 80ms ease-out, left 80ms ease-out;
+}
+
+/* Caret Line */
+.collaborator-caret-line {
+  position: relative;
+  width: 2.5px;
+  border-radius: 1px;
+  animation: collaborator-caret-blink 1.2s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+/* Caret glow effect */
+.collaborator-caret-line::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 2px;
+  opacity: 0.3;
+  animation: collaborator-caret-glow 2s ease-in-out infinite;
+}
+
+/* Caret tip arrow */
+.collaborator-caret-line::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid currentColor;
+}
+
+/* Name Flag */
+.collaborator-caret-flag {
+  position: absolute;
+  top: -22px;
+  left: -2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px 6px 6px 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  color: white;
+  box-shadow:
+    0 2px 8px -2px rgba(0, 0, 0, 0.25),
+    0 1px 2px rgba(0, 0, 0, 0.1);
+  animation: collaborator-flag-appear 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: bottom left;
+}
+
+/* Flag connector triangle */
+.collaborator-caret-flag::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-top: 5px solid currentColor;
+  border-right: 5px solid transparent;
+}
+
+/* Active typing state - flag bounces slightly */
+.collaborator-caret.is-typing .collaborator-caret-flag {
+  animation: collaborator-flag-bounce 0.6s ease-in-out infinite;
+}
+
+/* Active typing state - caret has stronger glow */
+.collaborator-caret.is-typing .collaborator-caret-line::before {
+  opacity: 0.5;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Selection Highlight Styles
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.collaborator-selection-highlight {
+  position: absolute;
+  pointer-events: none;
+  z-index: 5;
+  border-radius: 3px;
+  transition: all 80ms ease-out;
+}
+
+/* Selection glow effect */
+.collaborator-selection-highlight::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 4px;
+  opacity: 0.15;
+}
+
+/* Selection Label */
+.collaborator-selection-label {
+  position: absolute;
+  top: -18px;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  color: white;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  animation: collaborator-flag-appear 0.2s ease-out;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Color Variants (for better visibility)
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Add subtle text shadow for better readability on any background */
+.collaborator-caret-flag,
+.collaborator-selection-label {
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Caret Message Bubble
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@keyframes collaborator-message-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes collaborator-message-pulse {
+  0%, 100% {
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.2);
+  }
+  50% {
+    box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.25);
+  }
+}
+
+.collaborator-caret-message {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: -4px;
+  max-width: 200px;
+  padding: 6px 10px;
+  border-radius: 8px 8px 8px 2px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: white;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow:
+    0 2px 8px -2px rgba(0, 0, 0, 0.2),
+    0 1px 2px rgba(0, 0, 0, 0.1);
+  animation:
+    collaborator-message-appear 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+    collaborator-message-pulse 2s ease-in-out infinite;
+  z-index: 15;
+  pointer-events: none;
+}
+
+/* Message arrow pointing up to caret */
+.collaborator-caret-message::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 6px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 6px solid currentColor;
+}
+
+/* Fade out animation for expiring messages */
+.collaborator-caret-message.fading {
+  animation: collaborator-message-fadeout 0.3s ease-out forwards;
+}
+
+@keyframes collaborator-message-fadeout {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.95);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   QUILL-CURSORS MODULE CUSTOM STYLES
+   Styles for the quill-cursors module used for real-time collaboration
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Cursors container */
+.ql-cursors {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 100;
+}
+
+/* Main cursor container */
+.ql-cursor {
+  position: absolute;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* Hidden state */
+.ql-cursor.hidden .ql-cursor-caret-container,
+.ql-cursor.hidden .ql-cursor-flag {
+  display: none;
+}
+
+/* Caret container */
+.ql-cursor .ql-cursor-caret-container {
+  position: relative;
+  display: inline-block;
+}
+
+/* Caret line - the actual visible cursor */
+.ql-cursor .ql-cursor-caret {
+  display: block;
+  width: 2px !important;
+  margin-left: -1px;
+  border-radius: 1px;
+  animation: collaborator-caret-blink 1.2s ease-in-out infinite;
+  transform-origin: bottom center;
+  position: relative;
+}
+
+/* Caret glow effect */
+.ql-cursor .ql-cursor-caret::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 3px;
+  background: inherit;
+  opacity: 0.25;
+  filter: blur(2px);
+  animation: collaborator-caret-glow 2s ease-in-out infinite;
+}
+
+/* Caret tip arrow pointing down */
+.ql-cursor .ql-cursor-caret::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid;
+  border-top-color: inherit;
+}
+
+/* Name flag - positioned above the caret */
+.ql-cursor .ql-cursor-flag {
+  position: absolute;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  padding: 8px 4px 8px 4px;
+  border-radius: 8px 8px 8px 2px !important;
+  font-size: 12px !important;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  animation: collaborator-flag-appear 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: bottom left;
+  transition: opacity 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+}
+
+/* Flag connector triangle pointing down to caret */
+.ql-cursor .ql-cursor-flag::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-top: 5px solid;
+  border-top-color: inherit;
+  border-right: 5px solid transparent;
+}
+
+/* Cursor name text */
+.ql-cursor .ql-cursor-name {
+  color: white !important;
+}
+
+/* Typing indicator dot */
+.ql-cursor .ql-cursor-typing-indicator {
+  display: none;
+  width: 6px;
+  height: 6px;
+  background: white;
+  border-radius: 50%;
+  opacity: 0.8;
+  animation: collaborator-typing-pulse 0.8s ease-in-out infinite;
+}
+
+/* Show typing indicator when typing */
+.ql-cursor.is-typing .ql-cursor-typing-indicator {
+  display: block;
+}
+
+/* Active typing state - flag bounces */
+.ql-cursor.is-typing .ql-cursor-flag {
+  animation: collaborator-flag-bounce 0.6s ease-in-out infinite;
+}
+
+/* Active typing state - stronger glow */
+.ql-cursor.is-typing .ql-cursor-caret::before {
+  opacity: 0.4;
+}
+
+/* Selection blocks container */
+.ql-cursor .ql-cursor-selections {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+/* Individual selection blocks */
+.ql-cursor .ql-cursor-selection-block {
+  position: absolute;
+  border-radius: 2px;
+  opacity: 0.35;
+}
+
+/* Typing pulse animation */
+@keyframes collaborator-typing-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 1;
+  }
+}
+
+/* Message bubble for quill-cursors */
+.ql-cursor .ql-cursor-message {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: -4px;
+  max-width: 200px;
+  padding: 6px 10px;
+  border-radius: 8px 8px 8px 2px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: white;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow:
+    0 2px 8px -2px rgba(0, 0, 0, 0.2),
+    0 1px 2px rgba(0, 0, 0, 0.1);
+  animation:
+    collaborator-message-appear 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+    collaborator-message-pulse 2s ease-in-out infinite;
+  z-index: 15;
+  pointer-events: none;
+}
+
+/* Message arrow pointing up to caret */
+.ql-cursor .ql-cursor-message::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 6px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 6px solid;
+  border-bottom-color: inherit;
+}

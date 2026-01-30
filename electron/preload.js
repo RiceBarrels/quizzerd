@@ -4,6 +4,10 @@ const { contextBridge, ipcRenderer, shell } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   // Platform info
   platform: process.platform,
+  isMac: process.platform === 'darwin',
+  isWindows: process.platform === 'win32',
+  isLinux: process.platform === 'linux',
+  isElectron: true,
 
   // App info
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
@@ -12,6 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   minimizeWindow: () => ipcRenderer.send('minimize-window'),
   maximizeWindow: () => ipcRenderer.send('maximize-window'),
   closeWindow: () => ipcRenderer.send('close-window'),
+  isMaximized: () => ipcRenderer.invoke('is-maximized'),
 
   // Open URL in system browser (for OAuth flows)
   openExternal: (url) => shell.openExternal(url),

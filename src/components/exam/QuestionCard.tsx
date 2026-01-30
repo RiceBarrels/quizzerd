@@ -32,24 +32,69 @@ interface FieldHighlightProps {
   children: React.ReactNode;
 }
 
+// Check if user is actively typing (activity within last 3 seconds)
+function isUserTyping(user: PresenceUser): boolean {
+  if (!user.cursor.lastActivityTimestamp) return false;
+  return Date.now() - user.cursor.lastActivityTimestamp < 3000;
+}
+
 function FieldHighlight({ user, children }: FieldHighlightProps) {
+  const [showLockWarning, setShowLockWarning] = useState(false);
+
   if (!user) {
     return <>{children}</>;
   }
 
+  const typing = user.cursor.isTyping || isUserTyping(user);
+
+  // Handle click on locked field - show warning
+  const handleFieldClick = (e: React.MouseEvent) => {
+    if (typing) {
+      setShowLockWarning(true);
+      setTimeout(() => setShowLockWarning(false), 2000);
+    }
+  };
+
   return (
     <div
-      className="relative rounded-md transition-all"
+      className={cn(
+        "relative rounded-md transition-all",
+        typing && "cursor-not-allowed"
+      )}
       style={{
-        boxShadow: `0 0 0 2px ${user.color}`,
+        boxShadow: typing
+          ? `0 0 0 2px ${user.color}, 0 0 12px ${user.color}40`
+          : `0 0 0 2px ${user.color}`,
       }}
+      onClick={handleFieldClick}
     >
-      {/* User indicator badge - tooltip only on badge, not the whole field */}
+      {/* Soft lock overlay - dims the field slightly when someone is typing */}
+      {typing && (
+        <div
+          className="absolute inset-0 rounded-md pointer-events-none z-[1]"
+          style={{ backgroundColor: `${user.color}08` }}
+        />
+      )}
+
+      {/* Lock warning toast */}
+      {showLockWarning && (
+        <div
+          className="absolute -top-10 left-1/2 -translate-x-1/2 z-20 px-3 py-1.5 rounded-md text-xs font-medium text-white shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-200"
+          style={{ backgroundColor: user.color }}
+        >
+          {user.name.split(' ')[0]} is typing here
+        </div>
+      )}
+
+      {/* User indicator badge with typing animation */}
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
             <div
-              className="absolute -top-2 -right-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium text-white shadow-sm cursor-default"
+              className={cn(
+                "absolute -top-2 -right-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium text-white shadow-sm cursor-default transition-all",
+                typing && "animate-pulse"
+              )}
               style={{ backgroundColor: user.color }}
             >
               <Avatar className="h-3.5 w-3.5 border border-white/30">
@@ -59,10 +104,18 @@ function FieldHighlight({ user, children }: FieldHighlightProps) {
                 </AvatarFallback>
               </Avatar>
               <span className="max-w-[60px] truncate">{user.name.split(' ')[0]}</span>
+              {/* Typing indicator dots */}
+              {typing && (
+                <span className="flex gap-0.5 ml-0.5">
+                  <span className="w-1 h-1 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1 h-1 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1 h-1 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </span>
+              )}
             </div>
           </TooltipTrigger>
           <TooltipContent side="top">
-            <p>{user.name} is editing this field</p>
+            <p>{user.name} is {typing ? 'typing in' : 'viewing'} this field</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -124,6 +177,7 @@ interface QuestionCardProps {
   onlineUsers?: PresenceUser[];
   currentUserId?: string;
   onSelectionChange?: (editorId: string, index: number, length: number) => void;
+  onActivity?: (editorId: string, isTyping: boolean) => void;
 }
 
 /**
@@ -192,7 +246,8 @@ const QuestionCard = memo(function QuestionCard({
   onFocusField,
   onlineUsers = [],
   currentUserId,
-  onSelectionChange
+  onSelectionChange,
+  onActivity
 }: QuestionCardProps) {
   const [open, setOpen] = useState(false);
 
@@ -208,21 +263,25 @@ const QuestionCard = memo(function QuestionCard({
     return user || null;
   };
 
-  // Helper to get collaborator selections for a specific editor
+  // Helper to get collaborator selections/carets for a specific editor
   const getCollaboratorSelections = (editorId: string): CollaboratorSelection[] => {
     return onlineUsers
       .filter((u) => {
         if (u.id === currentUserId) return false;
         if (u.cursor.editorId !== editorId) return false;
-        if (!u.cursor.selectionLength || u.cursor.selectionLength <= 0) return false;
+        // Include both carets (length === 0) and selections (length > 0)
+        if (u.cursor.selectionIndex === undefined) return false;
         return true;
       })
       .map((u) => ({
-        oditorId: u.cursor.editorId!,
+        editorId: u.cursor.editorId!,
         index: u.cursor.selectionIndex || 0,
         length: u.cursor.selectionLength || 0,
         userName: u.name,
         color: u.color,
+        isTyping: u.cursor.isTyping || isUserTyping(u),
+        message: u.cursor.message,
+        messageTimestamp: u.cursor.messageTimestamp,
       }));
   };
 
@@ -384,6 +443,7 @@ const QuestionCard = memo(function QuestionCard({
               onChange={(value) => onUpdateQuestion(index, 'question_text', value)}
               onFocus={() => onFocusField?.(item.question_id, 'question')}
               onSelectionChange={onSelectionChange}
+              onActivity={onActivity}
               collaboratorSelections={getCollaboratorSelections(`question-${item.question_id}`)}
               placeholder="Enter your question"
               minHeight={80}
@@ -421,6 +481,7 @@ const QuestionCard = memo(function QuestionCard({
                       onChange={(value) => onUpdateOption(index, optionIndex, value)}
                       onFocus={() => onFocusField?.(item.question_id, 'option', optionIndex)}
                       onSelectionChange={onSelectionChange}
+                      onActivity={onActivity}
                       collaboratorSelections={getCollaboratorSelections(`question-${item.question_id}-option-${optionIndex}`)}
                       placeholder={`Option ${optionIndex + 1}`}
                       minHeight={50}
@@ -788,6 +849,7 @@ const QuestionCard = memo(function QuestionCard({
                   onChange={(value) => onUpdateQuestion(index, 'test_cases', value)}
                   onFocus={() => onFocusField?.(item.question_id, 'settings')}
                   onSelectionChange={onSelectionChange}
+                  onActivity={onActivity}
                   collaboratorSelections={getCollaboratorSelections(`question-${item.question_id}-test-cases`)}
                   placeholder="Describe the test cases or expected output"
                   minHeight={80}
@@ -807,6 +869,7 @@ const QuestionCard = memo(function QuestionCard({
                 onChange={(value) => onUpdateQuestion(index, 'description', value)}
                 onFocus={() => onFocusField?.(item.question_id, 'question')}
                 onSelectionChange={onSelectionChange}
+                onActivity={onActivity}
                 collaboratorSelections={getCollaboratorSelections(`question-${item.question_id}-description`)}
                 placeholder="Section description"
                 minHeight={80}
@@ -831,6 +894,7 @@ const QuestionCard = memo(function QuestionCard({
                 onChange={(value) => onUpdateQuestion(index, 'explanation', value)}
                 onFocus={() => onFocusField?.(item.question_id, 'explanation')}
                 onSelectionChange={onSelectionChange}
+                onActivity={onActivity}
                 collaboratorSelections={getCollaboratorSelections(`question-${item.question_id}-explanation`)}
                 placeholder="Provide an explanation for the answer"
                 minHeight={80}

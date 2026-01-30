@@ -15,6 +15,7 @@ import { shadcn } from '@clerk/themes';
 import { ReactNode } from 'react';
 import DevGate from '@/components/DevGate';
 import { NavigationProgress } from '@/components/navigation-progress';
+import { ElectronBodyClass } from '@/components/electron/ElectronBodyClass';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -146,6 +147,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               enableSystem
               disableTransitionOnChange
             >
+              <ElectronBodyClass />
               <NavigationProgress />
               <CompactModeProvider>
                 <DevGate isActive={false}>

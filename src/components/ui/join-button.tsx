@@ -20,7 +20,7 @@ import { useUser } from "@clerk/nextjs"
 import { Label } from "./label"
 import { Input } from "./input"
 
-export default function JoinButton({children=(<Button variant="outline"> <PlusIcon /> Join</Button>), defaultValue="joinExam"}){
+export default function JoinButton({children=(<Button variant="ghost"> <PlusIcon /> Join</Button>), defaultValue="joinExam"}){
     const [examCode, setExamCode] = useState("")
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState("")

@@ -40,6 +40,10 @@ type SidebarContextProps = {
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
   toggleSidebar: () => void
+  // Auto-hide behavior
+  isHidden: boolean
+  setIsHidden: (hidden: boolean) => void
+  showSidebar: boolean
 }
 
 const SidebarContext = React.createContext<SidebarContextProps | null>(null)
@@ -69,6 +73,11 @@ function SidebarProvider({
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
 
+  // Auto-hide state (synced with localStorage)
+  const [isHidden, setIsHiddenState] = React.useState(false)
+  const [showSidebar, setShowSidebar] = React.useState(true)
+  const sidebarRef = React.useRef<HTMLDivElement>(null)
+
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
   const [_open, _setOpen] = React.useState(defaultOpen)
@@ -87,6 +96,60 @@ function SidebarProvider({
     },
     [setOpenProp, open]
   )
+
+  // Setter for isHidden that also syncs with localStorage
+  const setIsHidden = React.useCallback((hidden: boolean) => {
+    setIsHiddenState(hidden)
+    setShowSidebar(!hidden)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sidebarHidden', hidden ? 'true' : 'false')
+    }
+  }, [])
+
+  // Sync with localStorage on mount
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedValue = localStorage.getItem('sidebarHidden') === 'true'
+      setIsHiddenState(storedValue)
+      setShowSidebar(!storedValue)
+    }
+  }, [])
+
+  // Listen for toolbarHiddenChange events to sync sidebar state
+  React.useEffect(() => {
+    const handleToolbarChange = (e: CustomEvent) => {
+      const hidden = e.detail === 'true'
+      setIsHiddenState(hidden)
+      setShowSidebar(!hidden)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('sidebarHidden', hidden ? 'true' : 'false')
+      }
+    }
+    window.addEventListener('toolbarHiddenChange', handleToolbarChange as EventListener)
+    return () => window.removeEventListener('toolbarHiddenChange', handleToolbarChange as EventListener)
+  }, [])
+
+  // Mouse movement handler for auto-show/hide
+  React.useEffect(() => {
+    if (!isHidden) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      // Show sidebar when mouse is near the left edge (within 15px)
+      if (e.clientX <= 15) {
+        setShowSidebar(true)
+      } else if (showSidebar) {
+        // Get sidebar element width to determine hide threshold
+        const sidebarWidth = 260 // Approximate sidebar width
+        // Hide sidebar when mouse moves away (with buffer)
+        if (e.clientX > sidebarWidth + 50) {
+          setShowSidebar(false)
+        }
+      }
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    return () => window.removeEventListener('mousemove', handleMouseMove)
+  }, [isHidden, showSidebar])
 
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {
@@ -122,8 +185,11 @@ function SidebarProvider({
       openMobile,
       setOpenMobile,
       toggleSidebar,
+      isHidden,
+      setIsHidden,
+      showSidebar,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, isHidden, setIsHidden, showSidebar]
   )
 
   return (
@@ -163,7 +229,7 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset"
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const { isMobile, state, openMobile, setOpenMobile, isHidden, showSidebar } = useSidebar()
 
   if (collapsible === "none") {
     return (
@@ -213,12 +279,20 @@ function Sidebar({
       data-variant={variant}
       data-side={side}
       data-slot="sidebar"
+      data-hidden={isHidden}
+      data-show={showSidebar}
+      style={{
+        opacity: isHidden && !showSidebar ? 0 : 1,
+        pointerEvents: isHidden && !showSidebar ? 'none' : 'auto',
+        transition: 'opacity 0.2s ease-in-out',
+      }}
     >
       {/* This is what handles the sidebar gap on desktop */}
       <div
         data-slot="sidebar-gap"
         className={cn(
-          "relative w-(--sidebar-width) bg-transparent transition-[width] duration-300 ease-in-out",
+          "relative bg-transparent transition-[width] duration-300 ease-in-out",
+          isHidden ? "w-0" : "w-(--sidebar-width)",
           "group-data-[collapsible=offcanvas]:w-0",
           "group-data-[side=right]:rotate-180",
           variant === "floating" || variant === "inset"
@@ -229,7 +303,7 @@ function Sidebar({
       <div
         data-slot="sidebar-container"
         className={cn(
-          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-300 ease-in-out md:flex",
+          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width,opacity,transform] duration-300 ease-in-out md:flex",
           side === "left"
             ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
             : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
@@ -239,6 +313,9 @@ function Sidebar({
             : "group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l",
           className
         )}
+        style={{
+          transform: isHidden && !showSidebar ? 'translateX(-100%)' : 'translateX(0)',
+        }}
         {...props}
       >
         <div

@@ -343,7 +343,7 @@ export default function ExamPage() {
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
     >
-      <div className="bg-sidebar border rounded-xl p-4">
+      <div className="p-4">
         <motion.div
           className="flex items-center justify-between mb-4"
           initial={{ opacity: 0, y: -10 }}

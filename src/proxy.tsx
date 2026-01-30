@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { rateLimit, getClientIdentifier, getRateLimitConfig, rateLimitHeaders } from './lib/rate-limit';
 
 const isProtectedRoute = createRouteMatcher([
-  '/dashboard(.*)',
+  '/exam(.*)',
   '/profile(.*)',
   '/todos(.*)',
   '/calender(.*)',
@@ -19,7 +19,7 @@ const isProtectedRoute = createRouteMatcher([
   '/api/exams/import-google-form(.*)',
   '/api/exams/google-forms-list(.*)',
   '/api/exams/log-violation(.*)',
-  '/api/dashboard(.*)',
+  '/api/exam(.*)',
 ]);
 
 const isPublicRoute = createRouteMatcher([
@@ -77,7 +77,7 @@ export default clerkMiddleware(async (auth, req) => {
   const { userId } = await auth();
 
   if (userId && (path === '/sign-in' || path === '/sign-up')) {
-    const dashboardUrl = new URL('/dashboard', req.url);
+    const dashboardUrl = new URL('/exam', req.url);
     return Response.redirect(dashboardUrl);
   }
 });

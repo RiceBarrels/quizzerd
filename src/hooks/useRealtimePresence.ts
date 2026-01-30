@@ -18,6 +18,9 @@ export interface CursorPosition {
   editorId?: string;
   selectionIndex?: number;
   selectionLength?: number;
+  // Activity tracking for seamless collaboration
+  isTyping?: boolean;
+  lastActivityTimestamp?: number;
   // Chat message (Figma-style "/" chat)
   message?: string;
   messageTimestamp?: number;
@@ -34,7 +37,7 @@ export interface PresenceUser {
 }
 
 export interface ExamDataChange {
-  type: 'question_update' | 'question_add' | 'question_delete' | 'question_reorder' | 'exam_update';
+  type: 'question_update' | 'question_add' | 'question_delete' | 'question_reorder' | 'exam_field_update' | 'exam_update';
   questionIndex?: number;
   questionId?: string;
   field?: string;
@@ -90,22 +93,50 @@ export function useRealtimePresence({
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
   const cursorRef = useRef<CursorPosition>({ questionId: null, fieldType: null });
   const onDataChangeRef = useRef(onDataChange);
+  const isSubscribedRef = useRef(false);
+
+  // Store user data in refs to avoid re-triggering useEffect
+  const userIdRef = useRef<string | null>(null);
+  const userDataRef = useRef<{
+    email: string;
+    name: string;
+    imageUrl: string;
+  } | null>(null);
+
+  // Update user refs when user changes
+  useEffect(() => {
+    if (user) {
+      userIdRef.current = user.id;
+      userDataRef.current = {
+        email: user.primaryEmailAddress?.emailAddress || '',
+        name: user.fullName || user.firstName || 'Anonymous',
+        imageUrl: user.imageUrl || '',
+      };
+    }
+  }, [user]);
 
   // Keep callback ref updated
   useEffect(() => {
     onDataChangeRef.current = onDataChange;
   }, [onDataChange]);
 
-  // Initialize Supabase client
+  // Initialize Supabase client once
   useEffect(() => {
     if (!supabaseRef.current) {
       supabaseRef.current = createClient(supabaseUrl, supabaseKey);
     }
   }, []);
 
-  // Set up presence channel
+  // Set up presence channel - only depend on examId, enabled, and user.id (not entire user object)
+  const userId = user?.id;
+
   useEffect(() => {
-    if (!enabled || !examId || !user || !supabaseRef.current) return;
+    if (!enabled || !examId || !userId || !supabaseRef.current) return;
+
+    // Prevent duplicate subscriptions (React Strict Mode double-render)
+    if (isSubscribedRef.current && channelRef.current) {
+      return;
+    }
 
     const supabase = supabaseRef.current;
     const channelName = `exam-presence:${examId}`;
@@ -114,7 +145,7 @@ export function useRealtimePresence({
     const channel = supabase.channel(channelName, {
       config: {
         presence: {
-          key: user.id,
+          key: userId,
         },
       },
     });
@@ -126,17 +157,17 @@ export function useRealtimePresence({
       const state = channel.presenceState();
       const users: PresenceUser[] = [];
 
-      Object.entries(state).forEach(([userId, presences]) => {
-        if (userId !== user.id && presences.length > 0) {
+      Object.entries(state).forEach(([oddiUserId, presences]) => {
+        if (oddiUserId !== userId && presences.length > 0) {
           const presence = presences[0] as any;
           users.push({
-            id: userId,
+            id: oddiUserId,
             email: presence.email || '',
             name: presence.name || 'Anonymous',
             imageUrl: presence.imageUrl,
             cursor: presence.cursor || { questionId: null, fieldType: null },
             lastSeen: presence.lastSeen || Date.now(),
-            color: getUserColor(userId),
+            color: getUserColor(oddiUserId),
           });
         }
       });
@@ -144,21 +175,21 @@ export function useRealtimePresence({
       setOnlineUsers(users);
     });
 
-    // Handle join events
-    channel.on('presence', { event: 'join' }, ({ key, newPresences }) => {
-      console.log('User joined:', key);
+    // Handle join events (silent - no console spam)
+    channel.on('presence', { event: 'join' }, () => {
+      // Presence sync event will handle updating the users list
     });
 
-    // Handle leave events
-    channel.on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-      console.log('User left:', key);
+    // Handle leave events (silent - no console spam)
+    channel.on('presence', { event: 'leave' }, () => {
+      // Presence sync event will handle updating the users list
     });
 
     // Handle broadcast messages for data sync
     channel.on('broadcast', { event: 'data_change' }, ({ payload }) => {
       const change = payload as ExamDataChange;
       // Don't process our own changes
-      if (change.userId !== user.id && onDataChangeRef.current) {
+      if (change.userId !== userId && onDataChangeRef.current) {
         console.log('Received data change from collaborator:', change);
         onDataChangeRef.current(change);
       }
@@ -167,61 +198,68 @@ export function useRealtimePresence({
     // Subscribe and track presence
     channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
+        isSubscribedRef.current = true;
         setIsConnected(true);
 
-        // Track this user's presence
+        // Track this user's presence using refs for latest data
+        const userData = userDataRef.current;
         await channel.track({
-          id: user.id,
-          email: user.primaryEmailAddress?.emailAddress || '',
-          name: user.fullName || user.firstName || 'Anonymous',
-          imageUrl: user.imageUrl,
+          id: userId,
+          email: userData?.email || '',
+          name: userData?.name || 'Anonymous',
+          imageUrl: userData?.imageUrl || '',
           cursor: cursorRef.current,
           lastSeen: Date.now(),
         });
       }
     });
 
-    // Cleanup on unmount
+    // Cleanup on unmount or when examId/userId changes
     return () => {
+      isSubscribedRef.current = false;
       channel.unsubscribe();
       channelRef.current = null;
       setIsConnected(false);
       setOnlineUsers([]);
     };
-  }, [examId, enabled, user]);
+  }, [examId, enabled, userId]);
 
-  // Update cursor position
+  // Update cursor position - use refs to avoid dependency on user object
   const updateCursor = useCallback((cursor: CursorPosition) => {
     cursorRef.current = cursor;
 
-    if (channelRef.current && user && isConnected) {
+    const currentUserId = userIdRef.current;
+    const userData = userDataRef.current;
+
+    if (channelRef.current && currentUserId && isConnected) {
       channelRef.current.track({
-        id: user.id,
-        email: user.primaryEmailAddress?.emailAddress || '',
-        name: user.fullName || user.firstName || 'Anonymous',
-        imageUrl: user.imageUrl,
+        id: currentUserId,
+        email: userData?.email || '',
+        name: userData?.name || 'Anonymous',
+        imageUrl: userData?.imageUrl || '',
         cursor,
         lastSeen: Date.now(),
       });
     }
-  }, [user, isConnected]);
+  }, [isConnected]);
 
-  // Broadcast data changes to other collaborators
+  // Broadcast data changes to other collaborators - use refs to avoid dependency on user object
   const broadcastChange = useCallback((change: Omit<ExamDataChange, 'timestamp' | 'userId'>) => {
-    if (channelRef.current && user && isConnected) {
+    const currentUserId = userIdRef.current;
+
+    if (channelRef.current && currentUserId && isConnected) {
       const fullChange: ExamDataChange = {
         ...change,
         timestamp: Date.now(),
-        userId: user.id,
+        userId: currentUserId,
       };
-      console.log('Broadcasting change:', fullChange);
       channelRef.current.send({
         type: 'broadcast',
         event: 'data_change',
         payload: fullChange,
       });
     }
-  }, [user, isConnected]);
+  }, [isConnected]);
 
   return {
     onlineUsers,

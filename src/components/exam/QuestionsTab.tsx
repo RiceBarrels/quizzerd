@@ -64,6 +64,7 @@ interface QuestionsTabProps {
   currentUserId?: string;
   onFocusField?: (questionId: string, fieldType: 'question' | 'option' | 'explanation' | 'settings', optionIndex?: number) => void;
   onSelectionChange?: (editorId: string, index: number, length: number) => void;
+  onActivity?: (editorId: string, isTyping: boolean) => void;
 }
 
 /**
@@ -139,7 +140,8 @@ export default function QuestionsTab({
   onlineUsers = [],
   currentUserId,
   onFocusField,
-  onSelectionChange
+  onSelectionChange,
+  onActivity
 }: QuestionsTabProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -468,6 +470,7 @@ export default function QuestionsTab({
                       onlineUsers={onlineUsers}
                       currentUserId={currentUserId}
                       onSelectionChange={onSelectionChange}
+                      onActivity={onActivity}
                     />
                   </div>
                 );
