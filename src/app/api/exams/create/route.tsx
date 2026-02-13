@@ -22,9 +22,12 @@ export async function POST(request: Request) {
       duration_minutes,
       attempts_allowed,
       shuffle_items,
+      shuffle_questions,
       show_results_immediately,
       passing_score,
-      collaborator_ids = []
+      collaborator_ids = [],
+      items = [],
+      questions = []
     } = body;
 
     // Validate required fields
@@ -36,6 +39,21 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createSupabaseClient();
+
+    // Use items from body, or questions (for backward compatibility), or empty array
+    const examItems = items.length > 0 ? items : questions;
+
+    // Process items to generate new question IDs and calculate total points
+    const processedItems = examItems.map((item: any, index: number) => ({
+      ...item,
+      question_id: crypto.randomUUID(), // Generate new ID for copied questions
+      order_index: index,
+    }));
+
+    // Calculate total points from items
+    const totalPoints = processedItems.reduce((sum: number, item: any) => {
+      return sum + (item.points || 0);
+    }, 0);
 
     // Create the exam
     const { data, error } = await supabase
@@ -49,11 +67,11 @@ export async function POST(request: Request) {
         collaborator_ids: collaborator_ids,
         duration_minutes: duration_minutes || 60,
         attempts_allowed: attempts_allowed || 1,
-        shuffle_items: shuffle_items || false,
+        shuffle_items: shuffle_items || shuffle_questions || false,
         show_results_immediately: show_results_immediately !== false,
         passing_score: passing_score || 70,
-        items: [],
-        total_points: 0,
+        items: processedItems,
+        total_points: totalPoints,
         status: 'draft',
         is_published: false,
         start_date: null,
